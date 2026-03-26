@@ -5,7 +5,7 @@ import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { Materials } from './pages/Materials';
 import { Restock } from './pages/Restock';
-import { History } from './pages/History';
+import { History } from './pages/Reports';
 import { Products } from './pages/Products';
 function AppContent() {
   const { user } = useInventory();
