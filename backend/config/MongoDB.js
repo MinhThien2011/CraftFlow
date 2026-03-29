@@ -42,9 +42,9 @@ export const initializeCollections = async (models) => {
     }
 
     console.log(
-        `🎉 Initialized ${initializedCount} collections of Maneki_Neko.`
-    );
-};
+        `🎉 Initialized ${initializedCount} collections of ${mongoose.connection.db.databaseName}.`
+        );
+   };
 
 // Hàm seed categories chỉ khi chưa có data
 // const seedCategoriesIfEmpty = async () => {

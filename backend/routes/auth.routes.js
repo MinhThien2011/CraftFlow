@@ -10,6 +10,6 @@ authRouter.get('/',(req , res)=>{
     })
 })
 
-authRouter.get('/login', login);
+authRouter.post('/login', login);
 
 export default authRouter;

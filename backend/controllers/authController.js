@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
+import { loginValidator } from '../validations/authValidation.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -14,6 +15,7 @@ const generateAccessToken = (userId , res) =>{
     sameSite: 'strict',
     maxAge: 7 * 24 * 60 * 60 * 1000  
   });
+  return accessToken;
 }
 
 // ─── Controllers ──────────────────────────────────────────────────────────────
@@ -26,15 +28,17 @@ const generateAccessToken = (userId , res) =>{
  */
 export const login = async (req, res) => {
   try {
-    const { identifier, password } = req.body;
-
-    // 1. Validate input
-    if (!identifier || !password) {
+    // 1. Validate input with Joi
+    const { error, value } = loginValidator(req.body);
+    
+    if (error) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide both username/email and password.',
+        message: error.details.map(detail => detail.message).join(', '),
       });
     }
+
+    const { identifier, password } = value;
 
     // 2. Tìm user theo username hoặc email
     const user = await User.findOne({
@@ -72,10 +76,7 @@ export const login = async (req, res) => {
     // 5. Generate tokens
     const accessToken  = generateAccessToken(user._id, res);
 
-    // 6. Send refresh token via HttpOnly cookie
-    setRefreshTokenCookie(res, refreshToken);
-
-    // 7. Return user info (excluding password)
+    // 6. Return user info (excluding password)
     const userPayload = {
       _id:      user._id,
       username: user.username,
