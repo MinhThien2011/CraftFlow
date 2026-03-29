@@ -3,7 +3,7 @@ import { ROLES } from '../utils/constants.js';
 
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true, trim: true },
-  email: { type: String, required: true, unique: true, lowercase: true },
+  email: { type: String, required: true, unique: true },
   password: { type: String, required: true, select: false },
   fullName: { type: String, required: true },
   phone: { type: String, required: true },
@@ -32,7 +32,6 @@ const userSchema = new mongoose.Schema({
 });
 
 // Index
-userSchema.index({ email: 1 });
 userSchema.index({ currentAssignedQuantity: 1 });
 userSchema.index({ isActive: 1 });
 

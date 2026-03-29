@@ -10,7 +10,6 @@ const materialSchema = new mongoose.Schema({
   isActive: { type: Boolean, default: true }
 }, { timestamps: true });
 
-materialSchema.index({ code: 1 });
 materialSchema.index({ currentStock: 1 });
 
 export default mongoose.model('Material', materialSchema);

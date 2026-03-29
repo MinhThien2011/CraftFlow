@@ -11,8 +11,6 @@ const productSchema = new mongoose.Schema({
   baseCost: { type: Number, default: 0 }
 }, { timestamps: true });
 
-productSchema.index({ name: 1 });
-productSchema.index({ code: 1 });
 productSchema.index({ isActive: 1 });
 
 export default mongoose.model('Product', productSchema);
