@@ -1,5 +1,15 @@
 import mongoose from "mongoose";
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { models_list } from "../models/models_list.js";
+import { ROLES } from "../utils/constants.js";
+import Role from "../models/Roles.js";
+import User from "../models/User.js";
+import Material from "../models/Material.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const MONGO_ATLAS_URI = process.env.MONGO_URI_ATLAS;
 const MONGO_RAILWAY_URI = process.env.MONGO_URI_RAILWAY;
@@ -63,6 +73,96 @@ export const initializeCollections = async (models) => {
 //         throw error;
 //     }
 // };
+
+// Hàm seed roles nếu bảng Role trống
+const seedRolesIfEmpty = async () => {
+    try {
+        const count = await Role.countDocuments();
+        if (count === 0) {
+            console.log("🛠 Bảng Role trống, đang seed roles mặc định...");
+            const roleDocs = Object.values(ROLES).map(roleName => ({ roleName }));
+            await Role.insertMany(roleDocs);
+            console.log(`✅ Đã seed ${roleDocs.length} roles thành công!`);
+        } else {
+            console.log(`ℹ️ Bảng Role đã có ${count} bản ghi, bỏ qua seed roles.`);
+        }
+    } catch (error) {
+        console.error("❌ Lỗi khi seed roles:", error);
+        throw error;
+    }
+};
+
+// Hàm seed users nếu bảng User trống
+const seedUsersIfEmpty = async () => {
+    try {
+        const count = await User.countDocuments();
+        if (count === 0) {
+            console.log("👥 Bảng User trống, đang seed users mặc định...");
+            
+            // Đọc file seed
+            const seedPath = path.join(__dirname, '..', 'seeds', 'userSeed.json');
+            if (!fs.existsSync(seedPath)) {
+                console.warn(`⚠️ File seed không tồn tại tại: ${seedPath}`);
+                return;
+            }
+
+            const rawData = fs.readFileSync(seedPath, 'utf8');
+            const usersData = JSON.parse(rawData);
+
+            // Lấy tất cả roles để mapping role name sang ObjectId
+            const roles = await Role.find({});
+            const roleMap = roles.reduce((acc, role) => {
+                acc[role.roleName] = role._id;
+                return acc;
+            }, {});
+
+            const usersToSeed = usersData.map(userData => {
+                let roleName = userData.role;
+                if (roleName === 'user') roleName = ROLES.STAFF;
+
+                return {
+                    ...userData,
+                    role: roleMap[roleName] || roleMap[ROLES.STAFF] // Default sang STAFF nếu không tìm thấy
+                };
+            });
+
+            await User.create(usersToSeed);
+            console.log(`✅ Đã seed ${usersToSeed.length} users thành công!`);
+        } else {
+            console.log(`ℹ️ Bảng User đã có ${count} bản ghi, bỏ qua seed users.`);
+        }
+    } catch (error) {
+        console.error("❌ Lỗi khi seed users:", error);
+        throw error;
+    }
+};
+
+// Hàm seed materials nếu bảng Material trống
+const seedMaterialsIfEmpty = async () => {
+    try {
+        const count = await Material.countDocuments();
+        if (count === 0) {
+            console.log("📦 Bảng Material trống, đang seed nguyên vật liệu mặc định...");
+            
+            const seedPath = path.join(__dirname, '..', 'seeds', 'materialSeed.json');
+            if (!fs.existsSync(seedPath)) {
+                console.warn(`⚠️ File seed không tồn tại tại: ${seedPath}`);
+                return;
+            }
+
+            const rawData = fs.readFileSync(seedPath, 'utf8');
+            const materialsData = JSON.parse(rawData);
+
+            await Material.insertMany(materialsData);
+            console.log(`✅ Đã seed ${materialsData.length} nguyên vật liệu thành công!`);
+        } else {
+            console.log(`ℹ️ Bảng Material đã có ${count} bản ghi, bỏ qua seed materials.`);
+        }
+    } catch (error) {
+        console.error("❌ Lỗi khi seed materials:", error);
+        throw error;
+    }
+};
 
 const closeExistingConnection = async () => {
     const { isConnected, isConnecting } = checkMongoConnection();
@@ -215,8 +315,10 @@ export const connectToDatabase = async () => {
 
         await initializeCollections(models_list);
 
-        // Seed categories chỉ khi bảng trống
-        // await seedCategoriesIfEmpty();
+        // Seed data mặc định
+        await seedRolesIfEmpty();
+        await seedUsersIfEmpty();
+        await seedMaterialsIfEmpty();
 
         // Setup event handlers (chỉ setup 1 lần)
         setupConnectionHandlers();

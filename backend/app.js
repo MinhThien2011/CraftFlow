@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import express from 'express';
 import mainRouter from './routes/main.routes.js';
 import { connectToDatabase } from './config/mongoDB.js';
+import cookieParser from 'cookie-parser';
 
 const app = express();
 connectToDatabase()
@@ -17,6 +18,8 @@ app.use(cors({
   origin: '*',
   credentials: true,
 }));
+
+app.use(cookieParser());
 app.use(compression());
 app.use(helmet());
 app.use(morgan('dev'));

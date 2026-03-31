@@ -1,0 +1,152 @@
+[
+    {
+        "username": "thien.pham",
+        "email": "thien.pham@craftflow.com",
+        "fullName": "Phạm Minh Thiện",
+        "password": "CraftFlow@2026",
+        "phone": "0908123456",
+        "address": "Số 15, Đường Lê Lợi, Quận 1, TP. Hồ Chí Minh",
+        "isActive": true,
+        "role": "admin"
+    },
+    {
+        "username": "TranTri.IvanIV",
+        "email": "TranTri.IvanIV@craftflow.com",
+        "fullName": "Trần Văn Trí",
+        "password": "CraftFlow@2026",
+        "phone": "0912345678",
+        "address": "24/5 Trần Hưng Đạo, Quận Hoàn Kiếm, Hà Nội",
+        "isActive": true,
+        "role": "admin"
+    },
+    {
+        "username": "linh.tran",
+        "email": "linh.tran@craftflow.com",
+        "fullName": "Trần Diệu Linh",
+        "password": "CraftFlow@2026",
+        "phone": "0933456789",
+        "address": "102 Nguyễn Văn Linh, Quận Hải Châu, Đà Nẵng",
+        "isActive": true,
+        "role": "admin"
+    },
+    {
+        "username": "hung.vu",
+        "email": "hung.vu@craftflow.com",
+        "fullName": "Dương Văn Minh",
+        "password": "CraftFlow@2026",
+        "phone": "0987654321",
+        "address": "Kho số 2, KCN Sóng Thần, Dĩ An, Bình Dương",
+        "isActive": true,
+        "role": "kho_manager"
+    },
+    {
+        "username": "mai.le",
+        "email": "mai.le@craftflow.com",
+        "fullName": "Lê Thị Tuyết Mai",
+        "password": "CraftFlow@2026",
+        "phone": "0945123456",
+        "address": "Căn hộ B12, Chung cư Blue Sky, Quận Tân Bình, TP. HCM",
+        "isActive": true,
+        "role": "kho_manager"
+    },
+    {
+        "username": "dung.hoang",
+        "email": "dung.hoang@craftflow.com",
+        "fullName": "Hoàng Anh Dũng",
+        "password": "CraftFlow@2026",
+        "phone": "0356123456",
+        "address": "Xưởng sản xuất A, Hẻm 45, Đường số 8, Quận Thủ Đức, TP. HCM",
+        "isActive": true,
+        "role": "staff"
+    },
+    {
+        "username": "phuong.ngo",
+        "email": "phuong.ngo@craftflow.com",
+        "fullName": "Ngô Thanh Phương",
+        "password": "CraftFlow@2026",
+        "phone": "0367234567",
+        "address": "12/8B Nguyễn Trãi, Phường 2, Quận 5, TP. HCM",
+        "isActive": true,
+        "role": "staff"
+    },
+    {
+        "username": "son.dang",
+        "email": "son.dang@craftflow.com",
+        "fullName": "Đặng Hồng Sơn",
+        "password": "CraftFlow@2026",
+        "phone": "0378345678",
+        "address": "Số 5, Ngõ 12, Phố Huế, Quận Hai Bà Trưng, Hà Nội",
+        "isActive": true,
+        "role": "staff"
+    },
+    {
+        "username": "thao.nguyen",
+        "email": "thao.nguyen@craftflow.com",
+        "fullName": "Nguyễn Phương Thảo",
+        "password": "CraftFlow@2026",
+        "phone": "0389456789",
+        "address": "456 CMT8, Phường 11, Quận 3, TP. HCM",
+        "isActive": true,
+        "role": "staff"
+    },
+    {
+        "username": "tuan.ly",
+        "email": "tuan.ly@craftflow.com",
+        "fullName": "Lý Minh Tuấn",
+        "password": "CraftFlow@2026",
+        "phone": "0390567890",
+        "address": "78 Phan Đình Phùng, Phường 2, TP. Đà Lạt",
+        "isActive": true,
+        "role": "staff"
+    },
+    {
+        "username": "quynh.do",
+        "email": "quynh.do@craftflow.com",
+        "fullName": "Đỗ Như Quỳnh",
+        "password": "CraftFlow@2026",
+        "phone": "0812678901",
+        "address": "Số 23, Đường Võ Văn Kiệt, Quận Ninh Kiều, Cần Thơ",
+        "isActive": true,
+        "role": "staff"
+    },
+    {
+        "username": "huy.pham",
+        "email": "huy.pham@craftflow.com",
+        "fullName": "Phạm Gia Huy",
+        "password": "CraftFlow@2026",
+        "phone": "0823789012",
+        "address": "156/7 Lê Văn Sỹ, Quận Phú Nhuận, TP. HCM",
+        "isActive": true,
+        "role": "staff"
+    },
+    {
+        "username": "trang.bui",
+        "email": "trang.bui@craftflow.com",
+        "fullName": "Bùi Minh Trang",
+        "password": "CraftFlow@2026",
+        "phone": "0834890123",
+        "address": "99 Kim Mã, Quận Ba Đình, Hà Nội",
+        "isActive": true,
+        "role": "staff"
+    },
+    {
+        "username": "thanh.vo",
+        "email": "thanh.vo@craftflow.com",
+        "fullName": "Võ Văn Thanh",
+        "password": "CraftFlow@2026",
+        "phone": "0845901234",
+        "address": "Khu dân cư Trung Sơn, Bình Chánh, TP. HCM",
+        "isActive": true,
+        "role": "staff"
+    },
+    {
+        "username": "ngoc.phan",
+        "email": "ngoc.phan@craftflow.com",
+        "fullName": "Phan Hồng Ngọc",
+        "password": "CraftFlow@2026",
+        "phone": "0856012345",
+        "address": "Số 12, Đường số 4, KDC Cityland, Quận Gò Vấp, TP. HCM",
+        "isActive": true,
+        "role": "staff"
+    }
+]

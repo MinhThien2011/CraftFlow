@@ -1,115 +1,221 @@
-import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
+import { handlerPasswordValidator } from '../validations/authValidation.js';
 import { loginValidator } from '../validations/authValidation.js';
+import * as userService from '../services/userService.js';
+import { StatusCodes } from 'http-status-codes';
+import { generateAccessToken } from '../middleware/cookies.js';
+import { logActivity } from '../utils/logger.js';
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const generateAccessToken = (userId , res) =>{
-  const accessToken = jwt.sign({ id: userId }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN || '8h',
-  });
-  res.cookie('accessToken', accessToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
-    maxAge: 7 * 24 * 60 * 60 * 1000  
-  });
-  return accessToken;
-}
 
-// ─── Controllers ──────────────────────────────────────────────────────────────
-
-/**
- * POST /api/auth/login
- * Body: { identifier: string (username or email), password: string }
- *
- * Account được tạo bởi admin, không có self-register.
- */
 export const login = async (req, res) => {
   try {
-    // 1. Validate input with Joi
     const { error, value } = loginValidator(req.body);
-    
+
     if (error) {
-      return res.status(400).json({
-        success: false,
-        message: error.details.map(detail => detail.message).join(', '),
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        data: {
+          message: error.details.map(detail => detail.message).join(', '),
+        },
       });
     }
 
     const { identifier, password } = value;
 
-    // 2. Tìm user theo username hoặc email
     const user = await User.findOne({
       $or: [
         { username: identifier.trim() },
         { email: identifier.trim() },
       ],
-    })
-      .populate('role', 'roleName');
+    }).populate('role', 'roleName');
 
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: 'Username or password is incorrect.',
+      // await logActivity({
+      //   action: 'LOGIN_FAILED',
+      //   module: 'AUTH',
+      //   details: `Failed login attempt for identifier: ${identifier}`,
+      //   metadata: { identifier }
+      // }, req);
+
+      return res.status(StatusCodes.UNAUTHORIZED).json({
+        data: {
+          message: 'Username or password is incorrect.',
+        },
       });
     }
 
-    // 3. Check account status before login
     if (!user.isActive) {
-      return res.status(403).json({
-        success: false,
-        message: 'User account has been deactivated. Please contact admin.',
+      await logActivity({
+        author: user._id,
+        action: 'LOGIN_BANNED',
+        module: 'AUTH',
+        details: `Banned user attempted to login: ${user.username}`
+      }, req);
+
+      return res.status(StatusCodes.FORBIDDEN).json({
+        data: {
+          message: 'User account has been banned. Please contact admin to activate it.',
+        },
       });
     }
 
-    // 4. Compare password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    const isPasswordValid = User.comparePassword(password, user.password);
+
     if (!isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        message: 'Incorrect username or password.',
+      await logActivity({
+        author: user._id,
+        action: 'LOGIN_FAILED',
+        module: 'AUTH',
+        details: `Incorrect password for user: ${user.username}`
+      }, req);
+
+      return res.status(StatusCodes.UNAUTHORIZED).json({
+        data: {
+          message: 'Incorrect username or password.',
+        },
       });
     }
 
-    // 5. Generate tokens
-    const accessToken  = generateAccessToken(user._id, res);
+    const accessToken = generateAccessToken(user._id, res);
+    
+    await logActivity({
+      author: user._id,
+      action: 'LOGIN_SUCCESS',
+      module: 'AUTH',
+      details: `User logged in: ${user.username}`
+    }, req);
 
-    // 6. Return user info (excluding password)
     const userPayload = {
-      _id:      user._id,
+      _id: user._id,
       username: user.username,
-      email:    user.email,
+      email: user.email,
       fullName: user.fullName,
-      phone:    user.phone,
-      role:     user.role?.roleName ?? null,
+      phone: user.phone,
+      role: user.role?.roleName ?? null,
       isActive: user.isActive,
     };
 
-    return res.status(200).json({
-      success: true,
-      message: 'Login successful.',
+    return res.status(StatusCodes.OK).json({
       data: {
-        user: userPayload,
+        message: 'Login successful.',
+        userPayload,
         accessToken,
       },
     });
   } catch (error) {
     console.error('[AuthController] login error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Error in server. Please try again later.',
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      data: {
+        message: 'Error in server. Please try again later.',
+      },
     });
   }
 };
 
+export const refreshPassword = async (req, res) => {
+  try {
+    const { error, value } = handlerPasswordValidator(req.body, 'refresh');
 
+    if (error) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        data: {
+        message: error.details.map(detail => detail.message).join(', '),
+       },
+      });
+    }
+    const newPassword = value.newPassword;
+    const user = await User.findOne({ $or: [{ username: value.identifier.trim() }, { email: value.identifier.trim() }] }).select('-password');
+    if (!user || !user.isActive) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+       data: {
+        message: 'User not found.',
+       },
+      });
+    }
+    user.password = newPassword;
+    await user.save();
+
+    await logActivity({
+      author: user._id,
+      action: 'PASSWORD_REFRESHED',
+      module: 'AUTH',
+      details: `Password refreshed for user: ${user.username}`
+    }, req);
+
+    return res.status(StatusCodes.OK).json({
+      data: {
+        message: 'Password refreshed successfully.',
+        user : user,
+      },
+    });
+  } catch (error) {
+    console.error('[AuthController] refreshPassword error:', error);
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      data: {
+        message: 'Error in server. Please try again later.',
+      },
+    });
+  }
+}
+
+export const changePassword = async (req, res) =>{
+try {
+    const { error, value } = handlerPasswordValidator(req.body, 'change');
+
+    if (error) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        data: {
+        message: error.details.map(detail => detail.message).join(', '),
+       },
+      });
+    }
+    const newPassword = value.newPassword;
+    const user = await User.findOne({ _id: req.userId }).select('-password');
+    if (!user || !user.isActive) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+       data: {
+        message: 'User not found.',
+       },
+      });
+    }
+    user.password = newPassword;
+    await user.save();
+
+    await logActivity({
+      author: user._id,
+      action: 'PASSWORD_CHANGED',
+      module: 'AUTH',
+      details: `User changed their own password: ${user.username}`
+    }, req);
+
+    return res.status(StatusCodes.OK).json({
+      data: {
+        message: 'Password changed successfully.',
+        user : user,
+      },
+    });
+  } catch (error) {
+    console.error('[AuthController] changePassword error:', error);
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      data: {
+        message: 'Error in server. Please try again later.',
+      },
+    });
+  }
+}
 /**
  * POST /api/auth/logout
  * Xoá refresh token cookie.
  */
 export const logout = async (req, res) => {
+  const accessToken = req.cookies?.accessToken;
+  if (!accessToken) {
+    return res.status(StatusCodes.UNAUTHORIZED).json({
+      data: {
+        message: 'Unauthorized',
+      },
+    });
+  }
   try {
     res.clearCookie('accessToken', {
       httpOnly: true,
@@ -117,56 +223,66 @@ export const logout = async (req, res) => {
       sameSite: 'strict',
     });
 
-    return res.status(200).json({
-      success: true,
-      message: 'Logout successful.',
+    await logActivity({
+      author: req.userId,
+      action: 'LOGOUT',
+      module: 'AUTH',
+      details: 'User logged out'
+    }, req);
+
+    return res.status(StatusCodes.OK).json({
+      data: {
+        message: 'Logout successful.',
+      },
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: 'Error in server. Please try again later.',
-      error: error.message,
+    console.error('[AuthController] logout error:', error);
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      data: {
+        message: 'Error in server. Please try again later.',
+      },
     });
   }
 };
 
 /**
  * GET /api/auth/me
- * Lấy thông tin user đang đăng nhập (yêu cầu middleware xác thực trước).
+ * Lấy thông tin user đang đăng nhập
  */
 export const getUserInfo = async (req, res) => {
   try {
-    // req.user được gán bởi auth middleware
+    console.log(req.userId);
     const user = await User.findById(req.userId).populate('role', 'roleName');
 
     if (!user || !user.isActive) {
-      return res.status(404).json({
-        success: false,
+      return res.status(StatusCodes.NOT_FOUND).json({
+       data: {
         message: 'User not found.',
+       },
       });
     }
 
-    return res.status(200).json({
-      success: true,
+    return res.status(StatusCodes.OK).json({
       data: {
-        _id:                    user._id,
-        username:               user.username,
-        email:                  user.email,
-        fullName:               user.fullName,
-        phone:                  user.phone,
-        address:                user.address,
-        role:                   user.role?.roleName ?? null,
-        maxDailyCapacity:       user.maxDailyCapacity,
-        currentAssignedQuantity:user.currentAssignedQuantity,
-        hasWarningFlag:         user.hasWarningFlag,
-        isActive:               user.isActive,
+        _id: user._id,
+        username: user.username,
+        email: user.email,
+        fullName: user.fullName,
+        phone: user.phone,
+        address: user.address,
+        role: user.role?.roleName ?? null,
+        maxDailyCapacity: user.maxDailyCapacity,
+        currentAssignedQuantity: user.currentAssignedQuantity,
+        hasWarningFlag: user.hasWarningFlag,
+        isActive: user.isActive,
       },
     });
   } catch (error) {
     console.error('[AuthController] getMe error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Error in server. Please try again later.',
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      data: {
+        message: 'Error in server. Please try again later.',
+      },
     });
   }
 };

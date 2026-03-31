@@ -7,6 +7,15 @@ const productSchema = new mongoose.Schema({
   category: String,
   unit: { type: String, default: 'unit' },
   estimatedProductionTime: { type: Number, default: 0, min: 0 },
+  estimateMaterialCost: [
+    {
+      material: { type: String, required: true, trim: true },
+      cost: { type: Number, required: true, min: 0 },
+      quantity: { type: Number, required: true, min: 0 },
+      unit: { type: String, default: 'unit' },
+      price: { type: Number, required: true, min: 0 },
+    }
+  ],
   isActive: { type: Boolean, default: true },
   baseCost: { type: Number, default: 0 }
 }, { timestamps: true });

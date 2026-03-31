@@ -1,4 +1,3 @@
-// src/models/Bom.js
 import mongoose from 'mongoose';
 
 const bomSchema = new mongoose.Schema({
@@ -18,6 +17,7 @@ const bomSchema = new mongoose.Schema({
             required: true,
             min: 0.001,
         },
+        unit: { type: String, required: true },
         note: String,
     }],
     version: { type: String, default: 'v1.0' },

@@ -1,5 +1,8 @@
 import { Router } from "express";
 import authRouter from "./auth.routes.js";
+import userRouter from "./user.routes.js";
+import materialRouter from "./material.routes.js";
+import systemRouter from "./system.routes.js";
 
 const mainRouter = Router();
 
@@ -10,5 +13,8 @@ mainRouter.get('/',(req , res)=>{
     })
 })
 mainRouter.use('/auth', authRouter);
+mainRouter.use('/users', userRouter);
+mainRouter.use('/materials', materialRouter);
+mainRouter.use('/system', systemRouter);
 
 export default mainRouter;
