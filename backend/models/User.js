@@ -9,7 +9,7 @@ const userSchema = new mongoose.Schema({
   fullName: { type: String, required: true, trim: true , minlength: 3 },
   phone: { type: String, required: true, trim: true , unique: true },
   address: { type: String, trim: true, },
-  birthDate: { type: Date },
+  birthDay: { type: Date },
   gender: { type: String, enum: ['male', 'female'], default: 'male', required: true },
   avatar: { type: String, default: 'https://th.bing.com/th/id/OIP.fJBE-eHSQaEAChDXIjmrpQHaJQ?o=7rm=3&rs=1&pid=ImgDetMain&o=7&rm=3' },
 
@@ -40,8 +40,10 @@ const userSchema = new mongoose.Schema({
    },
 });
 
+userSchema.index({ fullName: 1 });
 userSchema.index({ currentAssignedQuantity: 1 });
 userSchema.index({ isActive: 1 });
+userSchema.index({ role: 1 });
 
 // extensions 
 userSchema.statics.comparePassword  = function (candidatePassword, userPassword) {

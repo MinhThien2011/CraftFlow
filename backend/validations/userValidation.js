@@ -32,7 +32,7 @@ const userSchema = Joi.object({
   address: Joi.string().required().messages({
     'any.required': 'Address is required.'
   }),
-  birthDate: Joi.date().iso().optional(),
+  birthDay: Joi.date().optional(),
   gender: Joi.string().valid('male', 'female').default('male'),
   role: Joi.string().optional(),
   isActive: Joi.boolean().default(true)
@@ -42,7 +42,7 @@ const updateUserSchema = Joi.object({
   fullName: Joi.string().min(3),
   phone: Joi.string().pattern(/^[0-9]{10,11}$/),
   address: Joi.string(),
-  birthDate: Joi.date().iso(),
+  birthDay: Joi.date().optional(),
   gender: Joi.string().valid('male', 'female'),
   avatar: Joi.string().uri().optional(),
   isActive: Joi.boolean()

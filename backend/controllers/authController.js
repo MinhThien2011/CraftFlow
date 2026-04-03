@@ -1,7 +1,6 @@
 import User from '../models/User.js';
 import { handlerPasswordValidator } from '../validations/authValidation.js';
 import { loginValidator } from '../validations/authValidation.js';
-import * as userService from '../services/userService.js';
 import { StatusCodes } from 'http-status-codes';
 import { generateAccessToken } from '../middleware/cookies.js';
 import { logActivity } from '../utils/logger.js';
@@ -96,18 +95,19 @@ export const login = async (req, res) => {
     };
 
     return res.status(StatusCodes.OK).json({
+      success: true,
+      message: 'Login successful.',
       data: {
-        message: 'Login successful.',
-        userPayload,
+        user: userPayload,
         accessToken,
       },
     });
   } catch (error) {
     console.error('[AuthController] login error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      data: {
-        message: 'Error in server. Please try again later.',
-      },
+      success: false,
+      message: 'Error in server. Please try again later.',
+      data: null
     });
   }
 };
@@ -118,18 +118,18 @@ export const refreshPassword = async (req, res) => {
 
     if (error) {
       return res.status(StatusCodes.BAD_REQUEST).json({
-        data: {
+        success: false,
         message: error.details.map(detail => detail.message).join(', '),
-       },
+        data: null
       });
     }
     const newPassword = value.newPassword;
     const user = await User.findOne({ $or: [{ username: value.identifier.trim() }, { email: value.identifier.trim() }] }).select('-password');
     if (!user || !user.isActive) {
       return res.status(StatusCodes.NOT_FOUND).json({
-       data: {
+        success: false,
         message: 'User not found.',
-       },
+        data: null
       });
     }
     user.password = newPassword;
@@ -143,17 +143,16 @@ export const refreshPassword = async (req, res) => {
     }, req);
 
     return res.status(StatusCodes.OK).json({
-      data: {
-        message: 'Password refreshed successfully.',
-        user : user,
-      },
+      success: true,
+      message: 'Password refreshed successfully.',
+      data: { user },
     });
   } catch (error) {
     console.error('[AuthController] refreshPassword error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      data: {
-        message: 'Error in server. Please try again later.',
-      },
+      success: false,
+      message: 'Error in server. Please try again later.',
+      data: null
     });
   }
 }
@@ -164,18 +163,18 @@ try {
 
     if (error) {
       return res.status(StatusCodes.BAD_REQUEST).json({
-        data: {
+        success: false,
         message: error.details.map(detail => detail.message).join(', '),
-       },
+        data: null
       });
     }
     const newPassword = value.newPassword;
     const user = await User.findOne({ _id: req.userId }).select('-password');
     if (!user || !user.isActive) {
       return res.status(StatusCodes.NOT_FOUND).json({
-       data: {
+        success: false,
         message: 'User not found.',
-       },
+        data: null
       });
     }
     user.password = newPassword;
@@ -189,17 +188,16 @@ try {
     }, req);
 
     return res.status(StatusCodes.OK).json({
-      data: {
-        message: 'Password changed successfully.',
-        user : user,
-      },
+      success: true,
+      message: 'Password changed successfully.',
+      data: { user },
     });
   } catch (error) {
     console.error('[AuthController] changePassword error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      data: {
-        message: 'Error in server. Please try again later.',
-      },
+      success: false,
+      message: 'Error in server. Please try again later.',
+      data: null
     });
   }
 }
@@ -211,9 +209,9 @@ export const logout = async (req, res) => {
   const accessToken = req.cookies?.accessToken;
   if (!accessToken) {
     return res.status(StatusCodes.UNAUTHORIZED).json({
-      data: {
-        message: 'Unauthorized',
-      },
+      success: false,
+      message: 'Unauthorized',
+      data: null
     });
   }
   try {
@@ -231,16 +229,16 @@ export const logout = async (req, res) => {
     }, req);
 
     return res.status(StatusCodes.OK).json({
-      data: {
-        message: 'Logout successful.',
-      },
+      success: true,
+      message: 'Logout successful.',
+      data: null
     });
   } catch (error) {
     console.error('[AuthController] logout error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      data: {
-        message: 'Error in server. Please try again later.',
-      },
+      success: false,
+      message: 'Error in server. Please try again later.',
+      data: null
     });
   }
 };
@@ -256,33 +254,41 @@ export const getUserInfo = async (req, res) => {
 
     if (!user || !user.isActive) {
       return res.status(StatusCodes.NOT_FOUND).json({
-       data: {
+        success: false,
         message: 'User not found.',
-       },
+        data: null
       });
     }
 
     return res.status(StatusCodes.OK).json({
+      success: true,
+      message: 'User info retrieved successfully.',
       data: {
-        _id: user._id,
-        username: user.username,
-        email: user.email,
-        fullName: user.fullName,
-        phone: user.phone,
-        address: user.address,
-        role: user.role?.roleName ?? null,
-        maxDailyCapacity: user.maxDailyCapacity,
-        currentAssignedQuantity: user.currentAssignedQuantity,
-        hasWarningFlag: user.hasWarningFlag,
-        isActive: user.isActive,
+        user: {
+          _id: user._id,
+          username: user.username,
+          email: user.email,
+          fullName: user.fullName,
+          phone: user.phone,
+          address: user.address,
+          birthDate: user.birthDate?.toLocaleString(),
+          avatar: user.avatar,
+          role: user.role?.roleName ?? null,
+          maxDailyCapacity: user.maxDailyCapacity,
+          currentAssignedQuantity: user.currentAssignedQuantity,
+          hasWarningFlag: user.hasWarningFlag,
+          isActive: user.isActive,
+          createdAt: user.createdAt?.toLocaleString(),
+          updatedAt: user.updatedAt?.toLocaleString(),
+        },
       },
     });
   } catch (error) {
     console.error('[AuthController] getMe error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      data: {
-        message: 'Error in server. Please try again later.',
-      },
+      success: false,
+      message: 'Error in server. Please try again later.',
+      data: null
     });
   }
 };

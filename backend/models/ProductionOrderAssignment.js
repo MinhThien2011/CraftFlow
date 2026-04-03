@@ -20,6 +20,11 @@ const assignmentSchema = new mongoose.Schema({
     default: ORDER_STATUS.ASSIGNED,
   },
   notes: String,
+  previousStaff: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
+  reassignedAt: Date,
   startedAt: Date,
   finishedAt: Date,
 }, { timestamps: true });

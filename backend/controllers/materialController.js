@@ -44,13 +44,25 @@ export const getAllMaterials = async (req, res) => {
       filters
     });
 
+    if (!result.success) {
+      return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+        success: false,
+        message: result.message,
+        data: null
+      });
+    }
+
     return res.status(StatusCodes.OK).json({ 
-      data: result 
+      success: true,
+      message: result.message,
+      data: result.data 
     });
   } catch (error) {
     console.error('[MaterialController] getAllMaterials error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      data: { message: 'Failed to retrieve materials.' }
+      success: false,
+      message: 'Failed to retrieve materials.',
+      data: null
     });
   }
 };
@@ -61,19 +73,28 @@ export const getAllMaterials = async (req, res) => {
 export const getMaterialById = async (req, res) => {
   try {
     const { id } = req.params;
-    const material = await materialService.getMaterialById(id);
+    const result = await materialService.getMaterialById(id);
 
-    if (!material) {
-      return res.status(StatusCodes.NOT_FOUND).json({
-        data: { message: 'Material not found.' }
+    if (!result.success) {
+      const statusCode = result.message === 'Material not found.' ? StatusCodes.NOT_FOUND : StatusCodes.INTERNAL_SERVER_ERROR;
+      return res.status(statusCode).json({
+        success: false,
+        message: result.message,
+        data: null
       });
     }
 
-    return res.status(StatusCodes.OK).json({ data: material });
+    return res.status(StatusCodes.OK).json({ 
+      success: true,
+      message: result.message,
+      data: { material: result.data }
+    });
   } catch (error) {
     console.error('[MaterialController] getMaterialById error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      data: { message: 'Failed to retrieve material.' }
+      success: false,
+      message: 'Failed to retrieve material.',
+      data: null
     });
   }
 };
@@ -88,14 +109,23 @@ export const getMaterialByCode = async (req, res) => {
     
     if (!material) {
       return res.status(StatusCodes.NOT_FOUND).json({
-        data: { message: 'Material not found with this code.' }
+        success: false,
+        message: 'Material not found with this code.',
+        data: null
       });
     }
 
-    return res.status(StatusCodes.OK).json({ data: material });
+    return res.status(StatusCodes.OK).json({ 
+      success: true,
+      message: 'Material retrieved successfully by code.',
+      data: { material }
+    });
   } catch (error) {
+    console.error('[MaterialController] getMaterialByCode error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      data: { message: 'Failed to retrieve material by code.' }
+      success: false,
+      message: 'Failed to retrieve material by code.',
+      data: null
     });
   }
 };
@@ -105,14 +135,28 @@ export const getMaterialByCode = async (req, res) => {
  */
 export const getLowStockMaterials = async (req, res) => {
   try {
-    const lowStockMaterials = await Material.find({
-      $expr: { $lte: ["$currentStock", "$threshold"] },
-      isActive: true
+    const { threshold } = req.query;
+    const result = await materialService.getLowStockMaterialsService(threshold ? parseInt(threshold) : undefined);
+    
+    if (!result.success) {
+      return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+        success: false,
+        message: result.message,
+        data: null
+      });
+    }
+
+    return res.status(StatusCodes.OK).json({ 
+      success: true,
+      message: result.message,
+      data: result.data 
     });
-    return res.status(StatusCodes.OK).json({ data: lowStockMaterials });
   } catch (error) {
+    console.error('[MaterialController] getLowStockMaterials error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      data: { message: 'Failed to retrieve low stock materials.' }
+      success: false,
+      message: 'Failed to retrieve low stock materials.',
+      data: null
     });
   }
 };
@@ -125,14 +169,18 @@ export const createMaterial = async (req, res) => {
     const { error, value } = createMaterialValidator(req.body);
     if (error) {
       return res.status(StatusCodes.BAD_REQUEST).json({
-        data: { message: error.details.map(d => d.message).join(', ') }
+        success: false,
+        message: error.details.map(d => d.message).join(', '),
+        data: null
       });
     }
 
     const existingMaterial = await Material.findOne({ code: value.code.toUpperCase() });
     if (existingMaterial) {
       return res.status(StatusCodes.CONFLICT).json({
-        data: { message: 'Material code already exists.' }
+        success: false,
+        message: 'Material code already exists.',
+        data: null
       });
     }
 
@@ -147,11 +195,16 @@ export const createMaterial = async (req, res) => {
     }, req);
 
     return res.status(StatusCodes.CREATED).json({
-      data: { message: 'Material created successfully.', material: newMaterial }
+      success: true,
+      message: 'Material created successfully.',
+      data: { material: newMaterial }
     });
   } catch (error) {
+    console.error('[MaterialController] createMaterial error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      data: { message: 'Failed to create material.' }
+      success: false,
+      message: 'Failed to create material.',
+      data: null
     });
   }
 };
@@ -165,32 +218,41 @@ export const updateMaterial = async (req, res) => {
     const { error, value } = updateMaterialValidator(req.body);
     if (error) {
       return res.status(StatusCodes.BAD_REQUEST).json({
-        data: { message: error.details.map(d => d.message).join(', ') }
+        success: false,
+        message: error.details.map(d => d.message).join(', '),
+        data: null
       });
     }
 
     const material = await Material.findByIdAndUpdate(id, value, { new: true });
     if (!material) {
       return res.status(StatusCodes.NOT_FOUND).json({
-        data: { message: 'Material not found.' }
+        success: false,
+        message: 'Material not found.',
+        data: null
       });
     }
 
-    await logActivity({
-      author: req.userId,
-      action: 'UPDATE_MATERIAL',
-      module: 'MATERIAL',
-      details: `Updated material: ${material.name} (${material.code})`,
-      targetId: material._id,
-      metadata: value
+    await logActivity({ 
+      author: req.userId, 
+      action: 'UPDATE_MATERIAL', 
+      module: 'MATERIAL', 
+      details: `Updated material: ${material.name} (${material.code})`, 
+      targetId: material._id, 
+      metadata: value 
     }, req);
 
     return res.status(StatusCodes.OK).json({
-      data: { message: 'Material updated successfully.', material }
+      success: true,
+      message: 'Material updated successfully.',
+      data: { material }
     });
   } catch (error) {
+    console.error('[MaterialController] updateMaterial error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      data: { message: 'Failed to update material.' }
+      success: false,
+      message: 'Failed to update material.',
+      data: null
     });
   }
 };
@@ -204,14 +266,18 @@ export const adjustStock = async (req, res) => {
     const { error, value } = adjustStockValidator(req.body);
     if (error) {
       return res.status(StatusCodes.BAD_REQUEST).json({
-        data: { message: error.details.map(d => d.message).join(', ') }
+        success: false,
+        message: error.details.map(d => d.message).join(', '),
+        data: null
       });
     }
 
     const material = await Material.findById(id);
     if (!material) {
       return res.status(StatusCodes.NOT_FOUND).json({
-        data: { message: 'Material not found.' }
+        success: false,
+        message: 'Material not found.',
+        data: null
       });
     }
 
@@ -220,7 +286,9 @@ export const adjustStock = async (req, res) => {
 
     if (afterStock < 0) {
       return res.status(StatusCodes.BAD_REQUEST).json({
-        data: { message: 'Stock cannot be less than 0.' }
+        success: false,
+        message: 'Stock cannot be less than 0.',
+        data: null
       });
     }
 
@@ -249,14 +317,16 @@ export const adjustStock = async (req, res) => {
     }, req);
 
     return res.status(StatusCodes.OK).json({
-      data: { 
-        message: 'Stock adjusted successfully.', 
-        material 
-      }
+      success: true,
+      message: 'Stock adjusted successfully.',
+      data: { material }
     });
   } catch (error) {
+    console.error('[MaterialController] adjustStock error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      data: { message: 'Failed to adjust stock.' }
+      success: false,
+      message: 'Failed to adjust stock.',
+      data: null
     });
   }
 };
@@ -269,14 +339,18 @@ export const adjustStockByCode = async (req, res) => {
     const { error, value } = adjustStockByCodeValidator(req.body);
     if (error) {
       return res.status(StatusCodes.BAD_REQUEST).json({
-        data: { message: error.details.map(d => d.message).join(', ') }
+        success: false,
+        message: error.details.map(d => d.message).join(', '),
+        data: null
       });
     }
 
     const material = await Material.findOne({ code: value.code.toUpperCase() });
     if (!material) {
       return res.status(StatusCodes.NOT_FOUND).json({
-        data: { message: 'Material not found with this code.' }
+        success: false,
+        message: 'Material not found with this code.',
+        data: null
       });
     }
 
@@ -285,7 +359,9 @@ export const adjustStockByCode = async (req, res) => {
 
     if (afterStock < 0) {
       return res.status(StatusCodes.BAD_REQUEST).json({
-        data: { message: 'Stock cannot be less than 0.' }
+        success: false,
+        message: 'Stock cannot be less than 0.',
+        data: null
       });
     }
 
@@ -312,14 +388,16 @@ export const adjustStockByCode = async (req, res) => {
     }, req);
 
     return res.status(StatusCodes.OK).json({
-      data: { 
-        message: 'Stock adjusted via barcode successfully.', 
-        material 
-      }
+      success: true,
+      message: 'Stock adjusted via barcode successfully.',
+      data: { material }
     });
   } catch (error) {
+    console.error('[MaterialController] adjustStockByCode error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      data: { message: 'Failed to adjust stock via barcode.' }
+      success: false,
+      message: 'Failed to adjust stock via barcode.',
+      data: null
     });
   }
 };
@@ -351,7 +429,9 @@ export const getMaterialHistory = async (req, res) => {
       const material = await Material.findOne({ code: code.toUpperCase() });
       if (!material) {
         return res.status(StatusCodes.NOT_FOUND).json({
-          data: { message: 'Material not found with this code.' }
+          success: false,
+          message: 'Material not found with this code.',
+          data: null
         });
       }
       filter.material = material._id;
@@ -363,9 +443,12 @@ export const getMaterialHistory = async (req, res) => {
       .populate('material', 'name code unit color')
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(limitNum);
+      .limit(limitNum)
+      .lean();
       
     return res.status(StatusCodes.OK).json({ 
+      success: true,
+      message: 'Material history retrieved successfully.',
       data: {
         history,
         pagination: {
@@ -377,9 +460,11 @@ export const getMaterialHistory = async (req, res) => {
       } 
     });
   } catch (error) {
-    console.error('getMaterialHistory Error:', error);
+    console.error('[MaterialController] getMaterialHistory error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      data: { message: 'Failed to retrieve material history.' }
+      success: false,
+      message: 'Failed to retrieve material history.',
+      data: null
     });
   }
 };

@@ -7,6 +7,7 @@ import { ROLES } from "../utils/constants.js";
 import Role from "../models/Roles.js";
 import User from "../models/User.js";
 import Material from "../models/Material.js";
+import Product from "../models/Product.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -164,6 +165,67 @@ const seedMaterialsIfEmpty = async () => {
     }
 };
 
+// Hàm seed products nếu bảng Product trống
+const seedProductsIfEmpty = async () => {
+    try {
+        const count = await Product.countDocuments();
+        if (count === 0) {
+            console.log("🎁 Bảng Product trống, đang seed sản phẩm handmade mặc định...");
+            
+            const seedPath = path.join(__dirname, '..', 'seeds', 'productSeed.json');
+            if (!fs.existsSync(seedPath)) {
+                console.warn(`⚠️ File seed không tồn tại tại: ${seedPath}`);
+                return;
+            }
+
+            const rawData = fs.readFileSync(seedPath, 'utf8');
+            const productsData = JSON.parse(rawData);
+
+            // Mapping materialCode to actual Material IDs and caching metadata
+            const materials = await Material.find({ isActive: true }).lean();
+            const materialMap = materials.reduce((acc, m) => {
+                acc[m.code] = m;
+                return acc;
+            }, {});
+
+            const productsToSeed = productsData.map(product => {
+                const updatedEstimate = product.estimateMaterialCost.map(item => {
+                    const material = materialMap[item.materialCode];
+                    if (!material) {
+                        console.warn(`⚠️ Material code ${item.materialCode} not found for product ${product.name}`);
+                        return null;
+                    }
+                    return {
+                        material: material._id,
+                        materialCode: material.code,
+                        materialName: material.name,
+                        quantity: item.quantity,
+                        unit: material.unit,
+                        priceAtTime: material.price
+                    };
+                }).filter(item => item !== null);
+
+                // Calculate baseCost automatically from estimated materials
+                const baseCost = updatedEstimate.reduce((sum, item) => sum + (item.quantity * item.priceAtTime), 0);
+
+                return {
+                    ...product,
+                    estimateMaterialCost: updatedEstimate,
+                    baseCost
+                };
+            });
+
+            await Product.insertMany(productsToSeed);
+            console.log(`✅ Đã seed ${productsToSeed.length} sản phẩm thành công!`);
+        } else {
+            console.log(`ℹ️ Bảng Product đã có ${count} bản ghi, bỏ qua seed products.`);
+        }
+    } catch (error) {
+        console.error("❌ Lỗi khi seed products:", error);
+        throw error;
+    }
+};
+
 const closeExistingConnection = async () => {
     const { isConnected, isConnecting } = checkMongoConnection();
 
@@ -240,7 +302,7 @@ const connectWithFallback = async () => {
     if (MONGO_LOCAL_URI) {
         console.log("⚠️ Đang fallback sang MongoDB Local...");
         const localConnected = await tryConnectToMongo(MONGO_LOCAL_URI, "MongoDB Local");
-        return localConnected;
+        if (localConnected) return true;
     } else {
         console.log("⚠️ MongoDB Local URI không được cấu hình (MONGO_URI_LOCAL)");
         return false;
@@ -319,6 +381,7 @@ export const connectToDatabase = async () => {
         await seedRolesIfEmpty();
         await seedUsersIfEmpty();
         await seedMaterialsIfEmpty();
+        await seedProductsIfEmpty();
 
         // Setup event handlers (chỉ setup 1 lần)
         setupConnectionHandlers();

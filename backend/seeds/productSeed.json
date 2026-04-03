@@ -1,0 +1,135 @@
+[
+  {
+    "name": "Gấu Bông Len Handmade - Brownie",
+    "code": "PROD-BEAR-01",
+    "description": "Gấu bông móc tay bằng len cotton mềm mại, an toàn cho bé.",
+    "category": "Amigurumi",
+    "unit": "con",
+    "estimatedProductionTime": 180,
+    "estimateMaterialCost": [
+      {
+        "materialCode": "YARN-MC-01",
+        "quantity": 1.5
+      },
+      {
+        "materialCode": "FILL-PL-01",
+        "quantity": 0.1
+      },
+      {
+        "materialCode": "ACC-EYE-01",
+        "quantity": 1
+      }
+    ],
+    "isActive": true
+  },
+  {
+    "name": "Túi Tote Canvas Basic",
+    "code": "PROD-BAG-01",
+    "description": "Túi tote vải canvas trắng ngà, phong cách tối giản.",
+    "category": "Fashion",
+    "unit": "cái",
+    "estimatedProductionTime": 120,
+    "estimateMaterialCost": [
+      {
+        "materialCode": "FAB-CV-01",
+        "quantity": 0.8
+      },
+      {
+        "materialCode": "ACC-ZIP-01",
+        "quantity": 1
+      }
+    ],
+    "isActive": true
+  },
+  {
+    "name": "Khăn Trải Bàn Linen Thêu Hoa",
+    "code": "PROD-HOME-01",
+    "description": "Khăn trải bàn vải linen bột tự nhiên, thêu tay họa tiết tinh tế.",
+    "category": "Home Decor",
+    "unit": "tấm",
+    "estimatedProductionTime": 240,
+    "estimateMaterialCost": [
+      {
+        "materialCode": "FAB-LN-01",
+        "quantity": 1.5
+      },
+      {
+        "materialCode": "RIBB-SL-01",
+        "quantity": 2
+      }
+    ],
+    "isActive": true
+  },
+  {
+    "name": "Vòng Tay Cườm Lấp Lánh",
+    "code": "PROD-ACC-01",
+    "description": "Vòng tay kết từ hạt cườm thủy tinh, sang trọng và nữ tính.",
+    "category": "Jewelry",
+    "unit": "chiếc",
+    "estimatedProductionTime": 60,
+    "estimateMaterialCost": [
+      {
+        "materialCode": "BEAD-GL-01",
+        "quantity": 0.2
+      }
+    ],
+    "isActive": true
+  },
+  {
+    "name": "Móc Treo Tường Macrame Boho",
+    "code": "PROD-DECOR-01",
+    "description": "Đồ trang trí tường phong cách Bohemian đan bằng dây cotton.",
+    "category": "Home Decor",
+    "unit": "cái",
+    "estimatedProductionTime": 180,
+    "estimateMaterialCost": [
+      {
+        "materialCode": "ROPE-MC-01",
+        "quantity": 0.5
+      },
+      {
+        "materialCode": "BEAD-WD-01",
+        "quantity": 0.1
+      }
+    ],
+    "isActive": true
+  },
+  {
+    "name": "Gối Tựa Nhung Mềm",
+    "code": "PROD-HOME-02",
+    "description": "Gối tựa lưng đan bằng len nhung đũa siêu mềm mại.",
+    "category": "Home Decor",
+    "unit": "cái",
+    "estimatedProductionTime": 150,
+    "estimateMaterialCost": [
+      {
+        "materialCode": "YARN-VH-01",
+        "quantity": 3
+      },
+      {
+        "materialCode": "FILL-PL-01",
+        "quantity": 0.5
+      }
+    ],
+    "isActive": true
+  },
+  {
+    "name": "Kẹp Tóc Đất Sét Nặn Tay",
+    "code": "PROD-ACC-02",
+    "description": "Kẹp tóc đính hoa đất sét polymer nung handmade.",
+    "category": "Jewelry",
+    "unit": "cái",
+    "estimatedProductionTime": 90,
+    "estimateMaterialCost": [
+      {
+        "materialCode": "CLAY-PL-01",
+        "quantity": 0.2
+      },
+      {
+        "materialCode": "GLUE-ST-01",
+        "quantity": 1
+      }
+    ],
+    "isActive": true
+  }
+]

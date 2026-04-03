@@ -9,11 +9,13 @@ const productSchema = new mongoose.Schema({
   estimatedProductionTime: { type: Number, default: 0, min: 0 },
   estimateMaterialCost: [
     {
-      material: { type: String, required: true, trim: true },
-      cost: { type: Number, required: true, min: 0 },
+      material: { type: mongoose.Schema.Types.ObjectId, ref: 'Material', required: true },
       quantity: { type: Number, required: true, min: 0 },
+      // Optional: Cache these for quick access without populating
+      materialCode: { type: String, required: true },
+      materialName: { type: String, required: true },
       unit: { type: String, default: 'unit' },
-      price: { type: Number, required: true, min: 0 },
+      priceAtTime: { type: Number, required: true, min: 0 }, // Price when product was defined
     }
   ],
   isActive: { type: Boolean, default: true },

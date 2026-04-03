@@ -1,6 +1,7 @@
 import SystemLog from '../models/SystemLog.js';
+import { standardlizeResponseDataHelper } from '../utils/standardlizeResponseData.js';
 import { StatusCodes } from 'http-status-codes';
-
+import * as sysLoggingService from '../services/sysLoggingService.js';
 /**
  * Get system logs with filtering and pagination.
  */
@@ -28,33 +29,27 @@ export const getSystemLogs = async (req, res) => {
       if (endDate) query.createdAt.$lte = new Date(endDate);
     }
 
-    const logs = await SystemLog.find(query)
-      .populate('author', 'username fullName role')
-      .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit).lean();
+    const result = await sysLoggingService.getSystemLogsService(query, parseInt(page), parseInt(limit));
 
-    const count = await SystemLog.countDocuments(query);
-    
-    const standardlizeLog = logs.map(log => ({
-      ...log,
-      createdAt: log.createdAt.toLocaleString(),
-      ipAddress: log.ipAddress || 'N/A',
-      userAgent: log.userAgent || 'N/A',
-    }));
-    
-    return res.status(StatusCodes.OK).json({
-      data: {
-        logs: standardlizeLog,
-        totalPages: Math.ceil(count / limit),
-        currentPage: page,
-        totalLogs: count
-      }
-    });
-  } catch (error) {
-    console.error('[SystemController] getSystemLogs error:', error);
-    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      data: { message: 'Failed to retrieve system logs.', error: error.message }
-    });
-  }
+        if (!result.success) {
+            return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+                success: false,
+                message: result.message,
+                data: null
+            });
+        }
+
+        return res.status(StatusCodes.OK).json({
+            success: true,
+            message: 'System logs retrieved successfully.',
+            data: result.data
+        });
+    } catch (error) {
+        console.error('[SystemController] getSystemLogs error:', error);
+        return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+            success: false,
+            message: 'Failed to retrieve system logs.',
+            data: null
+        });
+    }
 };

@@ -10,8 +10,10 @@ export const ROLES = {
  */
 export const ORDER_STATUS = {
   PENDING: 'pending',              // Newly created
+  INSUFFICIENT_MATERIALS: 'insufficient_materials', // Lack of raw materials
   MATERIALS_CHECKING: 'materials_checking',   // Checking BOM & stock
   MATERIALS_ALLOCATED: 'materials_allocated',  // Materials reserved
+  READY_TO_ASSIGN: 'ready_to_assign', // Materials enough, waiting for admin to assign
   ASSIGNED: 'assigned',             // Tasks assigned to staff
   IN_PREPARATION: 'in_preparation',       // Waiting for materials
   IN_PRODUCTION: 'in_production',        // Production in progress
@@ -28,9 +30,11 @@ export const ORDER_STATUS = {
  */
 export const REQUISITION_STATUS = {
   PENDING: 'pending',              // Staff requested
-  APPROVED_PREPARING: 'approved_preparing',   // Approved and being prepared
-  ISSUED: 'issued',               // Materials issued to staff
-  TIMEOUT_CANCELLED: 'timeout_cancelled',    // Auto cancelled due to timeout
+  ACCEPTED: 'accepted',            // Kho manager accepted
+  PREPARING: 'preparing',          // Being prepared in warehouse
+  PREPARED: 'prepared',            // Ready for pickup
+  COMPLETED: 'completed',          // Materials picked up by staff
+  CANCELLED: 'cancelled',          // Cancelled by manager or timeout
 }
 
 /**

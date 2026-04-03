@@ -4,6 +4,7 @@ import { StatusCodes } from 'http-status-codes';
 import { createUserValidator, updateUserValidator } from '../validations/userValidation.js';
 import { logActivity } from '../utils/logger.js';
 import * as userService from '../services/userService.js';
+import { standardlizeResponseDataHelper } from '../utils/standardlizeResponseData.js';
 
 /**
  * Get all users with filtering, searching, and pagination.
@@ -38,11 +39,26 @@ export const getAllUsers = async (req, res) => {
     }
     
     const result = await userService.getUserByQuery(filter, pageNum, limitNum, search);
-    return res.status(StatusCodes.OK).json({ data: result });
+    
+    if (!result.success) {
+      return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+        success: false,
+        message: result.message,
+        data: null
+      });
+    }
+
+    return res.status(StatusCodes.OK).json({ 
+      success: true,
+      message: result.message,
+      data: result.data 
+    });
   } catch (error) {
-    console.error('getAllUsers Error:', error);
+    console.error('[UserController] getAllUsers Error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      data: { message: 'Failed to retrieve users.' }
+      success: false,
+      message: 'Failed to retrieve users.',
+      data: null
     });
   }
 };
@@ -53,19 +69,28 @@ export const getAllUsers = async (req, res) => {
 export const getUserById = async (req, res) => {
   try {
     const { id } = req.params;
-    const user = await userService.getUserById(id);
+    const result = await userService.getUserById(id);
     
-    if (user.status === 404) {
-      return res.status(StatusCodes.NOT_FOUND).json({
-        data: { message: user.error }
+    if (!result.success) {
+      const statusCode = result.message === 'User not found.' ? StatusCodes.NOT_FOUND : StatusCodes.INTERNAL_SERVER_ERROR;
+      return res.status(statusCode).json({
+        success: false,
+        message: result.message,
+        data: null
       });
     }
 
-    return res.status(StatusCodes.OK).json({ data: user });
+    return res.status(StatusCodes.OK).json({ 
+      success: true,
+      message: result.message,
+      data: { user: result.data }
+    });
   } catch (error) {
-    console.error('getUserById Error:', error);
+    console.error('[UserController] getUserById Error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      data: { message: 'Failed to retrieve user.' }
+      success: false,
+      message: 'Failed to retrieve user.',
+      data: null
     });
   }
 };
@@ -78,7 +103,9 @@ export const createUser = async (req, res) => {
     const { error, value } = createUserValidator(req.body);
     if (error) {
       return res.status(StatusCodes.BAD_REQUEST).json({
-        data: { message: error.details.map(d => d.message).join(', ') }
+        success: false,
+        message: ['Validation', error.details.map(d => d.message).join(', ')],
+        data: null
       });
     }
 
@@ -88,7 +115,9 @@ export const createUser = async (req, res) => {
     
     if (existingUser) {
       return res.status(StatusCodes.CONFLICT).json({
-        data: { message: 'Username or Email already exists.' }
+        success: false,
+        message: 'Username or Email already exists.',
+        data: null
       });
     }
     
@@ -100,10 +129,10 @@ export const createUser = async (req, res) => {
       value.role = role?._id;
     }
     
-    const newUser = await User.create(value);
+    const newUser = await User.create(value)
 
     await logActivity({
-      userId: req.userId,
+      author: req.userId,
       action: 'CREATE_USER',
       module: 'USER',
       details: `Admin created user: ${newUser.username}`,
@@ -112,16 +141,23 @@ export const createUser = async (req, res) => {
     }, req);
 
     return res.status(StatusCodes.CREATED).json({
-      data: { message: 'User created successfully.', user: newUser }
+      success: true,
+      message: 'User created successfully.',
+      data: { user: newUser }
     });
   } catch (error) {
+    console.log('[UserController] createUser Error:', error);
     if (error.code === 11000) {
       return res.status(StatusCodes.CONFLICT).json({
-        data: { message: error.message }
+        success: false,
+        message: 'Duplicate key error: ' + Object.keys(error.keyValue).join(', ') + ' with value ' + JSON.stringify(error.keyValue),
+        data: null
       });
     }
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      data: { message: 'Failed to create user.' , error: error.message }
+      success: false,
+      message: 'Failed to create user.',
+      data: null
     });
   }
 };
@@ -136,32 +172,42 @@ export const updateUser = async (req, res) => {
     
     if (error) {
       return res.status(StatusCodes.BAD_REQUEST).json({
-        data: { message: error.details.map(d => d.message).join(', ') }
+        success: false,
+        message: error.details.map(d => d.message).join(', '),
+        data: null
       });
     }
 
-    const user = await User.findByIdAndUpdate(id, value, { new: true }).populate('role', 'roleName');
-    if (!user) {
-      return res.status(StatusCodes.NOT_FOUND).json({
-        data: { message: 'User not found.' }
+    const result = await userService.updateUser(id, value);
+    if (!result.success) {
+      const statusCode = result.message === 'User not found.' ? StatusCodes.NOT_FOUND : StatusCodes.INTERNAL_SERVER_ERROR;
+      return res.status(statusCode).json({
+        success: false,
+        message: result.message,
+        data: null
       });
     }
 
     await logActivity({
-      userId: req.userId,
+      author: req.userId,
       action: 'UPDATE_USER',
       module: 'USER',
-      details: `Updated user info for: ${user.username}`,
-      targetId: user._id,
+      details: `Updated user info for: ${result.data.username}`,
+      targetId: result.data._id,
       metadata: value
     }, req);
 
     return res.status(StatusCodes.OK).json({
-      data: { message: 'User updated successfully.', user }
+      success: true,
+      message: 'User updated successfully.',
+      data: { user: result.data }
     });
   } catch (error) {
+    console.error('[UserController] updateUser Error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      data: { message: 'Failed to update user.' }
+      success: false,
+      message: 'Failed to update user.',
+      data: null
     });
   }
 };
@@ -172,28 +218,36 @@ export const updateUser = async (req, res) => {
 export const deleteUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const user = await User.findByIdAndDelete(id).populate('role', 'roleName');
-    if (!user) {
-      return res.status(StatusCodes.NOT_FOUND).json({
-        data: { message: 'User not found.' }
+    const result = await userService.deleteUser(id);
+    
+    if (!result.success) {
+      const statusCode = result.message === 'User not found.' ? StatusCodes.NOT_FOUND : StatusCodes.INTERNAL_SERVER_ERROR;
+      return res.status(statusCode).json({
+        success: false,
+        message: result.message,
+        data: null
       });
     }
 
     await logActivity({
-      userId: req.userId,
+      author: req.userId,
       action: 'DELETE_USER',
       module: 'USER',
-      details: `Admin deleted user account: ${user.username}`,
-      targetId: user._id,
-      metadata: { role: user.role?.roleName }
+      details: `Admin deleted user ID: ${id}`,
+      targetId: id
     }, req);
 
     return res.status(StatusCodes.OK).json({
-      data: { message: 'User deleted successfully.', user: user }
+      success: true,
+      message: 'User deleted successfully.',
+      data: null
     });
   } catch (error) {
+    console.error('[UserController] deleteUser Error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      data: { message: 'Failed to delete user.' }
+      success: false,
+      message: 'Failed to delete user.',
+      data: null
     });
   }
 };
@@ -208,7 +262,9 @@ export const toggleUserStatus = async (req, res) => {
     
     if (!user) {
       return res.status(StatusCodes.NOT_FOUND).json({
-        data: { message: 'User not found.' }
+        success: false,
+        message: 'User not found.',
+        data: null
       });
     }
 
@@ -216,7 +272,7 @@ export const toggleUserStatus = async (req, res) => {
     await user.save();
 
     await logActivity({
-      userId: req.userId,
+      author: req.userId,
       action: 'TOGGLE_USER_STATUS',
       module: 'USER',
       details: `Admin ${user.isActive ? 'enabled' : 'disabled'} user: ${user.username}`,
@@ -225,14 +281,16 @@ export const toggleUserStatus = async (req, res) => {
     }, req);
 
     return res.status(StatusCodes.OK).json({
-      data: { 
-        message: `User ${user.isActive ? 'enabled' : 'disabled'} successfully.`, 
-        user 
-      }
+      success: true,
+      message: `User ${user.isActive ? 'enabled' : 'disabled'} successfully.`,
+      data: { user }
     });
   } catch (error) {
+    console.error('[UserController] toggleUserStatus Error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      data: { message: 'Failed to toggle user status.' }
+      success: false,
+      message: 'Failed to toggle user status.',
+      data: null
     });
   }
 };

@@ -3,6 +3,9 @@ import authRouter from "./auth.routes.js";
 import userRouter from "./user.routes.js";
 import materialRouter from "./material.routes.js";
 import systemRouter from "./system.routes.js";
+import productionRouter from "./production.routes.js";
+import requisitionRouter from "./requisition.routes.js";
+import productRouter from "./product.routes.js";
 
 const mainRouter = Router();
 
@@ -16,5 +19,8 @@ mainRouter.use('/auth', authRouter);
 mainRouter.use('/users', userRouter);
 mainRouter.use('/materials', materialRouter);
 mainRouter.use('/system', systemRouter);
+mainRouter.use('/production', productionRouter);
+mainRouter.use('/requisitions', requisitionRouter);
+mainRouter.use('/products', productRouter);
 
 export default mainRouter;
