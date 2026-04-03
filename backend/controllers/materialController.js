@@ -131,12 +131,17 @@ export const getMaterialByCode = async (req, res) => {
 };
 
 /**
- * Get materials with low stock (under threshold).
+ * Get materials with low stock (under their own threshold) with searching and pagination.
  */
 export const getLowStockMaterials = async (req, res) => {
   try {
-    const { threshold } = req.query;
-    const result = await materialService.getLowStockMaterialsService(threshold ? parseInt(threshold) : undefined);
+    const { search = '', page = 1, limit = 10 } = req.query;
+    
+    const result = await materialService.getLowStockMaterialsService({
+      search,
+      page: parseInt(page),
+      limit: parseInt(limit)
+    });
     
     if (!result.success) {
       return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({

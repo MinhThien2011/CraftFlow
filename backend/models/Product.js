@@ -19,7 +19,10 @@ const productSchema = new mongoose.Schema({
     }
   ],
   isActive: { type: Boolean, default: true },
-  baseCost: { type: Number, default: 0 }
+  baseCost: { type: Number, default: 0 },
+  currentStock: { type: Number, default: 0, min: 0 }, // Số lượng sản phẩm hoàn chỉnh trong kho
+  threshold: { type: Number, default: 5, min: 0 }, // Cảnh báo khi tồn kho thấp hơn mức này
+  totalProduced: { type: Number, default: 0, min: 0 } // Tổng số lượng đã sản xuất
 }, { timestamps: true });
 
 productSchema.index({ isActive: 1 });

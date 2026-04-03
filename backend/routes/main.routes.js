@@ -6,6 +6,7 @@ import systemRouter from "./system.routes.js";
 import productionRouter from "./production.routes.js";
 import requisitionRouter from "./requisition.routes.js";
 import productRouter from "./product.routes.js";
+import inventoryRouter from "./inventory.routes.js";
 
 const mainRouter = Router();
 
@@ -22,5 +23,6 @@ mainRouter.use('/system', systemRouter);
 mainRouter.use('/production', productionRouter);
 mainRouter.use('/requisitions', requisitionRouter);
 mainRouter.use('/products', productRouter);
+mainRouter.use('/inventory', inventoryRouter);
 
 export default mainRouter;

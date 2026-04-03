@@ -87,21 +87,51 @@ export const getMaterialById = async (id) => {
 };
 
 /**
- * Get low stock materials optimized with lean() and projection.
+ * Get materials with low stock (under their own threshold) with searching and pagination.
  */
-export const getLowStockMaterialsService = async (threshold = 10) => {
+export const getLowStockMaterialsService = async ({ search = '', page = 1, limit = 10 }) => {
   try {
-    const materials = await Material.find({ 
-      currentStock: { $lt: threshold },
-      isActive: true 
-    })
-    .select('name code unit currentStock threshold')
-    .lean();
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.min(MAX_LIMIT, Math.max(1, parseInt(limit)));
+    const skip = (pageNum - 1) * limitNum;
+
+    // Filter for low stock: currentStock <= threshold
+    const query = {
+      isActive: true,
+      $expr: { $lte: ["$currentStock", "$threshold"] }
+    };
+
+    // Add search if provided
+    if (search) {
+      const searchRegex = { $regex: search, $options: 'i' };
+      query.$or = [
+        { name: searchRegex },
+        { code: searchRegex }
+      ];
+    }
+
+    const [materials, total] = await Promise.all([
+      Material.find(query)
+        .select('name code unit currentStock threshold price color isActive createdAt')
+        .sort({ currentStock: 1 }) // Show most critical first
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      Material.countDocuments(query)
+    ]);
 
     return {
       success: true,
-      message: materials.length > 0 ? 'Low stock materials found' : 'No low stock materials found',
-      data: standardlizeResponseDataHelper(materials),
+      message: materials.length > 0 ? 'Low stock materials found.' : 'No low stock materials found.',
+      data: {
+        materials: standardlizeResponseDataHelper(materials),
+        pagination: {
+          total,
+          page: pageNum,
+          limit: limitNum,
+          pages: Math.ceil(total / limitNum)
+        }
+      }
     };
   } catch (error) {
     console.error('[materialService] getLowStockMaterialsService error:', error);

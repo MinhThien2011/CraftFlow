@@ -1,5 +1,5 @@
 import Joi from 'joi';
-import { ORDER_STATUS } from '../utils/constants.js';
+import { ORDER_STATUS, TRANSACTION_TYPE } from '../utils/constants.js';
 
 const objectId = Joi.string().hex().length(24).messages({
   'string.pattern.base': `"{{#label}}" must be a valid MongoDB ObjectId`,
@@ -33,7 +33,15 @@ const reassignTaskSchema = Joi.object({
   completedQuantity: Joi.number().integer().min(0).optional(),
 });
 
+const outgoingProductSchema = Joi.object({
+  productId: objectId.required(),
+  quantity: Joi.number().integer().min(1).required(),
+  transactionType: Joi.string().valid(TRANSACTION_TYPE.SALES_OUT, TRANSACTION_TYPE.DAMAGE_OUT).required(),
+  notes: Joi.string().trim().allow(''),
+});
+
 export const createOrderValidator =(body)=> createOrderSchema.validate(body, { abortEarly: false, stripUnknown: true });
 export const assignOrderValidator =(body)=> assignOrderSchema.validate(body, { abortEarly: false, stripUnknown: true });
 export const reassignTaskValidator =(body)=> reassignTaskSchema.validate(body, { abortEarly: false, stripUnknown: true });
 export const updateAssignmentStatusValidator =(body)=> updateAssignmentStatusSchema.validate(body, { abortEarly: false, stripUnknown: true });
+export const outgoingProductValidator =(body)=> outgoingProductSchema.validate(body, { abortEarly: false, stripUnknown: true });

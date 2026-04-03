@@ -3,7 +3,8 @@ import Product from '../models/Product.js';
 import Material from '../models/Material.js';
 import User from '../models/User.js';
 import ProductionOrderAssignment from '../models/ProductionOrderAssignment.js';
-import { ORDER_STATUS, ROLES } from '../utils/constants.js';
+import InventoryTransaction from '../models/InventoryTransaction.js'; // Import InventoryTransaction
+import { ORDER_STATUS, ROLES, TRANSACTION_TYPE } from '../utils/constants.js'; // Import TRANSACTION_TYPE
 import mongoose from 'mongoose';
 
 /**
@@ -280,10 +281,29 @@ export const updateAssignmentStatus = async (assignmentId, status, completedQuan
     const allCompleted = allAssignments.every(a => a.status === ORDER_STATUS.COMPLETED);
     
     if (allCompleted) {
-      await ProductionOrder.findByIdAndUpdate(parentOrderId, {
+      const completedOrder = await ProductionOrder.findByIdAndUpdate(parentOrderId, {
         status: ORDER_STATUS.COMPLETED,
         completedAt: new Date()
-      });
+      }, { new: true }).lean();
+
+      // Record product production into inventory
+      if (completedOrder) {
+        const product = await Product.findById(completedOrder.productId);
+        if (product) {
+          product.currentStock += completedOrder.quantity;
+          product.totalProduced += completedOrder.quantity;
+          await product.save();
+
+          // Create an inventory transaction record
+          await InventoryTransaction.create({
+            product: product._id,
+            quantity: completedOrder.quantity,
+            type: TRANSACTION_TYPE.PRODUCTION_IN,
+            notes: `Production order ${completedOrder.orderCode} completed.`,
+            relatedOrder: completedOrder._id,
+          });
+        }
+      }
     } else {
       // Check if any is in production
       const anyInProduction = allAssignments.some(a => 

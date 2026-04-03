@@ -47,6 +47,9 @@ export const TRANSACTION_TYPE = {
   DEDUCT: 'deduct',    // Deducted after use
   ISSUE: 'issue',     // Issued to staff
   ADJUST: 'adjust',    // Manual adjustment (loss, gain, correction)
+  PRODUCTION_IN: 'production_in', // Products moved from production to finished goods inventory
+  SALES_OUT: 'sales_out', // Products sold and moved out of inventory
+  DAMAGE_OUT: 'damage_out', // Products removed due to damage
 }
 
 export const REQUISITION_TIMEOUT_MINUTES = 120;
