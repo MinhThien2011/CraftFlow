@@ -102,7 +102,6 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
         {!collapsed && (
           <div className="flex flex-col">
             <span className="text-lg font-bold tracking-wide text-foreground">CRAFTFLOW</span>
-            <span className="text-xs text-muted-foreground">v1.0.0</span>
           </div>
         )}
       </div>
