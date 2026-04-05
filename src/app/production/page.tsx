@@ -90,26 +90,26 @@ export default function ProductionPage() {
   const paused = productionOrders.filter((o) => o.status === "Tạm dừng").length
 
   return (
-    <AppShell title="Production" subtitle="Welcome to CRAFTFLOW">
+    <AppShell title="Sản xuất" subtitle="Chào mừng đến với CRAFTFLOW">
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-semibold text-foreground">
-              Production Management
+              Quản lý sản xuất
             </h2>
             <p className="text-sm text-muted-foreground">
-              Track and manage production orders
+              Theo dõi và quản lý các đơn sản xuất
             </p>
           </div>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
               <Button className="gap-2">
                 <Plus className="h-4 w-4" />
-                New Production Order
+                Tạo đơn sản xuất mới
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="sm:max-w-106.25">
               <DialogHeader>
                 <DialogTitle>Tạo đơn sản xuất mới</DialogTitle>
                 <DialogDescription>
@@ -213,7 +213,7 @@ export default function ProductionPage() {
           <div className="relative flex-1 md:max-w-sm">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Search production orders..."
+              placeholder="Tìm kiếm đơn sản xuất..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9"
@@ -225,7 +225,7 @@ export default function ProductionPage() {
               size="sm"
               onClick={() => setStatusFilter("All")}
             >
-              All
+              Tất cả
             </Button>
             {Object.entries(statusConfig).map(([status, config]) => (
               <Button
@@ -255,7 +255,7 @@ export default function ProductionPage() {
                         {order.productName}
                       </CardTitle>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        Order #{order.id}
+                         Mã đơn #{order.id}
                       </p>
                     </div>
                     <Badge className={config.color}>{config.label}</Badge>

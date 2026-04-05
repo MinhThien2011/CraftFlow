@@ -79,16 +79,16 @@ export default function AIMarketingPage() {
   }
 
   return (
-    <AppShell title="AI Marketing" subtitle="Welcome to CRAFTFLOW">
+    <AppShell title="AI Marketing" subtitle="Chào mừng đến với CRAFTFLOW">
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-semibold text-foreground">
-              AI Marketing Assistant
+              Trợ lý Marketing AI
             </h2>
             <p className="text-sm text-muted-foreground">
-              Generate engaging content for your social media marketing
+              Tạo nội dung hấp dẫn cho chiến dịch marketing trên mạng xã hội
             </p>
           </div>
         </div>
@@ -101,7 +101,7 @@ export default function AIMarketingPage() {
                 <MessageSquare className="h-6 w-6 text-[#4A7C23]" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Captions Generated</p>
+                <p className="text-sm text-muted-foreground">Caption đã tạo</p>
                 <p className="text-2xl font-bold">156</p>
               </div>
             </CardContent>
@@ -112,7 +112,7 @@ export default function AIMarketingPage() {
                 <Hash className="h-6 w-6 text-[#D4A574]" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Hashtags Used</p>
+                <p className="text-sm text-muted-foreground">Hashtag đã dùng</p>
                 <p className="text-2xl font-bold">420</p>
               </div>
             </CardContent>
@@ -123,7 +123,7 @@ export default function AIMarketingPage() {
                 <Image className="h-6 w-6 text-[#17A2B8]" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Posts Created</p>
+                <p className="text-sm text-muted-foreground">Bài đăng đã tạo</p>
                 <p className="text-2xl font-bold">89</p>
               </div>
             </CardContent>
@@ -134,7 +134,7 @@ export default function AIMarketingPage() {
                 <Sparkles className="h-6 w-6 text-[#9333EA]" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">AI Credits</p>
+                <p className="text-sm text-muted-foreground">Lượt dùng AI</p>
                 <p className="text-2xl font-bold">∞</p>
               </div>
             </CardContent>
@@ -148,12 +148,12 @@ export default function AIMarketingPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <Megaphone className="h-5 w-5 text-[#8B7355]" />
-                Generate Content
+                Tạo Nội Dung
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">Select Product</label>
+                <label className="text-sm font-medium">Chọn Sản Phẩm</label>
                 <Select value={selectedProduct} onValueChange={setSelectedProduct}>
                   <SelectTrigger>
                     <SelectValue placeholder="Choose a product..." />
@@ -169,7 +169,7 @@ export default function AIMarketingPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium">Platform</label>
+                <label className="text-sm font-medium">Nền tảng</label>
                 <div className="flex flex-wrap gap-2">
                   {platforms.map((platform) => (
                     <Button
@@ -187,16 +187,16 @@ export default function AIMarketingPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium">Tone of Voice</label>
+                <label className="text-sm font-medium">Giọng điệu</label>
                 <Select defaultValue="friendly">
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="friendly">Friendly & Warm</SelectItem>
-                    <SelectItem value="professional">Professional</SelectItem>
-                    <SelectItem value="playful">Playful & Fun</SelectItem>
-                    <SelectItem value="luxury">Luxury & Premium</SelectItem>
+                    <SelectItem value="friendly">Thân thiện & Ấm áp</SelectItem>
+                    <SelectItem value="professional">Chuyên nghiệp</SelectItem>
+                    <SelectItem value="playful">Vui nhộn & Hấp dẫn</SelectItem>
+                    <SelectItem value="luxury">Cao cấp & Quý phái</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -209,12 +209,12 @@ export default function AIMarketingPage() {
                 {isGenerating ? (
                   <>
                     <RefreshCw className="h-4 w-4 animate-spin" />
-                    Generating...
+                    Đang tạo...
                   </>
                 ) : (
                   <>
                     <Sparkles className="h-4 w-4" />
-                    Generate Content
+                    Tạo Nội Dung
                   </>
                 )}
               </Button>
@@ -227,7 +227,7 @@ export default function AIMarketingPage() {
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Sparkles className="h-5 w-5 text-[#9333EA]" />
-                  Generated Content
+                  Nội Dung Đã Tạo
                 </CardTitle>
                 {generatedCaption && (
                   <Button
@@ -239,12 +239,12 @@ export default function AIMarketingPage() {
                     {copied ? (
                       <>
                         <Check className="h-4 w-4" />
-                        Copied!
+                        Đã sao chép!
                       </>
                     ) : (
                       <>
                         <Copy className="h-4 w-4" />
-                        Copy
+                        Sao chép
                       </>
                     )}
                   </Button>
@@ -257,7 +257,7 @@ export default function AIMarketingPage() {
                   <Textarea
                     value={generatedCaption}
                     onChange={(e) => setGeneratedCaption(e.target.value)}
-                    className="min-h-[200px] resize-none"
+                    className="min-h-50 resize-none"
                   />
                   <div className="flex flex-wrap gap-2">
                     <Badge variant="secondary">📘 Facebook</Badge>
@@ -266,10 +266,10 @@ export default function AIMarketingPage() {
                   </div>
                 </div>
               ) : (
-                <div className="flex h-[200px] items-center justify-center rounded-lg border-2 border-dashed border-border">
+                <div className="flex h-50 items-center justify-center rounded-lg border-2 border-dashed border-border">
                   <div className="text-center text-muted-foreground">
                     <Sparkles className="mx-auto h-8 w-8 mb-2" />
-                    <p>Select a product and generate content</p>
+                    <p>Chọn một sản phẩm và tạo nội dung</p>
                   </div>
                 </div>
               )}
@@ -280,26 +280,26 @@ export default function AIMarketingPage() {
         {/* Quick Templates */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Quick Templates</CardTitle>
+            <CardTitle className="text-base">Mẫu nhanh</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 md:grid-cols-3">
               <div className="rounded-lg border border-border p-4 hover:bg-muted/50 cursor-pointer transition-colors">
-                <p className="font-medium">Product Launch</p>
+                <p className="font-medium">Ra mắt sản phẩm</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Announce new products with excitement
+                  Giới thiệu sản phẩm mới một cách hấp dẫn
                 </p>
               </div>
               <div className="rounded-lg border border-border p-4 hover:bg-muted/50 cursor-pointer transition-colors">
-                <p className="font-medium">Sale Promotion</p>
+                <p className="font-medium">Khuyến mãi</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Create urgency for special offers
+                  Tạo sự khẩn trương cho các ưu đãi đặc biệt
                 </p>
               </div>
               <div className="rounded-lg border border-border p-4 hover:bg-muted/50 cursor-pointer transition-colors">
-                <p className="font-medium">Behind the Scenes</p>
+                <p className="font-medium">Hậu trường</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Show your crafting process
+                  Thể hiện quy trình chế tác của bạn
                 </p>
               </div>
             </div>

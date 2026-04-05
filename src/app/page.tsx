@@ -31,7 +31,7 @@ export default function LoginPage() {
     <div className="flex min-h-screen flex-col bg-background">
       {/* Header */}
       <header className="p-4">
-        <span className="text-sm text-muted-foreground">Login</span>
+        <span className="text-sm text-muted-foreground">Đăng Nhập</span>
       </header>
 
       {/* Main Content */}
@@ -47,7 +47,7 @@ export default function LoginPage() {
                 CRAFTFLOW
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                Hệ thống quản lý kho nguyên liệu
+                Hệ thống quản lý sản xuất & kho nguyên liệu
               </p>
             </div>
 

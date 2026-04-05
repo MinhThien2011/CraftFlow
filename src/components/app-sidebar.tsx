@@ -35,49 +35,49 @@ interface AppSidebarProps {
 
 const navigation = [
   {
-    name: "Dashboard",
+    name: "Tổng quan",
     href: "/dashboard",
     icon: LayoutDashboard,
   },
   {
-    name: "Inventory",
+    name: "Kho hàng",
     href: "/inventory",
     icon: Package,
   },
   {
-    name: "Products & BOM",
+    name: "Sản phẩm & BOM",
     href: "/products",
     icon: Boxes,
   },
   {
-    name: "Production",
+    name: "Sản xuất",
     href: "/production",
     icon: Factory,
   },
   {
-    name: "Stock Alerts",
+    name: "Cảnh báo tồn kho",
     href: "/alerts",
     icon: AlertTriangle,
   },
   {
-    name: "Users",
+    name: "Người dùng",
     href: "/users",
     icon: Users,
   },
   {
-    name: "AI Pricing",
+    name: "Định giá thông minh",
     href: "/ai-pricing",
     icon: Sparkles,
     badge: true,
   },
   {
-    name: "AI Marketing",
+    name: "Marketing AI",
     href: "/ai-marketing",
     icon: Megaphone,
     badge: true,
   },
   {
-    name: "Reports",
+    name: "Báo cáo",
     href: "/reports",
     icon: BarChart3,
     badge: true,
@@ -164,7 +164,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
               )}
               title={collapsed ? item.name : undefined}
             >
-              <item.icon className="h-5 w-5 flex-shrink-0" />
+              <item.icon className="h-5 w-5 shrink-0" />
               {!collapsed && (
                 <>
                   <span className="flex-1">{item.name}</span>
@@ -188,7 +188,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
           )}
         >
           <Settings className="h-5 w-5" />
-          {!collapsed && <span>Settings</span>}
+          {!collapsed && <span>Cài đặt</span>}
         </Link>
         <Button
           variant="ghost"
@@ -204,7 +204,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
           ) : (
             <>
               <PanelLeftClose className="h-5 w-5" />
-              <span>Collapse</span>
+              <span>Thu gọn</span>
             </>
           )}
         </Button>

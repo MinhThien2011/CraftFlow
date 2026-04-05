@@ -69,16 +69,16 @@ export default function ReportsPage() {
   }
 
   return (
-    <AppShell title="Reports" subtitle="Welcome to CRAFTFLOW">
+    <AppShell title="Báo cáo" subtitle="Chào mừng đến với CRAFTFLOW">
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-semibold text-foreground">
-              Reports & Analytics
+              Báo cáo & Phân tích
             </h2>
             <p className="text-sm text-muted-foreground">
-              View business insights and performance metrics
+              Theo dõi hiệu suất kinh doanh và phân tích dữ liệu
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -97,7 +97,7 @@ export default function ReportsPage() {
             </Select>
             <Button variant="outline" className="gap-2">
               <Download className="h-4 w-4" />
-              Export
+              Xuất báo cáo
             </Button>
           </div>
         </div>
@@ -159,7 +159,7 @@ export default function ReportsPage() {
           <TabsList>
             <TabsTrigger value="revenue">Doanh thu & Chi phí</TabsTrigger>
             <TabsTrigger value="production">Sản xuất</TabsTrigger>
-            <TabsTrigger value="products">Top sản phẩm</TabsTrigger>
+            <TabsTrigger value="products">Sản phẩm bán chạy</TabsTrigger>
           </TabsList>
 
           <TabsContent value="revenue">

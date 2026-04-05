@@ -62,21 +62,21 @@ export default function AlertsPage() {
   }
 
   return (
-    <AppShell title="Stock Alerts" subtitle="Welcome to CRAFTFLOW">
+    <AppShell title="Cảnh báo tồn kho" subtitle="Chào mừng đến với CRAFTFLOW">
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-semibold text-foreground">
-              Stock Alerts
+              Cảnh báo tồn kho
             </h2>
             <p className="text-sm text-muted-foreground">
-              Monitor low stock and critical inventory levels
+              Theo dõi nguyên vật liệu sắp hết và mức tồn kho nguy hiểm
             </p>
           </div>
           <Button variant="outline" className="gap-2">
             <Bell className="h-4 w-4" />
-            Configure Alerts
+            Thiết lập cảnh báo
           </Button>
         </div>
 
@@ -88,7 +88,7 @@ export default function AlertsPage() {
                 <AlertTriangle className="h-6 w-6 text-[#DC3545]" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Critical Alerts</p>
+                <p className="text-sm text-muted-foreground">Cảnh báo Khẩn cấp</p>
                 <p className="text-2xl font-bold text-[#DC3545]">
                   {criticalCount}
                 </p>
@@ -101,7 +101,7 @@ export default function AlertsPage() {
                 <Package className="h-6 w-6 text-[#FFA500]" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Low Stock Alerts</p>
+                <p className="text-sm text-muted-foreground">Sắp hết hàng</p>
                 <p className="text-2xl font-bold text-[#FFA500]">
                   {lowStockCount}
                 </p>
@@ -114,7 +114,7 @@ export default function AlertsPage() {
                 <CheckCircle className="h-6 w-6 text-[#4A7C23]" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Resolved Today</p>
+                <p className="text-sm text-muted-foreground">Đã xử lý hôm nay</p>
                 <p className="text-2xl font-bold text-[#4A7C23]">3</p>
               </div>
             </CardContent>
@@ -126,7 +126,7 @@ export default function AlertsPage() {
           <div className="relative flex-1 md:max-w-sm">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Search alerts..."
+              placeholder="Tìm kiếm cảnh báo..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9"
@@ -138,7 +138,7 @@ export default function AlertsPage() {
               size="sm"
               onClick={() => setStatusFilter("All")}
             >
-              All ({stockAlerts.length})
+              Tất cả ({stockAlerts.length})
             </Button>
             <Button
               variant={statusFilter === "Critical" ? "default" : "outline"}
@@ -148,7 +148,7 @@ export default function AlertsPage() {
                 statusFilter === "Critical" && "bg-[#DC3545] hover:bg-[#DC3545]/90"
               )}
             >
-              Critical ({criticalCount})
+              Khẩn cấp ({criticalCount})
             </Button>
             <Button
               variant={statusFilter === "Low Stock" ? "default" : "outline"}
@@ -158,7 +158,7 @@ export default function AlertsPage() {
                 statusFilter === "Low Stock" && "bg-[#FFA500] hover:bg-[#FFA500]/90"
               )}
             >
-              Low Stock ({lowStockCount})
+              Sắp hết hàng ({lowStockCount})
             </Button>
           </div>
         </div>
@@ -169,13 +169,13 @@ export default function AlertsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Material</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead className="text-right">Current Stock</TableHead>
-                  <TableHead className="text-right">Min Stock</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
+                  <TableHead>Nguyên liệu</TableHead>
+                  <TableHead>Loại</TableHead>
+                  <TableHead className="text-right">Tồn kho hiện tại</TableHead>
+                  <TableHead className="text-right">Tồn kho tối thiểu</TableHead>
+                  <TableHead>Trạng thái</TableHead>
+                  <TableHead>Ngày</TableHead>
+                  <TableHead className="text-right">Hành động</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

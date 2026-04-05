@@ -9,7 +9,7 @@ const _geistMono = Geist_Mono({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: 'CRAFTFLOW - Quản lý Kho Len',
   description: 'Hệ thống quản lý kho nguyên liệu cho đồ thủ công đan/móc len',
-  generator: 'v0.app',
+  generator: 'CRAFTFLOW.web',
   icons: {
     icon: [
       {

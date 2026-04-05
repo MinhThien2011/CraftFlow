@@ -35,7 +35,7 @@ import { cn } from "@/lib/utils"
 
 const statCards = [
   {
-    title: "Tổng nguyên liệu",
+    title: "Nguyên liệu trong kho",
     value: dashboardStats.totalMaterials,
     change: dashboardStats.materialsChange,
     changePrefix: "+",
@@ -74,7 +74,7 @@ const statCards = [
 
 export default function DashboardPage() {
   return (
-    <AppShell title="Dashboard" subtitle="Welcome to CRAFTFLOW">
+    <AppShell title="Tổng quan" subtitle="Chào mừng đến với CRAFTFLOW">
       <div className="space-y-6">
         {/* Stats Cards */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

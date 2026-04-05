@@ -49,28 +49,28 @@ export default function AIPricingPage() {
   }
 
   return (
-    <AppShell title="AI Pricing" subtitle="Welcome to CRAFTFLOW">
+    <AppShell title="Định giá AI" subtitle="Chào mừng đến với CRAFTFLOW">
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-semibold text-foreground">
-              AI Pricing Assistant
+              Trợ lý định giá
             </h2>
             <p className="text-sm text-muted-foreground">
-              Get AI-powered pricing suggestions based on costs and market data
+              Đề xuất giá bán dựa trên chi phí và xu hướng thị trường
             </p>
           </div>
           <Button className="gap-2" onClick={handleAnalyze} disabled={isAnalyzing}>
             {isAnalyzing ? (
               <>
                 <RefreshCw className="h-4 w-4 animate-spin" />
-                Analyzing...
+                Đang phân tích...
               </>
             ) : (
               <>
                 <Sparkles className="h-4 w-4" />
-                Analyze All Products
+                Phân tích Tất cả Sản phẩm
               </>
             )}
           </Button>
@@ -84,7 +84,7 @@ export default function AIPricingPage() {
                 <Sparkles className="h-6 w-6 text-[#9333EA]" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">AI Suggestions</p>
+                <p className="text-sm text-muted-foreground">Gợi ý từ AI</p>
                 <p className="text-2xl font-bold">{products.length}</p>
               </div>
             </CardContent>
@@ -95,7 +95,7 @@ export default function AIPricingPage() {
                 <TrendingUp className="h-6 w-6 text-[#4A7C23]" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Avg. Margin</p>
+                <p className="text-sm text-muted-foreground">Biên lợi nhuận TB</p>
                 <p className="text-2xl font-bold text-[#4A7C23]">22%</p>
               </div>
             </CardContent>
@@ -106,7 +106,7 @@ export default function AIPricingPage() {
                 <DollarSign className="h-6 w-6 text-[#D4A574]" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Avg. Price</p>
+                <p className="text-sm text-muted-foreground">Giá trung bình</p>
                 <p className="text-2xl font-bold">337,500 VND</p>
               </div>
             </CardContent>
@@ -117,7 +117,7 @@ export default function AIPricingPage() {
                 <Target className="h-6 w-6 text-[#17A2B8]" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Optimized</p>
+                <p className="text-sm text-muted-foreground">Đã tối ưu</p>
                 <p className="text-2xl font-bold">{products.length}</p>
               </div>
             </CardContent>
@@ -125,18 +125,18 @@ export default function AIPricingPage() {
         </div>
 
         {/* AI Insights */}
-        <Card className="border-[#9333EA]/20 bg-gradient-to-r from-[#F3E8FF]/30 to-transparent">
+        <Card className="border-[#9333EA]/20 bg-linear-to-r from-[#F3E8FF]/30 to-transparent">
           <CardHeader>
             <div className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-[#9333EA]" />
-              <CardTitle className="text-base">AI Insights</CardTitle>
+              <CardTitle className="text-base">Phân tích từ AI</CardTitle>
             </div>
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 md:grid-cols-3">
               <div className="rounded-lg bg-card p-4">
                 <p className="text-sm font-medium text-foreground">
-                  Market Trend
+                  Xu hướng thị trường
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Nhu cầu thú nhồi bông len đang tăng 15% trong tháng này
@@ -144,7 +144,7 @@ export default function AIPricingPage() {
               </div>
               <div className="rounded-lg bg-card p-4">
                 <p className="text-sm font-medium text-foreground">
-                  Cost Optimization
+                  Tối ưu chi phí
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Có thể tiết kiệm 8% chi phí bằng cách mua len cotton số lượng lớn
@@ -152,7 +152,7 @@ export default function AIPricingPage() {
               </div>
               <div className="rounded-lg bg-card p-4">
                 <p className="text-sm font-medium text-foreground">
-                  Pricing Opportunity
+                  Cơ hội định giá
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Khăn choàng có thể tăng giá 10% do mùa đông sắp tới
@@ -165,18 +165,18 @@ export default function AIPricingPage() {
         {/* Pricing Table */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Product Pricing Analysis</CardTitle>
+            <CardTitle className="text-base">Phân tích giá Sản phẩm</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Product</TableHead>
-                  <TableHead className="text-right">Cost (BOM)</TableHead>
-                  <TableHead className="text-right">Base Price</TableHead>
-                  <TableHead className="text-right">AI Suggested</TableHead>
-                  <TableHead className="text-right">Margin</TableHead>
-                  <TableHead className="text-center">Status</TableHead>
+                  <TableHead>Sản phẩm</TableHead>
+                  <TableHead className="text-right">Chi phí (BOM)</TableHead>
+                  <TableHead className="text-right">Giá cơ bản</TableHead>
+                  <TableHead className="text-right">Gợi ý từ AI</TableHead>
+                  <TableHead className="text-right">Biên lợi nhuận</TableHead>
+                  <TableHead className="text-center">Trạng thái</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -223,7 +223,7 @@ export default function AIPricingPage() {
                               : "bg-[#FFA500] text-white"
                           )}
                         >
-                          {margin >= 20 ? "Optimal" : "Review"}
+                          {margin >= 20 ? "Tốt" : "Cần xem lại"}
                         </Badge>
                       </TableCell>
                     </TableRow>

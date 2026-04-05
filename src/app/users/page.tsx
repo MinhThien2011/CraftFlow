@@ -128,8 +128,8 @@ export default function UsersPage() {
 
   return (
     <AppShell
-      title="User Management"
-      subtitle="Manage staff and warehouse accounts"
+      title="Quản lý người dùng"
+      subtitle="Quản lý nhân viên và tài khoản kho"
     >
       <div className="space-y-6">
         {/* Header Section */}
@@ -163,7 +163,7 @@ export default function UsersPage() {
                       <Label htmlFor="name">Họ và tên</Label>
                       <Input
                         id="name"
-                        placeholder="Nguyễn Văn A"
+                        placeholder="Nguyễn Văn An"
                         value={newUser.name}
                         onChange={(e) =>
                           setNewUser({ ...newUser, name: e.target.value })

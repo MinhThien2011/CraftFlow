@@ -71,26 +71,26 @@ export default function ProductsPage() {
   }
 
   return (
-    <AppShell title="Products & BOM" subtitle="Welcome to CRAFTFLOW">
+    <AppShell title="Sản phẩm & Định mức" subtitle="Chào mừng đến với CRAFTFLOW">
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-semibold text-foreground">
-              Products & BOM Management
+              Quản lý sản phẩm & định mức
             </h2>
             <p className="text-sm text-muted-foreground">
-              Manage your products and bill of materials
+              Quản lý sản phẩm và định mức nguyên vật liệu (BOM)
             </p>
           </div>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
               <Button className="gap-2">
                 <Plus className="h-4 w-4" />
-                {activeTab === "products" ? "Add Product" : "Create BOM"}
+                {activeTab === "products" ? "Thêm sản phẩm" : "Tạo BOM"}
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="sm:max-w-106.25">
               <DialogHeader>
                 <DialogTitle>
                   {activeTab === "products"
@@ -183,7 +183,7 @@ export default function ProductsPage() {
                 <Boxes className="h-6 w-6 text-[#8B7355]" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Total Products</p>
+                <p className="text-sm text-muted-foreground">Tổng sản phẩm</p>
                 <p className="text-2xl font-bold">{products.length}</p>
               </div>
             </CardContent>
@@ -194,7 +194,7 @@ export default function ProductsPage() {
                 <Package className="h-6 w-6 text-[#4A7C23]" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Active BOMs</p>
+                <p className="text-sm text-muted-foreground">Số BOM đang dùng</p>
                 <p className="text-2xl font-bold">{boms.length}</p>
               </div>
             </CardContent>
@@ -205,7 +205,7 @@ export default function ProductsPage() {
                 <Boxes className="h-6 w-6 text-[#D4A574]" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Categories</p>
+                <p className="text-sm text-muted-foreground">Danh mục</p>
                 <p className="text-2xl font-bold">{productCategories.length}</p>
               </div>
             </CardContent>
@@ -224,7 +224,7 @@ export default function ProductsPage() {
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              Products
+              Sản phẩm
             </button>
             <button
               onClick={() => setActiveTab("bom")}
@@ -235,7 +235,7 @@ export default function ProductsPage() {
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              Bill of Materials
+              Định mức 
             </button>
           </div>
 
@@ -243,7 +243,7 @@ export default function ProductsPage() {
             <div className="relative flex-1 md:w-64">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search..."
+                placeholder="Tìm kiếm..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -255,10 +255,10 @@ export default function ProductsPage() {
                 onValueChange={setSelectedCategory}
               >
                 <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Category" />
+                  <SelectValue placeholder="Danh mục" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="All">All Categories</SelectItem>
+                  <SelectItem value="All">Tất cả Danh mục</SelectItem>
                   {productCategories.map((cat) => (
                     <SelectItem key={cat} value={cat}>
                       {cat}
@@ -277,11 +277,11 @@ export default function ProductsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Product</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead className="text-right">Base Price</TableHead>
-                    <TableHead className="text-right">Suggested Price</TableHead>
-                    <TableHead>Created</TableHead>
+                    <TableHead>Sản phẩm</TableHead>
+                    <TableHead>Danh mục</TableHead>
+                    <TableHead className="text-right">Giá gốc</TableHead>
+                    <TableHead className="text-right">Giá đề xuất</TableHead>
+                    <TableHead>Ngày tạo</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

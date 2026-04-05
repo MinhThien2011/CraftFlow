@@ -71,53 +71,55 @@ export default function InventoryPage() {
   )
 
   const getStatusBadge = (status: Material["status"]) => {
-    switch (status) {
-      case "Good":
-        return (
-          <Badge className="bg-[#4A7C23] text-white hover:bg-[#4A7C23]/90">
-            Good
-          </Badge>
-        )
-      case "Low Stock":
-        return (
-          <Badge className="bg-[#FFA500] text-white hover:bg-[#FFA500]/90">
-            Low Stock
-          </Badge>
-        )
-      case "Critical":
-        return (
-          <Badge className="bg-[#DC3545] text-white hover:bg-[#DC3545]/90">
-            Critical
-          </Badge>
-        )
-    }
+  switch (status) {
+    case "Good":
+      return (
+        <Badge className="bg-[#4A7C23] text-white hover:bg-[#4A7C23]/90">
+          🟢 Ổn định
+        </Badge>
+      )
+    case "Low Stock":
+      return (
+        <Badge className="bg-[#FFA500] text-white hover:bg-[#FFA500]/90">
+          🟠 Sắp hết
+        </Badge>
+      )
+    case "Critical":
+      return (
+        <Badge className="bg-[#DC3545] text-white hover:bg-[#DC3545]/90">
+          🔴 Nguy cấp
+        </Badge>
+      )
+    default:
+      return null
   }
+}
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("vi-VN").format(value) + " VND"
   }
 
   return (
-    <AppShell title="Inventory" subtitle="Welcome to CRAFTFLOW">
+    <AppShell title="Kho hàng" subtitle="Chào mừng đến với CRAFTFLOW">
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-semibold text-foreground">
-              Inventory Management
+              Quản lý kho hàng
             </h2>
             <p className="text-sm text-muted-foreground">
-              Track materials, manage stock, and record imports
+              Quản lý nguyên liệu, tồn kho và lịch sử nhập hàng
             </p>
           </div>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
               <Button className="gap-2">
                 <Plus className="h-4 w-4" />
-                Add Material
+                Thêm nguyên liệu
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="sm:max-w-106.25">
               <DialogHeader>
                 <DialogTitle>Thêm nguyên liệu mới</DialogTitle>
                 <DialogDescription>
@@ -186,7 +188,7 @@ export default function InventoryPage() {
                 <Package className="h-6 w-6 text-[#8B7355]" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Total Materials</p>
+                <p className="text-sm text-muted-foreground">Tổng nguyên liệu</p>
                 <p className="text-2xl font-bold">{totalMaterials}</p>
               </div>
             </CardContent>
@@ -197,7 +199,7 @@ export default function InventoryPage() {
                 <TrendingDown className="h-6 w-6 text-[#FFA500]" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Low Stock Items</p>
+                <p className="text-sm text-muted-foreground">Sắp hết</p>
                 <p className="text-2xl font-bold text-[#FFA500]">
                   {lowStockItems}
                 </p>
@@ -210,7 +212,7 @@ export default function InventoryPage() {
                 <AlertTriangle className="h-6 w-6 text-[#DC3545]" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Critical Stock</p>
+                <p className="text-sm text-muted-foreground">Nguy cấp</p>
                 <p className="text-2xl font-bold text-[#DC3545]">
                   {criticalStock}
                 </p>
@@ -220,7 +222,7 @@ export default function InventoryPage() {
           <Card>
             <CardContent className="p-5">
               <p className="text-sm text-muted-foreground">
-                Total Inventory Value
+                Tổng giá trị tồn kho
               </p>
               <p className="text-xl font-bold text-[#4A7C23]">
                 {formatCurrency(totalValue)}
@@ -241,7 +243,7 @@ export default function InventoryPage() {
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              Material List
+              Danh sách nguyên liệu
             </button>
             <button
               onClick={() => setActiveTab("history")}
@@ -252,7 +254,7 @@ export default function InventoryPage() {
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              Import History
+              Lịch sử nhập kho
             </button>
           </div>
 
@@ -260,7 +262,7 @@ export default function InventoryPage() {
             <div className="relative flex-1 md:w-64">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search materials..."
+                placeholder="Tìm kiếm nguyên liệu..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -272,7 +274,7 @@ export default function InventoryPage() {
                 size="sm"
                 onClick={() => setSelectedCategory("All")}
               >
-                All
+                Tất cả
               </Button>
               {materialCategories.map((cat) => (
                 <Button
@@ -295,12 +297,12 @@ export default function InventoryPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Material</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead className="text-right">Current Stock</TableHead>
-                    <TableHead className="text-right">Min Stock</TableHead>
-                    <TableHead className="text-right">Unit Price</TableHead>
-                    <TableHead className="text-center">Status</TableHead>
+                    <TableHead>Nguyên liệu</TableHead>
+                    <TableHead>Loại</TableHead>
+                    <TableHead className="text-right">Tồn kho</TableHead>
+                    <TableHead className="text-right">Tối thiểu</TableHead>
+                    <TableHead className="text-right">Đơn giá</TableHead>
+                    <TableHead className="text-center">Trạng thái</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -346,12 +348,12 @@ export default function InventoryPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Material</TableHead>
-                    <TableHead>Supplier</TableHead>
-                    <TableHead className="text-right">Quantity</TableHead>
-                    <TableHead className="text-right">Unit Price</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                    <TableHead>Date</TableHead>
+                    <TableHead>Nguyên liệu</TableHead>
+                    <TableHead>Nhà cung cấp</TableHead>
+                    <TableHead className="text-right">Số lượng</TableHead>
+                    <TableHead className="text-right">Đơn giá</TableHead>
+                    <TableHead className="text-right">Tổng cộng</TableHead>
+                    <TableHead>Ngày</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

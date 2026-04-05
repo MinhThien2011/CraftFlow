@@ -16,7 +16,7 @@ import type {
 // Current user
 export const currentUser: User = {
   id: "1",
-  name: "Nguyễn Văn Admin",
+  name: "Nguyễn Văn Anh",
   email: "admin@craftflow.vn",
   role: "Admin",
 }
