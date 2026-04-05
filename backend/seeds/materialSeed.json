@@ -1,0 +1,167 @@
+[
+    {
+        "name": "Len Milk Cotton 125g",
+        "code": "YARN-MC-01",
+        "unit": "Cuộn",
+        "color": "Trắng sữa",
+        "price": 35000,
+        "currentStock": 50,
+        "threshold": 10,
+        "description": "Len cotton mềm mại, thích hợp đan móc thú bông và quần áo bé em.",
+        "isActive": true
+    },
+    {
+        "name": "Len Milk Cotton 125g",
+        "code": "YARN-MC-02",
+        "unit": "Cuộn",
+        "color": "Xanh Pastel",
+        "price": 35000,
+        "currentStock": 40,
+        "threshold": 10,
+        "description": "Len cotton mềm mại, thích hợp đan móc thú bông và quần áo bé em.",
+        "isActive": true
+    },
+    {
+        "name": "Len Nhung Đũa",
+        "code": "YARN-VH-01",
+        "unit": "Cuộn",
+        "color": "Hồng phấn",
+        "price": 45000,
+        "currentStock": 20,
+        "threshold": 5,
+        "description": "Sợi nhung lớn, cực kỳ mềm mại, dùng làm thảm hoặc gối tựa.",
+        "isActive": true
+    },
+    {
+        "name": "Vải Linen Bột",
+        "code": "FAB-LN-01",
+        "unit": "Mét",
+        "color": "Be tự nhiên",
+        "price": 85000,
+        "currentStock": 100,
+        "threshold": 15,
+        "description": "Vải linen cao cấp, thoáng mát, dùng may túi tote hoặc khăn trải bàn.",
+        "isActive": true
+    },
+    {
+        "name": "Vải Canvas Dày",
+        "code": "FAB-CV-01",
+        "unit": "Mét",
+        "color": "Trắng ngà",
+        "price": 60000,
+        "currentStock": 80,
+        "threshold": 20,
+        "description": "Vải canvas bền bỉ, thích hợp làm túi xách và đồ decor handmade.",
+        "isActive": true
+    },
+    {
+        "name": "Hạt Cườm Thủy Tinh 4mm",
+        "code": "BEAD-GL-01",
+        "unit": "Gói (50g)",
+        "color": "Trong suốt",
+        "price": 15000,
+        "currentStock": 200,
+        "threshold": 30,
+        "description": "Hạt cườm thủy tinh lấp lánh dùng kết vòng tay, trang sức.",
+        "isActive": true
+    },
+    {
+        "name": "Hạt Gỗ Tròn 10mm",
+        "code": "BEAD-WD-01",
+        "unit": "Túi (100 hạt)",
+        "color": "Nâu gỗ",
+        "price": 25000,
+        "currentStock": 150,
+        "threshold": 20,
+        "description": "Hạt gỗ tự nhiên dùng làm rèm hoặc phụ kiện macrame.",
+        "isActive": true
+    },
+    {
+        "name": "Đất Sét Polymer",
+        "code": "CLAY-PL-01",
+        "unit": "Thỏi",
+        "color": "Đỏ tươi",
+        "price": 42000,
+        "currentStock": 30,
+        "threshold": 8,
+        "description": "Đất sét nung cao cấp, không co ngót, dùng làm trang sức thủ công.",
+        "isActive": true
+    },
+    {
+        "name": "Đất Sét Tự Khô",
+        "code": "CLAY-AD-01",
+        "unit": "Gói (500g)",
+        "color": "Trắng",
+        "price": 55000,
+        "currentStock": 25,
+        "threshold": 5,
+        "description": "Đất sét tự khô trong không khí, dễ tạo hình đồ gốm mini.",
+        "isActive": true
+    },
+    {
+        "name": "Dây Thừng Macrame 3mm",
+        "code": "ROPE-MC-01",
+        "unit": "Cuộn (100m)",
+        "color": "Trắng kem",
+        "price": 120000,
+        "currentStock": 15,
+        "threshold": 3,
+        "description": "Dây thừng cotton xoắn dùng đan macrame trang trí tường.",
+        "isActive": true
+    },
+    {
+        "name": "Keo Nến Nhỏ",
+        "code": "GLUE-ST-01",
+        "unit": "Cây",
+        "color": "Trong",
+        "price": 2000,
+        "currentStock": 500,
+        "threshold": 50,
+        "description": "Keo nến dùng cho súng bắn keo, dán hoa lụa và phụ kiện.",
+        "isActive": true
+    },
+    {
+        "name": "Ruy Băng Lụa 2cm",
+        "code": "RIBB-SL-01",
+        "unit": "Cuộn (20m)",
+        "color": "Đỏ đô",
+        "price": 28000,
+        "currentStock": 60,
+        "threshold": 10,
+        "description": "Ruy băng bóng mượt dùng thắt nơ hộp quà, trang trí.",
+        "isActive": true
+    },
+    {
+        "name": "Mắt Thú Nút Cài 8mm",
+        "code": "ACC-EYE-01",
+        "unit": "Cặp",
+        "color": "Đen",
+        "price": 3000,
+        "currentStock": 300,
+        "threshold": 50,
+        "description": "Mắt nhựa đen bóng dùng cho thú bông móc len.",
+        "isActive": true
+    },
+    {
+        "name": "Khóa Kéo Ẩn 20cm",
+        "code": "ACC-ZIP-01",
+        "unit": "Cái",
+        "color": "Trắng",
+        "price": 5000,
+        "currentStock": 100,
+        "threshold": 20,
+        "description": "Khóa kéo giọt nước dùng cho túi xách và gối.",
+        "isActive": true
+    },
+    {
+        "name": "Bông Gòn Nhân Tạo",
+        "code": "FILL-PL-01",
+        "unit": "Kg",
+        "color": "Trắng",
+        "price": 90000,
+        "currentStock": 10,
+        "threshold": 2,
+        "description": "Bông gòn tơi xốp, đàn hồi tốt, dùng nhồi thú bông.",
+        "isActive": true
+    }
+]
