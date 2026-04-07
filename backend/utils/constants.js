@@ -63,3 +63,27 @@ export const PRIORITY = {
   HIGH:   'high',
   URGENT: 'urgent',
 }
+
+/**
+ * Product Inventory Stock Levels
+ * Used for categorizing product quantity relative to its threshold
+ */
+export const STOCK_LEVEL = {
+  OUT_OF_STOCK: 'out_of_stock', // 0
+  CRITICAL:     'critical',     // Extremely low, needs immediate production
+  LOW:          'low',          // Below threshold
+  NORMAL:       'normal',       // Adequate stock
+  OVERSTOCK:    'overstock',    // Excess stock
+};
+
+/**
+ * Mapping of stock levels to metadata (labels, colors, etc.)
+ * Useful for both backend categorization and frontend display
+ */
+export const STOCK_LEVEL_METADATA = {
+  [STOCK_LEVEL.OUT_OF_STOCK]: { label: 'Hết hàng', color: '#ff4d4f', priority: 1 },
+  [STOCK_LEVEL.CRITICAL]:     { label: 'Cực thấp', color: '#ff7a45', priority: 2 },
+  [STOCK_LEVEL.LOW]:          { label: 'Sắp hết',  color: '#ffa940', priority: 3 },
+  [STOCK_LEVEL.NORMAL]:       { label: 'Bình thường', color: '#52c41a', priority: 4 },
+  [STOCK_LEVEL.OVERSTOCK]:    { label: 'Vượt mức', color: '#1890ff', priority: 5 },
+};

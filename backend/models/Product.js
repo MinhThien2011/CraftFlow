@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { determineStockLevel } from '../utils/inventoryHelpers.js';
 
 const productSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true, unique: true },
@@ -11,7 +12,6 @@ const productSchema = new mongoose.Schema({
     {
       material: { type: mongoose.Schema.Types.ObjectId, ref: 'Material', required: true },
       quantity: { type: Number, required: true, min: 0 },
-      // Optional: Cache these for quick access without populating
       materialCode: { type: String, required: true },
       materialName: { type: String, required: true },
       unit: { type: String, default: 'unit' },
@@ -23,7 +23,19 @@ const productSchema = new mongoose.Schema({
   currentStock: { type: Number, default: 0, min: 0 }, // Số lượng sản phẩm hoàn chỉnh trong kho
   threshold: { type: Number, default: 5, min: 0 }, // Cảnh báo khi tồn kho thấp hơn mức này
   totalProduced: { type: Number, default: 0, min: 0 } // Tổng số lượng đã sản xuất
-}, { timestamps: true });
+}, { 
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+});
+
+/**
+ * Virtual property to get current stock level status.
+ * Used for display and categorization.
+ */
+productSchema.virtual('stockLevel').get(function() {
+  return determineStockLevel(this.currentStock, this.threshold);
+});
 
 productSchema.index({ isActive: 1 });
 

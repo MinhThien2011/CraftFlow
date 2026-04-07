@@ -1,6 +1,8 @@
 import Material from '../models/Material.js';
 import Product from '../models/Product.js';
 import { standardlizeResponseDataHelper } from '../utils/standardlizeResponseData.js';
+import { determineStockLevel } from '../utils/inventoryHelpers.js';
+import { STOCK_LEVEL_METADATA } from '../utils/constants.js';
 
 const MAX_LIMIT = 100;
 
@@ -82,11 +84,16 @@ export const getMaterialInventory = async ({ search = '', page = 1, limit = 10 }
     Material.countDocuments(query)
   ]);
 
-  // Enrich with low stock flag
-  const enrichedMaterials = materials.map(m => ({
-    ...m,
-    isLowStock: m.currentStock <= m.threshold
-  }));
+  // Enrich with detailed stock level information
+  const enrichedMaterials = materials.map(m => {
+    const stockLevel = determineStockLevel(m.currentStock, m.threshold);
+    return {
+      ...m,
+      isLowStock: m.currentStock <= m.threshold, // Keep for backward compatibility
+      stockLevel,
+      stockLevelInfo: STOCK_LEVEL_METADATA[stockLevel]
+    };
+  });
 
   return {
     success: true,
@@ -127,10 +134,16 @@ export const getProductInventory = async ({ search = '', page = 1, limit = 10 })
     Product.countDocuments(query)
   ]);
 
-  const enrichedProducts = products.map(p => ({
-    ...p,
-    isLowStock: p.currentStock <= p.threshold
-  }));
+  // Enrich with detailed stock level information
+  const enrichedProducts = products.map(p => {
+    const stockLevel = determineStockLevel(p.currentStock, p.threshold);
+    return {
+      ...p,
+      isLowStock: p.currentStock <= p.threshold, // Keep for backward compatibility
+      stockLevel,
+      stockLevelInfo: STOCK_LEVEL_METADATA[stockLevel]
+    };
+  });
 
   return {
     success: true,

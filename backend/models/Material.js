@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { determineStockLevel } from '../utils/inventoryHelpers.js';
 
 const materialSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
@@ -10,7 +11,18 @@ const materialSchema = new mongoose.Schema({
   threshold: { type: Number, default: 10, min: 0 },
   description: String,
   isActive: { type: Boolean, default: true }
-}, { timestamps: true });
+}, { 
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+});
+
+/**
+ * Virtual property to get current stock level status.
+ */
+materialSchema.virtual('stockLevel').get(function() {
+  return determineStockLevel(this.currentStock, this.threshold);
+});
 
 materialSchema.index({ name: 1 });
 materialSchema.index({ currentStock: 1 });
