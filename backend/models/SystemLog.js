@@ -4,7 +4,8 @@ const systemLogSchema = new mongoose.Schema({
   author: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: false // Null for unauthenticated actions like failed login
+    required: false, // Null for unauthenticated actions like failed login
+    index: true
   },
   action: {
     type: String,
@@ -34,7 +35,7 @@ const systemLogSchema = new mongoose.Schema({
   timestamps: { createdAt: true, updatedAt: false }
 });
 
-// Index for efficient querying by date range
 systemLogSchema.index({ createdAt: -1 });
+systemLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 90 * 24 * 60 * 60 });
 
 export default mongoose.model('SystemLog', systemLogSchema);

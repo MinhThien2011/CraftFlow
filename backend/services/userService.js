@@ -1,3 +1,4 @@
+import { buildUpdatePayload } from '../utils/payloadBuilder.js'
 import User from '../models/User.js'
 
 const MAX_LIMIT = 100;
@@ -15,7 +16,19 @@ export const deleteUser = async (userId) => {
 
 export const updateUser = async (userId, updateData) => {
     try {
-        const user = await User.findByIdAndUpdate(userId, updateData, { new: true }).lean();
+        const userdata = await User.findById(userId).lean();
+        const updatePayload = buildUpdatePayload(userdata, updateData);
+
+        if (!Object.keys(updatePayload).length) {
+            return { success: false, message: 'No fields to update.', data: null };
+        }
+
+        const user = await User.findOneAndUpdate(
+            { _id: userId },
+            { $set: updatePayload },
+            { new: true, runValidators: true }
+        ).select('-password').populate('role', 'roleName').lean();
+
         if (!user) return { success: false, message: 'User not found.', data: null };
         return { success: true, message: 'User updated successfully.', data: user };
     } catch (error) {
@@ -33,9 +46,9 @@ export const getUserByQuery = async (query, page = 1, limit = 10, search = '') =
         const pageNum = Math.max(1, parseInt(page));
         const limitNum = Math.min(MAX_LIMIT, Math.max(1, parseInt(limit)));
         const skip = (pageNum - 1) * limitNum;
-        
+
         let finalQuery = { ...query };
-        
+
         if (search) {
             const searchRegex = { $regex: search, $options: 'i' };
             finalQuery.$or = [
@@ -55,7 +68,7 @@ export const getUserByQuery = async (query, page = 1, limit = 10, search = '') =
                 .lean(),
             User.countDocuments(finalQuery)
         ]);
-            
+
         return {
             success: true,
             message: 'Users retrieved successfully.',

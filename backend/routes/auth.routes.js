@@ -4,7 +4,7 @@ import { jwtAuth } from "../middleware/jwtAuth.js";
 
 const authRouter = Router();
 
-authRouter.get('/',(req , res)=>{
+authRouter.get('/', (req, res) => {
     res.status(200).json({
         success: true,
         message: "Welcome to the Crab Flow Auth API",
@@ -12,9 +12,9 @@ authRouter.get('/',(req , res)=>{
 })
 
 authRouter.post('/login', login);
-authRouter.get('/user',jwtAuth, getUserInfo);
+authRouter.get('/user', jwtAuth, getUserInfo);
 authRouter.post('/refresh-password', refreshPassword);
-authRouter.post('/change-password', changePassword);
+authRouter.post('/change-password', jwtAuth, changePassword);
 authRouter.post('/logout', logout);
 
 export default authRouter;

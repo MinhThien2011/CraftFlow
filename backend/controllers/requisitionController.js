@@ -1,6 +1,5 @@
 import { StatusCodes } from 'http-status-codes';
 import * as requisitionService from '../services/materialRequisitionService.js';
-import { logActivity } from '../utils/logger.js';
 
 export const requestMaterials = async (req, res) => {
   try {
@@ -21,6 +20,7 @@ export const requestMaterials = async (req, res) => {
       data: result.data
     });
   } catch (error) {
+    console.error("Error submitting material requisition:", error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
       message: 'Failed to submit material requisition.',
@@ -49,6 +49,7 @@ export const updateStatus = async (req, res) => {
       data: result.data
     });
   } catch (error) {
+    console.error("Error updating requisition status:", error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
       message: 'Failed to update requisition status.',

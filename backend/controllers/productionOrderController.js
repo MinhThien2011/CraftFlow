@@ -29,7 +29,7 @@ export const createOrder = async (req, res) => {
         data: null
       });
     }
-
+    // sẽ sửa thành ghi log sau khi đã res client tránh làm tăng response time
     await logActivity({
       author: req.userId,
       action: 'CREATE_PRODUCTION_ORDER',
@@ -43,6 +43,7 @@ export const createOrder = async (req, res) => {
       message: result.message,
       data: result.data
     });
+    
   } catch (error) {
     console.error('[ProductionOrderController] createOrder error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({

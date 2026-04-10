@@ -1,7 +1,7 @@
 import SystemLog from "../models/SystemLog.js";
 import { standardlizeResponseDataHelper } from "../utils/standardlizeResponseData.js";
 
-const MAX_LIMIT = 500; // Logs can be larger than other entities
+const MAX_LIMIT = 500;
 
 /**
  * Get system logs with filtering and pagination.
@@ -16,7 +16,14 @@ export const getSystemLogsService = async (query, page = 1, limit = 50) => {
         const [logs, count] = await Promise.all([
             SystemLog.find(query)
                 .select('author action module details targetId createdAt ipAddress') // Projection
-                .populate('author', 'username fullName role')
+                .populate({
+                    path: 'author',
+                    select: 'username fullName role',
+                    populate: {
+                        path: 'role',
+                        select: 'roleName'
+                    }
+                })
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limitNum)
@@ -42,7 +49,7 @@ export const getSystemLogsService = async (query, page = 1, limit = 50) => {
         return {
             success: false,
             message: error.message,
-            data: null, 
+            data: null,
         };
     }
 }

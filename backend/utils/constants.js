@@ -81,8 +81,8 @@ export const STOCK_LEVEL = {
  * Useful for both backend categorization and frontend display
  */
 export const STOCK_LEVEL_METADATA = {
-  [STOCK_LEVEL.OUT_OF_STOCK]: { label: 'Hết hàng', color: '#ff4d4f', priority: 1 },
-  [STOCK_LEVEL.CRITICAL]:     { label: 'Cực thấp', color: '#ff7a45', priority: 2 },
+  [STOCK_LEVEL.OUT_OF_STOCK]: { label: 'ét ô ét', color: '#ff4d4f', priority: 1 },
+  [STOCK_LEVEL.CRITICAL]:     { label: 'Cực thấp Cíu Cíu', color: '#ff7a45', priority: 2 },
   [STOCK_LEVEL.LOW]:          { label: 'Sắp hết',  color: '#ffa940', priority: 3 },
   [STOCK_LEVEL.NORMAL]:       { label: 'Bình thường', color: '#52c41a', priority: 4 },
   [STOCK_LEVEL.OVERSTOCK]:    { label: 'Vượt mức', color: '#1890ff', priority: 5 },

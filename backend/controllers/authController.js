@@ -249,7 +249,7 @@ export const logout = async (req, res) => {
  */
 export const getUserInfo = async (req, res) => {
   try {
-    console.log(req.userId);
+    console.log("User Get Info:", req.userId);
     const user = await User.findById(req.userId).populate('role', 'roleName');
 
     if (!user || !user.isActive) {

@@ -2,8 +2,6 @@ import { STOCK_LEVEL } from './constants.js';
 
 /**
  * Determine the stock level based on current quantity and threshold.
- * 
- * Senior approach: Centralize this business logic in a utility to ensure 
  * consistency across the entire application (API, frontend, reports).
  * 
  * @param {number} currentStock - The current amount in inventory

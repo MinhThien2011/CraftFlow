@@ -1,15 +1,16 @@
 import { Router } from 'express';
-import { 
-  getAllUsers, 
+import {
+  getAllUsers,
   getUserById,
-  createUser, 
-  updateUser, 
-  deleteUser, 
-  toggleUserStatus 
+  createUser,
+  updateUser,
+  deleteUser,
+  toggleUserStatus
 } from '../controllers/userController.js';
 import { jwtAuth } from '../middleware/jwtAuth.js';
 import { rolePermission } from '../middleware/rolePermission.js';
 import { ROLES } from '../utils/constants.js';
+import { imageUploader } from '../middleware/cloudinary_uploader.js';
 
 const userRouter = Router();
 
@@ -17,14 +18,14 @@ const userRouter = Router();
 userRouter.use(jwtAuth);
 
 // Profile management
-userRouter.patch('/profile/:id', updateUser);
+userRouter.patch('/profile', imageUploader('avatars'), updateUser);
 
 // --- Admin Only Routes ---
 userRouter.use(rolePermission([ROLES.ADMIN]));
 
 userRouter.get('/', getAllUsers);
 userRouter.get('/:id', getUserById);
-userRouter.post('/', createUser);
+userRouter.post('/', imageUploader('avatars'), createUser);
 userRouter.patch('/:id/status', toggleUserStatus);
 userRouter.delete('/:id', deleteUser);
 

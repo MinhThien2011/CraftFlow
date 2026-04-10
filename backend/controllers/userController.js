@@ -28,18 +28,18 @@ export const getAllUsers = async (req, res) => {
         if (role) {
           filter.role = role._id;
         } else {
-          return res.status(StatusCodes.OK).json({ 
-            data: { 
-              users: [], 
-              pagination: { total: 0, page: pageNum, limit: limitNum, pages: 0 } 
-            } 
+          return res.status(StatusCodes.OK).json({
+            data: {
+              users: [],
+              pagination: { total: 0, page: pageNum, limit: limitNum, pages: 0 }
+            }
           });
         }
       }
     }
-    
+
     const result = await userService.getUserByQuery(filter, pageNum, limitNum, search);
-    
+
     if (!result.success) {
       return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
         success: false,
@@ -48,10 +48,10 @@ export const getAllUsers = async (req, res) => {
       });
     }
 
-    return res.status(StatusCodes.OK).json({ 
+    return res.status(StatusCodes.OK).json({
       success: true,
       message: result.message,
-      data: result.data 
+      data: result.data
     });
   } catch (error) {
     console.error('[UserController] getAllUsers Error:', error);
@@ -70,7 +70,7 @@ export const getUserById = async (req, res) => {
   try {
     const { id } = req.params;
     const result = await userService.getUserById(id);
-    
+
     if (!result.success) {
       const statusCode = result.message === 'User not found.' ? StatusCodes.NOT_FOUND : StatusCodes.INTERNAL_SERVER_ERROR;
       return res.status(statusCode).json({
@@ -80,7 +80,7 @@ export const getUserById = async (req, res) => {
       });
     }
 
-    return res.status(StatusCodes.OK).json({ 
+    return res.status(StatusCodes.OK).json({
       success: true,
       message: result.message,
       data: { user: result.data }
@@ -102,17 +102,18 @@ export const createUser = async (req, res) => {
   try {
     const { error, value } = createUserValidator(req.body);
     if (error) {
+      console.log('error', error)
       return res.status(StatusCodes.BAD_REQUEST).json({
         success: false,
-        message: ['Validation', error.details.map(d => d.message).join(', ')],
+        message: 'Validation Error: ' + error.details.map(d => d.message).join(', '),
         data: null
       });
     }
 
-    const existingUser = await User.findOne({ 
-      $or: [{ email: value.email }, { username: value.username }] 
+    const existingUser = await User.findOne({
+      $or: [{ email: value.email }, { username: value.username }]
     });
-    
+
     if (existingUser) {
       return res.status(StatusCodes.CONFLICT).json({
         success: false,
@@ -120,15 +121,20 @@ export const createUser = async (req, res) => {
         data: null
       });
     }
-    
+
     if (!value.role) {
       const staffRole = await Role.findOne({ roleName: 'staff' });
       value.role = staffRole?._id;
-    }else{  
+    } else {
       const role = await Role.findOne({ roleName: value.role });
       value.role = role?._id;
     }
-    
+    console.log('req.file', req.imageUrl)
+    if (req.imageUrl) {
+      value.avatar = req.imageUrl;
+    }
+
+    console.log("value :", value)
     const newUser = await User.create(value)
 
     await logActivity({
@@ -167,9 +173,9 @@ export const createUser = async (req, res) => {
  */
 export const updateUser = async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = req.userId;
     const { error, value } = updateUserValidator(req.body);
-    
+
     if (error) {
       return res.status(StatusCodes.BAD_REQUEST).json({
         success: false,
@@ -180,7 +186,7 @@ export const updateUser = async (req, res) => {
 
     const result = await userService.updateUser(id, value);
     if (!result.success) {
-      const statusCode = result.message === 'User not found.' ? StatusCodes.NOT_FOUND : StatusCodes.INTERNAL_SERVER_ERROR;
+      const statusCode = result.message === 'User not found.' ? StatusCodes.NOT_FOUND : result.message === 'No fields to update.' ? StatusCodes.BAD_REQUEST : StatusCodes.INTERNAL_SERVER_ERROR;
       return res.status(statusCode).json({
         success: false,
         message: result.message,
@@ -188,20 +194,23 @@ export const updateUser = async (req, res) => {
       });
     }
 
-    await logActivity({
-      author: req.userId,
-      action: 'UPDATE_USER',
-      module: 'USER',
-      details: `Updated user info for: ${result.data.username}`,
-      targetId: result.data._id,
-      metadata: value
-    }, req);
-
-    return res.status(StatusCodes.OK).json({
+    res.status(StatusCodes.OK).json({
       success: true,
       message: 'User updated successfully.',
       data: { user: result.data }
     });
+    if (result.data) {
+      setImmediate(async () => {
+        await logActivity({
+          author: req.userId,
+          action: 'UPDATE_USER',
+          module: 'USER',
+          details: `Updated user info for: ${result.data.username}`,
+          targetId: result.data._id,
+          metadata: value
+        }, req);
+      }, req);
+    }
   } catch (error) {
     console.error('[UserController] updateUser Error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
@@ -219,7 +228,7 @@ export const deleteUser = async (req, res) => {
   try {
     const { id } = req.params;
     const result = await userService.deleteUser(id);
-    
+
     if (!result.success) {
       const statusCode = result.message === 'User not found.' ? StatusCodes.NOT_FOUND : StatusCodes.INTERNAL_SERVER_ERROR;
       return res.status(statusCode).json({
@@ -259,7 +268,7 @@ export const toggleUserStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const user = await User.findById(id).populate('role', 'roleName');
-    
+
     if (!user) {
       return res.status(StatusCodes.NOT_FOUND).json({
         success: false,

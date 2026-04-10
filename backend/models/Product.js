@@ -23,7 +23,7 @@ const productSchema = new mongoose.Schema({
   currentStock: { type: Number, default: 0, min: 0 }, // Số lượng sản phẩm hoàn chỉnh trong kho
   threshold: { type: Number, default: 5, min: 0 }, // Cảnh báo khi tồn kho thấp hơn mức này
   totalProduced: { type: Number, default: 0, min: 0 } // Tổng số lượng đã sản xuất
-}, { 
+}, {
   timestamps: true,
   toJSON: { virtuals: true },
   toObject: { virtuals: true }
@@ -33,10 +33,13 @@ const productSchema = new mongoose.Schema({
  * Virtual property to get current stock level status.
  * Used for display and categorization.
  */
-productSchema.virtual('stockLevel').get(function() {
+productSchema.virtual('stockLevel').get(function () {
   return determineStockLevel(this.currentStock, this.threshold);
 });
 
 productSchema.index({ isActive: 1 });
+productSchema.index({ category: 1 });
+productSchema.index({ name: 1, code: 1 });
+productSchema.index({ createdAt: -1 });
 
 export default mongoose.model('Product', productSchema);
