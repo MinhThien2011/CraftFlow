@@ -32,7 +32,15 @@ const systemLogSchema = new mongoose.Schema({
   ipAddress: String,
   userAgent: String
 }, {
-  timestamps: { createdAt: true, updatedAt: false }
+  timestamps: { createdAt: true, updatedAt: false },
+  toJSON: {
+    virtuals: true,
+    versionKey: false,
+  },
+  toObject: {
+    virtuals: true,
+    versionKey: false,
+  }
 });
 
 systemLogSchema.index({ createdAt: -1 });

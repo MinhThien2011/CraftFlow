@@ -27,7 +27,21 @@ const assignmentSchema = new mongoose.Schema({
   reassignedAt: Date,
   startedAt: Date,
   finishedAt: Date,
-}, { timestamps: true });
+}, {
+  timestamps: true,
+  toJSON: {
+    virtuals: true,
+    versionKey: false,
+  },
+  toObject: {
+    virtuals: true,
+    versionKey: false,
+    transform: function (doc, ret) {
+      delete ret._id;
+      return ret;
+    }
+  }
+});
 
 
 assignmentSchema.index({ productionOrder: 1, staff: 1 }, { unique: true });

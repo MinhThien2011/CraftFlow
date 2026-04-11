@@ -3,6 +3,15 @@ import { ROLES } from '../utils/constants.js';
 
 const roleSchema = new mongoose.Schema({
     roleName: { type: String, enum: Object.values(ROLES), default: ROLES.STAFF, index: true },
+}, {
+    toJSON: {
+        virtuals: true,
+        versionKey: false,
+    },
+    toObject: {
+        virtuals: true,
+        versionKey: false,
+    }
 });
 
 export default mongoose.model('Role', roleSchema);

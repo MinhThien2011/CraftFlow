@@ -3,6 +3,7 @@ import * as productController from '../controllers/productController.js';
 import { jwtAuth } from '../middleware/jwtAuth.js';
 import { rolePermission } from '../middleware/rolePermission.js';
 import { ROLES } from '../utils/constants.js';
+import { imageUploader } from '../middleware/cloudinary_uploader.js';
 
 const productRouter = Router();
 
@@ -21,25 +22,36 @@ productRouter.get('/:id', productController.getProductById);
 
 
 // --- Private Routes (Requires Authentication) ---
-productRouter.use(jwtAuth);
-
-// --- Admin & Warehouse Manager Routes ---
-const adminOrWarehouse = rolePermission([ROLES.ADMIN, ROLES.KHO_MANAGER]);
+productRouter.use(jwtAuth)
 
 // @route   POST /api/products
-// @desc    Create a new product
-productRouter.post('/', adminOrWarehouse, productController.createProduct);
+// @desc    Create a new product with image upload
+productRouter.post(
+    '/',
+    rolePermission([ROLES.ADMIN]),
+    imageUploader('products'),
+    productController.createProduct
+);
 
 // @route   PUT /api/products/:id
-// @desc    Update an existing product
-productRouter.put('/:id', adminOrWarehouse, productController.updateProduct);
+// @desc    Update an existing product with image upload
+productRouter.put(
+    '/:id',
+    rolePermission([ROLES.ADMIN]),
+    imageUploader('products'),
+    productController.updateProduct
+);
 
 // @route   DELETE /api/products/:id
 // @desc    Deactivate a product (soft delete)
-productRouter.delete('/:id', adminOrWarehouse, productController.deleteProduct);
+productRouter.delete('/:id', rolePermission([ROLES.ADMIN]), productController.deleteProduct);
 
 // @route   POST /api/products/outgoing
 // @desc    Record outgoing products (e.g., sales, damage)
-productRouter.post('/outgoing', adminOrWarehouse, productController.outgoingProduct);
+productRouter.post(
+    '/outgoing',
+    rolePermission([ROLES.ADMIN, ROLES.KHO_MANAGER]),
+    productController.outgoingProduct
+);
 
 export default productRouter;

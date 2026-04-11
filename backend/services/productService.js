@@ -1,7 +1,7 @@
 import Product from '../models/Product.js';
 import InventoryTransaction from '../models/InventoryTransaction.js';
-import { TRANSACTION_TYPE } from '../utils/constants.js';
 import { transformProduct, transformProducts } from '../utils/productTransformer.js';
+import { processMaterialCosts } from '../utils/productHelpers.js';
 
 /**
  * Service to get all products with advanced filtering, sorting, and pagination.
@@ -45,7 +45,7 @@ export const getProductsByQuery = async (query) => {
         .sort(sortOptions)
         .skip(skip)
         .limit(limitInt)
-        .populate('estimateMaterialCost.material', 'name code unit')
+        .populate('estimateMaterialCost.material', 'name code unit currency')
         .lean(),
       Product.countDocuments(conditions)
     ]);
@@ -75,7 +75,7 @@ export const getProductsByQuery = async (query) => {
  */
 export const getProductById = async (id) => {
   try {
-    const product = await Product.findById(id).populate('estimateMaterialCost.material', 'name code unit').lean();
+    const product = await Product.findById(id).populate('estimateMaterialCost.material', 'name code unit currency').lean();
     if (!product) {
       return { status: 'error', message: 'Product not found.', data: null };
     }
@@ -92,20 +92,25 @@ export const getProductById = async (id) => {
  */
 export const createProduct = async (productData) => {
   try {
-    // Check if code or name already exists
     const existingProduct = await Product.findOne({
-      $or: [{ name: productData.name }, { code: productData.code }]
+      $or: [{ code: productData.code }]
     });
 
     if (existingProduct) {
-      return { status: 'error', message: 'Product name or code already exists.', data: null };
+      return { status: 'error', message: 'Product code already exists.', data: null };
+    }
+
+    if (productData.estimateMaterialCost && productData.estimateMaterialCost.length > 0) {
+      const { processedMaterials, totalBaseCost } = await processMaterialCosts(productData.estimateMaterialCost);
+      productData.estimateMaterialCost = processedMaterials;
+      productData.baseCost = totalBaseCost;
     }
 
     const product = await Product.create(productData);
     return {
       status: 'success',
       message: 'Product created successfully.',
-      data: { product }
+      data: { product: transformProduct(product) }
     };
   } catch (error) {
     console.error('[ProductService] createProduct error:', error);
@@ -124,8 +129,6 @@ export const updateProduct = async (id, updateData) => {
     if (!product) {
       return { status: 'error', message: 'Product not found.', data: null };
     }
-
-    // If name or code is being updated, check for uniqueness
     if (updateData.name || updateData.code) {
       const existingProduct = await Product.findOne({
         _id: { $ne: id },
@@ -140,11 +143,17 @@ export const updateProduct = async (id, updateData) => {
       }
     }
 
+    if (updateData.estimateMaterialCost && updateData.estimateMaterialCost.length > 0) {
+      const { processedMaterials, totalBaseCost } = await processMaterialCosts(updateData.estimateMaterialCost);
+      updateData.estimateMaterialCost = processedMaterials;
+      updateData.baseCost = totalBaseCost;
+    }
+
     const updatedProduct = await Product.findByIdAndUpdate(id, updateData, { new: true, runValidators: true });
     return {
       status: 'success',
       message: 'Product updated successfully.',
-      data: { product: updatedProduct }
+      data: { product: transformProduct(updatedProduct) }
     };
   } catch (error) {
     console.error('[ProductService] updateProduct error:', error);
@@ -162,8 +171,6 @@ export const deleteProduct = async (id) => {
     if (!product) {
       return { status: 'error', message: 'Product not found.', data: null };
     }
-
-    // Soft delete: just set isActive to false
     product.isActive = false;
     await product.save();
 
@@ -205,7 +212,7 @@ export const recordOutgoingProduct = async (productId, quantity, transactionType
     return {
       status: 'success',
       message: 'Outgoing product recorded successfully.',
-      data: { product, transaction }
+      data: { product: transformProduct(product), transaction }
     };
   } catch (error) {
     console.error('[ProductService] recordOutgoingProduct error:', error);
@@ -234,9 +241,16 @@ export const getLowStockProductsService = async ({ search = '', page = 1, limit 
     }
 
     const [products, total] = await Promise.all([
-      Product.find(conditions).skip(skip).limit(limit).lean(),
+      Product.find(conditions)
+        .skip(skip)
+        .limit(limit)
+        .populate('estimateMaterialCost.material', 'name code unit currency')
+        .lean(),
       Product.countDocuments(conditions)
     ]);
+
+    const limitInt = parseInt(limit, 10);
+    const pageInt = parseInt(page, 10);
 
     return {
       status: 'success',
@@ -245,9 +259,9 @@ export const getLowStockProductsService = async ({ search = '', page = 1, limit 
         products: transformProducts(products),
         pagination: {
           total,
-          totalPages: Math.ceil(total / limit),
-          currentPage: page,
-          limit
+          totalPages: Math.ceil(total / limitInt),
+          currentPage: pageInt,
+          limit: limitInt
         }
       }
     };

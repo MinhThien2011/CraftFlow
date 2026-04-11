@@ -16,6 +16,24 @@ const materialItemSchema = new mongoose.Schema({
     type: Number,
     default: 0
   }
+}, {
+  _id: true,
+  toJSON: {
+    virtuals: true,
+    versionKey: false,
+    transform: function (doc, ret) {
+      delete ret._id;
+      return ret;
+    }
+  },
+  toObject: {
+    virtuals: true,
+    versionKey: false,
+    transform: function (doc, ret) {
+      delete ret._id;
+      return ret;
+    }
+  }
 });
 
 const requisitionSchema = new mongoose.Schema({
@@ -53,7 +71,17 @@ const requisitionSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   }
-}, { timestamps: true });
+}, {
+  timestamps: true,
+  toJSON: {
+    virtuals: true,
+    versionKey: false,
+  },
+  toObject: {
+    virtuals: true,
+    versionKey: false,
+  }
+});
 
 requisitionSchema.index({ staff: 1, status: 1 });
 requisitionSchema.index({ status: 1, timeoutAt: 1 });

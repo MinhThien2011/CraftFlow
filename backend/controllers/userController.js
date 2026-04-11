@@ -129,14 +129,12 @@ export const createUser = async (req, res) => {
       const role = await Role.findOne({ roleName: value.role });
       value.role = role?._id;
     }
-    console.log('req.file', req.imageUrl)
     if (req.imageUrl) {
       value.avatar = req.imageUrl;
     }
-
-    console.log("value :", value)
+    console.log('value', value)
     const newUser = await User.create(value)
-
+    console.log('newUser', newUser)
     await logActivity({
       author: req.userId,
       action: 'CREATE_USER',

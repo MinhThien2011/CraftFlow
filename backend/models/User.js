@@ -32,12 +32,25 @@ const userSchema = new mongoose.Schema({
 
 }, {
   timestamps: true,
-  toJSON: { 
-    transform(doc, ret) {
+  id: false,
+  toJSON: {
+    virtuals: true,
+    versionKey: false,
+    transform: function (doc, ret) {
       delete ret.password;
+      delete ret.id;
       return ret;
     }
-   },
+  },
+  toObject: {
+    virtuals: true,
+    versionKey: false,
+    transform: function (doc, ret) {
+      delete ret.password;
+      delete ret.id;
+      return ret;
+    }
+  }
 });
 
 userSchema.index({ fullName: 1 });

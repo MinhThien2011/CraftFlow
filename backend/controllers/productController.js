@@ -47,13 +47,21 @@ export const getProductById = async (req, res) => {
  */
 export const createProduct = async (req, res) => {
   try {
+    console.log('[ProductController] createProduct request body:', req.body);
+    if (req.body.estimateMaterialCost) {
+      req.body.estimateMaterialCost = JSON.parse(req.body.estimateMaterialCost);
+    }
     const { error, value } = createProductValidator(req.body);
     if (error) {
       return res.status(StatusCodes.BAD_REQUEST).json({
         status: 'error',
-        message: error.details.map(d => d.message).join(', '),
+        message: `Validation failed: ${error.details.map(d => d.message).join(', ')}`,
         data: null
       });
+    }
+
+    if (req.imageUrl) {
+      value.productImage = req.imageUrl;
     }
 
     const result = await productService.createProduct(value);
@@ -89,9 +97,13 @@ export const updateProduct = async (req, res) => {
     if (error) {
       return res.status(StatusCodes.BAD_REQUEST).json({
         status: 'error',
-        message: error.details.map(d => d.message).join(', '),
+        message: `Validation failed: ${error.details.map(d => d.message).join(', ')}`,
         data: null
       });
+    }
+
+    if (req.imageUrl) {
+      value.productImage = req.imageUrl;
     }
 
     const result = await productService.updateProduct(req.params.id, value);

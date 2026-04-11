@@ -16,7 +16,17 @@ const transactionSchema = new mongoose.Schema({
   khoManager:  { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 
   note: String,
-}, { timestamps: true });
+}, {
+  timestamps: true,
+  toJSON: {
+    virtuals: true,
+    versionKey: false,
+  },
+  toObject: {
+    virtuals: true,
+    versionKey: false,
+  }
+});
 
 transactionSchema.index({ material: 1, createdAt: -1 });
 transactionSchema.index({ type: 1, createdAt: -1 });

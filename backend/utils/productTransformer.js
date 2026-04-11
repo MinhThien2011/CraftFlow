@@ -8,12 +8,19 @@ import { determineStockLevel } from './inventoryHelpers.js';
  */
 export const transformProduct = (product) => {
   if (!product) return null;
-  const rawProduct = product.toObject ? product.toObject({ virtuals: true }) : product;
+  const productObj = product.toObject ? product.toObject({ virtuals: true }) : { ...product };
+  const { id, __v, ...rest } = productObj;
+  if (rest.estimateMaterialCost && Array.isArray(rest.estimateMaterialCost)) {
+    rest.estimateMaterialCost = rest.estimateMaterialCost.map(item => {
+      const itemObj = item.toObject ? item.toObject({ virtuals: true }) : { ...item };
+      const { id: subId, __v: subV, ...subRest } = itemObj;
+      return subRest;
+    });
+  }
 
   return {
-    ...rawProduct,
-    // Ensure virtuals are present even if .lean() was used
-    stockLevel: rawProduct.stockLevel || determineStockLevel(rawProduct.currentStock, rawProduct.threshold),
+    ...rest,
+    stockLevel: rest.stockLevel || determineStockLevel(rest.currentStock, rest.threshold),
   };
 };
 

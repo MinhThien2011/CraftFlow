@@ -37,7 +37,17 @@ const productionOrderSchema = new mongoose.Schema({
   overdueAlertSent: { type: Boolean, default: false },
   overdueAt: { type: Date },
 
-}, { timestamps: true });
+}, {
+  timestamps: true,
+  toJSON: {
+    virtuals: true,
+    versionKey: false,
+  },
+  toObject: {
+    virtuals: true,
+    versionKey: false,
+  }
+});
 
 // Compound indexes
 productionOrderSchema.index({ status: 1, priority: 1, deadline: 1 });
