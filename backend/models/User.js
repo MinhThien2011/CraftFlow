@@ -6,12 +6,12 @@ const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true, trim: true },
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
-  fullName: { type: String, required: true, trim: true , minlength: 3 },
-  phone: { type: String, required: true, trim: true , unique: true },
+  fullName: { type: String, required: true, trim: true, minlength: 3 },
+  phone: { type: String, required: true, trim: true, unique: true },
   address: { type: String, trim: true, },
   birthDay: { type: Date },
   gender: { type: String, enum: ['male', 'female'], default: 'male', required: true },
-  avatar: { type: String, default: 'https://th.bing.com/th/id/OIP.fJBE-eHSQaEAChDXIjmrpQHaJQ?o=7rm=3&rs=1&pid=ImgDetMain&o=7&rm=3' },
+  avatar: { type: String, default: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRBgHP9VR3PI61v6fM1RhIUBXk77MT6xsa2Sg' },
 
   role: {
     type: mongoose.Schema.Types.ObjectId,
@@ -32,22 +32,22 @@ const userSchema = new mongoose.Schema({
 
 }, {
   timestamps: true,
-  id: false,
+  // id: false,
   toJSON: {
-    virtuals: true,
+    // virtuals: true,
     versionKey: false,
     transform: function (doc, ret) {
       delete ret.password;
-      delete ret.id;
+      // delete ret.id;
       return ret;
     }
   },
   toObject: {
-    virtuals: true,
+    // virtuals: true,
     versionKey: false,
     transform: function (doc, ret) {
       delete ret.password;
-      delete ret.id;
+      // delete ret.id;
       return ret;
     }
   }
@@ -59,7 +59,7 @@ userSchema.index({ isActive: 1 });
 userSchema.index({ role: 1 });
 
 // extensions 
-userSchema.statics.comparePassword  = function (candidatePassword, userPassword) {
+userSchema.statics.comparePassword = function (candidatePassword, userPassword) {
   return bcrypt.compareSync(candidatePassword, userPassword);
 };
 userSchema.pre('save', async function () {

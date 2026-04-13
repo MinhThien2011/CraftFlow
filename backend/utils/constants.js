@@ -2,6 +2,7 @@ export const ROLES = {
   ADMIN: 'admin',
   STAFF: 'staff',
   KHO_MANAGER: 'kho_manager',
+  PRODUCTION_MANAGER: 'production_manager',
 };
 
 /**
@@ -58,9 +59,9 @@ export const REQUISITION_TIMEOUT_MINUTES = 120;
  * Priority Levels for Production Orders
  */
 export const PRIORITY = {
-  LOW:    'low',
+  LOW: 'low',
   MEDIUM: 'medium',
-  HIGH:   'high',
+  HIGH: 'high',
   URGENT: 'urgent',
 }
 
@@ -70,10 +71,10 @@ export const PRIORITY = {
  */
 export const STOCK_LEVEL = {
   OUT_OF_STOCK: 'out_of_stock', // 0
-  CRITICAL:     'critical',     // Extremely low, needs immediate production
-  LOW:          'low',          // Below threshold
-  NORMAL:       'normal',       // Adequate stock
-  OVERSTOCK:    'overstock',    // Excess stock
+  CRITICAL: 'critical',     // Extremely low, needs immediate production
+  LOW: 'low',          // Below threshold
+  NORMAL: 'normal',       // Adequate stock
+  OVERSTOCK: 'overstock',    // Excess stock
 };
 
 /**
@@ -82,8 +83,8 @@ export const STOCK_LEVEL = {
  */
 export const STOCK_LEVEL_METADATA = {
   [STOCK_LEVEL.OUT_OF_STOCK]: { label: 'ét ô ét', color: '#ff4d4f', priority: 1 },
-  [STOCK_LEVEL.CRITICAL]:     { label: 'Cực thấp Cíu Cíu', color: '#ff7a45', priority: 2 },
-  [STOCK_LEVEL.LOW]:          { label: 'Sắp hết',  color: '#ffa940', priority: 3 },
-  [STOCK_LEVEL.NORMAL]:       { label: 'Bình thường', color: '#52c41a', priority: 4 },
-  [STOCK_LEVEL.OVERSTOCK]:    { label: 'Vượt mức', color: '#1890ff', priority: 5 },
+  [STOCK_LEVEL.CRITICAL]: { label: 'Cực thấp Cíu Cíu', color: '#ff7a45', priority: 2 },
+  [STOCK_LEVEL.LOW]: { label: 'Sắp hết', color: '#ffa940', priority: 3 },
+  [STOCK_LEVEL.NORMAL]: { label: 'Bình thường', color: '#52c41a', priority: 4 },
+  [STOCK_LEVEL.OVERSTOCK]: { label: 'Vượt mức', color: '#1890ff', priority: 5 },
 };

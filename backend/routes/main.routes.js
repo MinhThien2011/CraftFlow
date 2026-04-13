@@ -7,6 +7,7 @@ import productionRouter from "./production.routes.js";
 import requisitionRouter from "./requisition.routes.js";
 import productRouter from "./product.routes.js";
 import inventoryRouter from "./inventory.routes.js";
+import dashboardRouter from "./dashboard.routes.js";
 
 const mainRouter = Router();
 
@@ -24,5 +25,6 @@ mainRouter.use('/production', productionRouter);
 mainRouter.use('/requisitions', requisitionRouter);
 mainRouter.use('/products', productRouter);
 mainRouter.use('/inventory', inventoryRouter);
+mainRouter.use('/dashboard', dashboardRouter);
 
 export default mainRouter;

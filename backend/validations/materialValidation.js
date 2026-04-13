@@ -23,6 +23,8 @@ const materialSchema = Joi.object({
   }),
   currentStock: Joi.number().min(0).default(0),
   threshold: Joi.number().min(0).default(10),
+  location: Joi.string().trim().allow('', null).max(100),
+  supplier: Joi.string().trim().allow('', null).max(100),
   description: Joi.string().trim().allow('', null).max(500),
   isActive: Joi.boolean().default(true)
 }).required();
@@ -36,6 +38,8 @@ const updateMaterialSchema = Joi.object({
   color: Joi.string().trim(),
   price: Joi.number().min(0),
   threshold: Joi.number().min(0),
+  location: Joi.string().trim().allow('', null).max(100),
+  supplier: Joi.string().trim().allow('', null).max(100),
   description: Joi.string().trim().allow('', null).max(500),
   isActive: Joi.boolean()
 }).min(1).required().messages({
@@ -46,13 +50,16 @@ const updateMaterialSchema = Joi.object({
  * Validation schema for stock adjustment (Stock In/Out).
  */
 const adjustStockSchema = Joi.object({
-  type: Joi.string().valid(TRANSACTION_TYPE.RECEIVE, TRANSACTION_TYPE.ADJUST).required().messages({
+  type: Joi.string().valid(TRANSACTION_TYPE.RECEIVE, TRANSACTION_TYPE.ISSUE, TRANSACTION_TYPE.ADJUST).required().messages({
     'any.only': 'Invalid transaction type for manual adjustment.'
   }),
   quantity: Joi.number().not(0).required().messages({
     'number.base': 'Quantity must be a number.',
     'any.required': 'Quantity is required.'
   }),
+  sender: Joi.string().trim().allow('', null).max(100),
+  receiver: Joi.string().trim().allow('', null).max(100),
+  orderRef: Joi.string().trim().allow('', null).max(100),
   note: Joi.string().trim().max(200).optional()
 }).required();
 

@@ -3,6 +3,7 @@ import { StatusCodes } from 'http-status-codes';
 import {
   createProductValidator,
   updateProductValidator,
+  incomingProductValidator,
   outgoingProductValidator
 } from '../validations/productValidation.js';
 import { logActivity } from '../utils/logger.js';
@@ -159,6 +160,52 @@ export const deleteProduct = async (req, res) => {
 };
 
 /**
+ * Controller to record incoming products (e.g., from production, returns).
+ */
+export const incomingProduct = async (req, res) => {
+  try {
+    const { error, value } = incomingProductValidator(req.body);
+    if (error) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        status: 'error',
+        message: `Validation failed: ${error.details.map(d => d.message).join(', ')}`,
+        data: null
+      });
+    }
+
+    const { productId, quantity, transactionType, sender, orderRef, notes } = value;
+    const result = await productService.recordIncomingProduct(
+      productId,
+      quantity,
+      transactionType,
+      notes,
+      req.userId,
+      { sender, orderRef }
+    );
+
+    if (result.status === 'success') {
+      await logActivity({
+        author: req.userId,
+        action: transactionType.toUpperCase(),
+        module: 'PRODUCT_INVENTORY',
+        details: `Recorded incoming ${quantity} items for product ${productId}. Reason: ${transactionType}`,
+        targetId: productId,
+        metadata: { quantity, transactionType, notes, sender, orderRef }
+      }, req);
+    }
+
+    return handleServiceResponse(res, result);
+  } catch (error) {
+    console.error('[ProductController] incomingProduct error:', error);
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: 'error',
+      message: 'Internal server error while recording incoming product.',
+      data: null
+    });
+  }
+};
+
+/**
  * Controller to record outgoing products (e.g., sales, damage).
  */
 export const outgoingProduct = async (req, res) => {
@@ -172,8 +219,15 @@ export const outgoingProduct = async (req, res) => {
       });
     }
 
-    const { productId, quantity, transactionType, notes } = value;
-    const result = await productService.recordOutgoingProduct(productId, quantity, transactionType, notes, req.userId);
+    const { productId, quantity, transactionType, receiver, customer, orderRef, notes } = value;
+    const result = await productService.recordOutgoingProduct(
+      productId,
+      quantity,
+      transactionType,
+      notes,
+      req.userId,
+      { receiver, customer, orderRef }
+    );
 
     if (result.status === 'success') {
       await logActivity({
@@ -182,7 +236,7 @@ export const outgoingProduct = async (req, res) => {
         module: 'PRODUCT_INVENTORY',
         details: `Recorded outgoing ${quantity} items for product ${productId}. Reason: ${transactionType}`,
         targetId: productId,
-        metadata: { quantity, transactionType, notes }
+        metadata: { quantity, transactionType, notes, receiver, customer, orderRef }
       }, req);
     }
 
@@ -192,6 +246,33 @@ export const outgoingProduct = async (req, res) => {
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
       message: 'Internal server error while recording outgoing product.',
+      data: null
+    });
+  }
+};
+
+/**
+ * Controller to get product transaction history.
+ */
+export const getProductHistory = async (req, res) => {
+  try {
+    const { id: idParam } = req.params;
+    const { id: idQuery, page = 1, limit = 10 } = req.query;
+
+    const productId = idParam || idQuery;
+
+    const result = await productService.getProductHistoryService({
+      productId,
+      page: parseInt(page),
+      limit: parseInt(limit)
+    });
+
+    return handleServiceResponse(res, result);
+  } catch (error) {
+    console.error('[ProductController] getProductHistory error:', error);
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: 'error',
+      message: 'Internal server error while fetching product history.',
       data: null
     });
   }

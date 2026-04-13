@@ -6,7 +6,7 @@ import { ROLES } from '../utils/constants.js';
 
 const productionRouter = Router();
 
-productionRouter.use([jwtAuth, rolePermission([ROLES.ADMIN])]);
+productionRouter.use([jwtAuth, rolePermission([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER])]);
 
 productionRouter.post('/', productionOrderController.createOrder);
 productionRouter.get('/suggestions', productionOrderController.getSuggestions);

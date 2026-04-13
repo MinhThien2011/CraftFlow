@@ -16,6 +16,14 @@ productRouter.get('/', productController.getAllProducts);
 // @desc    Get products with low stock
 productRouter.get('/low-stock', productController.getLowStockProducts);
 
+// @route   GET /api/products/history
+// @desc    Get all product transaction history
+productRouter.get('/history', productController.getProductHistory);
+
+// @route   GET /api/products/:id/history
+// @desc    Get transaction history for a specific product
+productRouter.get('/:id/history', productController.getProductHistory);
+
 // @route   GET /api/products/:id
 // @desc    Get a single product by ID
 productRouter.get('/:id', productController.getProductById);
@@ -45,6 +53,14 @@ productRouter.put(
 // @route   DELETE /api/products/:id
 // @desc    Deactivate a product (soft delete)
 productRouter.delete('/:id', rolePermission([ROLES.ADMIN]), productController.deleteProduct);
+
+// @route   POST /api/products/incoming
+// @desc    Record incoming products (e.g., from production, returns)
+productRouter.post(
+    '/incoming',
+    rolePermission([ROLES.ADMIN, ROLES.KHO_MANAGER, ROLES.PRODUCTION_MANAGER]),
+    productController.incomingProduct
+);
 
 // @route   POST /api/products/outgoing
 // @desc    Record outgoing products (e.g., sales, damage)

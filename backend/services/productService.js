@@ -1,7 +1,11 @@
 import Product from '../models/Product.js';
 import InventoryTransaction from '../models/InventoryTransaction.js';
+import mongoose from 'mongoose';
 import { transformProduct, transformProducts } from '../utils/productTransformer.js';
 import { processMaterialCosts } from '../utils/productHelpers.js';
+import { standardlizeResponseDataHelper } from '../utils/standardlizeResponseData.js';
+
+const MAX_LIMIT = 100;
 
 /**
  * Service to get all products with advanced filtering, sorting, and pagination.
@@ -18,16 +22,18 @@ export const getProductsByQuery = async (query) => {
       sortOrder = 'desc'
     } = query;
 
-    const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
-    const limitInt = parseInt(limit, 10);
+    const pageNum = Math.max(1, parseInt(page, 10));
+    const limitNum = Math.min(MAX_LIMIT, Math.max(1, parseInt(limit, 10)));
+    const skip = (pageNum - 1) * limitNum;
 
     // --- Build Query Conditions ---
     const conditions = { isActive: isActive === 'all' ? { $in: [true, false] } : (isActive === 'true' || isActive === true) };
 
     if (search) {
+      const searchRegex = { $regex: search, $options: 'i' };
       conditions.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { code: { $regex: search, $options: 'i' } }
+        { name: searchRegex },
+        { code: searchRegex }
       ];
     }
 
@@ -36,15 +42,14 @@ export const getProductsByQuery = async (query) => {
     }
 
     // --- Sorting --- 
-    const sortOptions = {};
-    sortOptions[sortBy] = sortOrder === 'asc' ? 1 : -1;
+    const sortOptions = { [sortBy]: sortOrder === 'asc' ? 1 : -1 };
 
     // --- Execute Query ---
     const [products, total] = await Promise.all([
       Product.find(conditions)
         .sort(sortOptions)
         .skip(skip)
-        .limit(limitInt)
+        .limit(limitNum)
         .populate('estimateMaterialCost.material', 'name code unit currency')
         .lean(),
       Product.countDocuments(conditions)
@@ -57,9 +62,9 @@ export const getProductsByQuery = async (query) => {
         products: transformProducts(products),
         pagination: {
           total,
-          totalPages: Math.ceil(total / limitInt),
-          currentPage: parseInt(page, 10),
-          limit: limitInt
+          totalPages: Math.ceil(total / limitNum),
+          currentPage: pageNum,
+          limit: limitNum
         }
       }
     };
@@ -71,7 +76,6 @@ export const getProductsByQuery = async (query) => {
 
 /**
  * Service to get a single product by ID.
- * @param {string} id - Product ID.
  */
 export const getProductById = async (id) => {
   try {
@@ -87,15 +91,204 @@ export const getProductById = async (id) => {
 };
 
 /**
+ * Service to record incoming products atomically.
+ */
+export const recordIncomingProduct = async (productId, quantity, type, note, userId, logistics = {}) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const product = await Product.findById(productId).session(session);
+    if (!product) {
+      throw new Error('Product not found.');
+    }
+
+    const beforeStock = product.currentStock;
+    product.currentStock += quantity;
+    const afterStock = product.currentStock;
+    await product.save({ session });
+
+    // Record transaction
+    const transaction = await InventoryTransaction.create([{
+      product: productId,
+      type,
+      quantity,
+      beforeStock,
+      afterStock,
+      performedBy: userId,
+      note,
+      sender: logistics.sender,
+      orderRef: logistics.orderRef,
+      location: logistics.location || product.location
+    }], { session });
+
+    await session.commitTransaction();
+
+    return {
+      status: 'success',
+      message: 'Incoming product recorded successfully.',
+      data: { product: transformProduct(product), transaction: transaction[0] }
+    };
+  } catch (error) {
+    await session.abortTransaction();
+    console.error('[ProductService] recordIncomingProduct error:', error);
+    return { status: 'error', message: error.message, data: null };
+  } finally {
+    session.endSession();
+  }
+};
+
+/**
+ * Service to record outgoing products atomically.
+ */
+export const recordOutgoingProduct = async (productId, quantity, type, note, userId, logistics = {}) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const product = await Product.findById(productId).session(session);
+    if (!product) {
+      throw new Error('Product not found.');
+    }
+
+    if (product.currentStock < quantity) {
+      throw new Error('Insufficient stock for this transaction.');
+    }
+
+    const beforeStock = product.currentStock;
+    product.currentStock -= quantity;
+    const afterStock = product.currentStock;
+    await product.save({ session });
+
+    // Record transaction
+    const transaction = await InventoryTransaction.create([{
+      product: productId,
+      type,
+      quantity: -quantity,
+      beforeStock,
+      afterStock,
+      performedBy: userId,
+      note,
+      receiver: logistics.receiver,
+      customer: logistics.customer,
+      orderRef: logistics.orderRef,
+      location: logistics.location || product.location
+    }], { session });
+
+    await session.commitTransaction();
+
+    return {
+      status: 'success',
+      message: 'Outgoing product recorded successfully.',
+      data: { product: transformProduct(product), transaction: transaction[0] }
+    };
+  } catch (error) {
+    await session.abortTransaction();
+    console.error('[ProductService] recordOutgoingProduct error:', error);
+    return { status: 'error', message: error.message, data: null };
+  } finally {
+    session.endSession();
+  }
+};
+
+/**
+ * Get product history with pagination and filtering.
+ */
+export const getProductHistoryService = async ({ productId, page = 1, limit = 10 }) => {
+  try {
+    const pageNum = Math.max(1, parseInt(page, 10));
+    const limitNum = Math.min(MAX_LIMIT, Math.max(1, parseInt(limit, 10)));
+    const skip = (pageNum - 1) * limitNum;
+
+    const filter = productId ? { product: productId } : {};
+
+    const [history, total] = await Promise.all([
+      InventoryTransaction.find(filter)
+        .populate('performedBy', 'fullName username')
+        .populate('product', 'name code unit category')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      InventoryTransaction.countDocuments(filter)
+    ]);
+
+    return {
+      status: 'success',
+      message: 'Product history retrieved successfully.',
+      data: {
+        history: standardlizeResponseDataHelper(history),
+        pagination: {
+          total,
+          page: pageNum,
+          limit: limitNum,
+          pages: Math.ceil(total / limitNum)
+        }
+      }
+    };
+  } catch (error) {
+    console.error('[ProductService] getProductHistoryService error:', error);
+    return { status: 'error', message: error.message, data: null };
+  }
+};
+
+/**
+ * Service to get products with low stock.
+ */
+export const getLowStockProductsService = async ({ search = '', page = 1, limit = 10 }) => {
+  try {
+    const pageNum = Math.max(1, parseInt(page, 10));
+    const limitNum = Math.min(MAX_LIMIT, Math.max(1, parseInt(limit, 10)));
+    const skip = (pageNum - 1) * limitNum;
+
+    // Low stock: currentStock <= threshold
+    const conditions = {
+      isActive: true,
+      $expr: { $lte: ['$currentStock', '$threshold'] }
+    };
+
+    if (search) {
+      const searchRegex = { $regex: search, $options: 'i' };
+      conditions.$or = [
+        { name: searchRegex },
+        { code: searchRegex }
+      ];
+    }
+
+    const [products, total] = await Promise.all([
+      Product.find(conditions)
+        .skip(skip)
+        .limit(limitNum)
+        .populate('estimateMaterialCost.material', 'name code unit currency')
+        .lean(),
+      Product.countDocuments(conditions)
+    ]);
+
+    return {
+      status: 'success',
+      message: 'Low stock products retrieved successfully.',
+      data: {
+        products: transformProducts(products),
+        pagination: {
+          total,
+          totalPages: Math.ceil(total / limitNum),
+          currentPage: pageNum,
+          limit: limitNum
+        }
+      }
+    };
+  } catch (error) {
+    console.error('[ProductService] getLowStockProductsService error:', error);
+    return { status: 'error', message: 'An error occurred while fetching low stock products.', data: null };
+  }
+};
+
+/**
  * Service to create a new product.
- * @param {object} productData - Data for the new product.
  */
 export const createProduct = async (productData) => {
   try {
-    const existingProduct = await Product.findOne({
-      $or: [{ code: productData.code }]
-    });
-
+    const existingProduct = await Product.findOne({ code: productData.code }).lean();
     if (existingProduct) {
       return { status: 'error', message: 'Product code already exists.', data: null };
     }
@@ -120,8 +313,6 @@ export const createProduct = async (productData) => {
 
 /**
  * Service to update an existing product.
- * @param {string} id - Product ID.
- * @param {object} updateData - Data to update.
  */
 export const updateProduct = async (id, updateData) => {
   try {
@@ -129,17 +320,11 @@ export const updateProduct = async (id, updateData) => {
     if (!product) {
       return { status: 'error', message: 'Product not found.', data: null };
     }
-    if (updateData.name || updateData.code) {
-      const existingProduct = await Product.findOne({
-        _id: { $ne: id },
-        $or: [
-          ...(updateData.name ? [{ name: updateData.name }] : []),
-          ...(updateData.code ? [{ code: updateData.code }] : [])
-        ]
-      });
 
+    if (updateData.code) {
+      const existingProduct = await Product.findOne({ _id: { $ne: id }, code: updateData.code }).lean();
       if (existingProduct) {
-        return { status: 'error', message: 'Product name or code already exists.', data: null };
+        return { status: 'error', message: 'Product code already exists.', data: null };
       }
     }
 
@@ -163,110 +348,16 @@ export const updateProduct = async (id, updateData) => {
 
 /**
  * Service to delete (deactivate) a product.
- * @param {string} id - Product ID.
  */
 export const deleteProduct = async (id) => {
   try {
-    const product = await Product.findById(id);
+    const product = await Product.findByIdAndUpdate(id, { isActive: false }, { new: true });
     if (!product) {
       return { status: 'error', message: 'Product not found.', data: null };
     }
-    product.isActive = false;
-    await product.save();
-
     return { status: 'success', message: 'Product deactivated successfully.', data: null };
   } catch (error) {
     console.error('[ProductService] deleteProduct error:', error);
     return { status: 'error', message: 'An error occurred while deleting the product.', data: null };
-  }
-};
-
-/**
- * Service to record outgoing products (e.g., sales, damage).
- */
-export const recordOutgoingProduct = async (productId, quantity, transactionType, notes, userId) => {
-  try {
-    const product = await Product.findById(productId);
-    if (!product) {
-      return { status: 'error', message: 'Product not found.', data: null };
-    }
-
-    if (product.currentStock < quantity) {
-      return { status: 'error', message: 'Insufficient stock for this transaction.', data: null };
-    }
-
-    // Update product stock
-    product.currentStock -= quantity;
-    await product.save();
-
-    // Record transaction
-    const transaction = await InventoryTransaction.create({
-      product: productId,
-      quantity: -quantity,
-      transactionType,
-      performedBy: userId,
-      notes,
-      referenceModel: 'Product'
-    });
-
-    return {
-      status: 'success',
-      message: 'Outgoing product recorded successfully.',
-      data: { product: transformProduct(product), transaction }
-    };
-  } catch (error) {
-    console.error('[ProductService] recordOutgoingProduct error:', error);
-    return { status: 'error', message: 'An error occurred while recording outgoing product.', data: null };
-  }
-};
-
-/**
- * Service to get products with low stock.
- */
-export const getLowStockProductsService = async ({ search = '', page = 1, limit = 10 }) => {
-  try {
-    const skip = (page - 1) * limit;
-
-    // Low stock: currentStock <= threshold
-    const conditions = {
-      isActive: true,
-      $expr: { $lte: ['$currentStock', '$threshold'] }
-    };
-
-    if (search) {
-      conditions.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { code: { $regex: search, $options: 'i' } }
-      ];
-    }
-
-    const [products, total] = await Promise.all([
-      Product.find(conditions)
-        .skip(skip)
-        .limit(limit)
-        .populate('estimateMaterialCost.material', 'name code unit currency')
-        .lean(),
-      Product.countDocuments(conditions)
-    ]);
-
-    const limitInt = parseInt(limit, 10);
-    const pageInt = parseInt(page, 10);
-
-    return {
-      status: 'success',
-      message: 'Low stock products retrieved successfully.',
-      data: {
-        products: transformProducts(products),
-        pagination: {
-          total,
-          totalPages: Math.ceil(total / limitInt),
-          currentPage: pageInt,
-          limit: limitInt
-        }
-      }
-    };
-  } catch (error) {
-    console.error('[ProductService] getLowStockProductsService error:', error);
-    return { status: 'error', message: 'An error occurred while fetching low stock products.', data: null };
   }
 };

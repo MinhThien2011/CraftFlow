@@ -10,6 +10,8 @@ const materialSchema = new mongoose.Schema({
   currency: { type: String, default: 'VND' },
   currentStock: { type: Number, default: 0, min: 0 },
   threshold: { type: Number, default: 10, min: 0 },
+  location: { type: String, trim: true }, // Shelf/Cabinet location
+  supplier: { type: String, trim: true }, // Supplier info
   description: String,
   isActive: { type: Boolean, default: true }
 }, {
@@ -35,6 +37,8 @@ materialSchema.index({ name: 1 });
 materialSchema.index({ currentStock: 1 });
 materialSchema.index({ price: 1 });
 materialSchema.index({ isActive: 1 });
+materialSchema.index({ location: 1 });
+materialSchema.index({ supplier: 1 });
 
 /**
  * Middleware to trigger synchronization with Products when a Material is updated.
