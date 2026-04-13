@@ -15,9 +15,15 @@ export const getDashboardStats = async (req, res) => {
     ]);
 
     if (!overview.success || !chartData.success || !performance.success) {
+      // Log specific errors for debugging
+      console.error('Dashboard stats retrieval errors:', {
+        overviewError: overview.message,
+        chartDataError: chartData.message,
+        performanceError: performance.message
+      });
       return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
         success: false,
-        message: 'Failed to retrieve some dashboard statistics.'
+        message: 'Failed to retrieve some dashboard statistics. Check logs for details.'
       });
     }
 

@@ -11,7 +11,7 @@ import mongoose from 'mongoose';
 export const getOverviewStats = async () => {
     try {
         const [materialStats, productStats, orderStats] = await Promise.all([
-            // 1. Material stats: Total items, Total value, Low stock items
+            // 1. Material stats: Total items, Total value, Low stock items, Stock percentage
             Material.aggregate([
                 { $match: { isActive: true } },
                 {
@@ -19,13 +19,26 @@ export const getOverviewStats = async () => {
                         _id: null,
                         totalItems: { $sum: 1 },
                         totalValue: { $sum: { $multiply: ['$currentStock', '$price'] } },
+                        totalCurrentStock: { $sum: '$currentStock' },
+                        totalThreshold: { $sum: '$threshold' },
                         lowStockItems: {
                             $sum: { $cond: [{ $lte: ['$currentStock', '$threshold'] }, 1, 0] }
                         }
                     }
+                },
+                {
+                    $addFields: {
+                        stockPercentage: {
+                            $cond: [
+                                { $eq: ['$totalThreshold', 0] },
+                                0,
+                                { $multiply: [{ $divide: ['$totalCurrentStock', '$totalThreshold'] }, 100] }
+                            ]
+                        }
+                    }
                 }
             ]),
-            // 2. Product stats: Total items, Total value, Low stock items
+            // 2. Product stats: Total items, Total value, Low stock items, Stock percentage
             Product.aggregate([
                 { $match: { isActive: true } },
                 {
@@ -33,8 +46,21 @@ export const getOverviewStats = async () => {
                         _id: null,
                         totalItems: { $sum: 1 },
                         totalValue: { $sum: { $multiply: ['$currentStock', '$baseCost'] } },
+                        totalCurrentStock: { $sum: '$currentStock' },
+                        totalThreshold: { $sum: '$threshold' },
                         lowStockItems: {
                             $sum: { $cond: [{ $lte: ['$currentStock', '$threshold'] }, 1, 0] }
+                        }
+                    }
+                },
+                {
+                    $addFields: {
+                        stockPercentage: {
+                            $cond: [
+                                { $eq: ['$totalThreshold', 0] },
+                                0,
+                                { $multiply: [{ $divide: ['$totalCurrentStock', '$totalThreshold'] }, 100] }
+                            ]
                         }
                     }
                 }
@@ -59,8 +85,8 @@ export const getOverviewStats = async () => {
         return {
             success: true,
             data: {
-                materials: materialStats[0] || { totalItems: 0, totalValue: 0, lowStockItems: 0 },
-                products: productStats[0] || { totalItems: 0, totalValue: 0, lowStockItems: 0 },
+                materials: materialStats[0] || { totalItems: 0, totalValue: 0, lowStockItems: 0, stockPercentage: 0 },
+                products: productStats[0] || { totalItems: 0, totalValue: 0, lowStockItems: 0, stockPercentage: 0 },
                 orders: formattedOrderStats
             }
         };
@@ -79,7 +105,7 @@ export const getChartData = async (days = 7) => {
         startDate.setDate(startDate.getDate() - days);
         startDate.setHours(0, 0, 0, 0);
 
-        const [inventoryTrends, productionTrends] = await Promise.all([
+        const [inventoryTrends, productionTrends, materialConsumptionTrends] = await Promise.all([
             // 1. Inventory movement trends (Receive vs Issue/Sales)
             InventoryTransaction.aggregate([
                 { $match: { createdAt: { $gte: startDate } } },
@@ -123,6 +149,48 @@ export const getChartData = async (days = 7) => {
                     }
                 },
                 { $sort: { _id: 1 } }
+            ]),
+            // 3. Material Consumption Trends
+            InventoryTransaction.aggregate([
+                {
+                    $match: {
+                        material: { $exists: true },
+                        type: { $in: [TRANSACTION_TYPE.ISSUE, TRANSACTION_TYPE.DEDUCT] },
+                        createdAt: { $gte: startDate }
+                    }
+                },
+                {
+                    $group: {
+                        _id: {
+                            date: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+                            material: '$material'
+                        },
+                        consumedQuantity: { $sum: { $abs: '$quantity' } }
+                    }
+                },
+                {
+                    $lookup: {
+                        from: 'materials',
+                        localField: '_id.material',
+                        foreignField: '_id',
+                        as: 'materialInfo'
+                    }
+                },
+                { $unwind: '$materialInfo' },
+                {
+                    $group: {
+                        _id: '$_id.date',
+                        materials: {
+                            $push: {
+                                materialId: '$_id.material',
+                                materialName: '$materialInfo.name',
+                                quantity: '$consumedQuantity'
+                            }
+                        },
+                        totalConsumed: { $sum: '$consumedQuantity' }
+                    }
+                },
+                { $sort: { _id: 1 } }
             ])
         ]);
 
@@ -130,7 +198,8 @@ export const getChartData = async (days = 7) => {
             success: true,
             data: {
                 inventoryTrends,
-                productionTrends
+                productionTrends,
+                materialConsumptionTrends
             }
         };
     } catch (error) {
