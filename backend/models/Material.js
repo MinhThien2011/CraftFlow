@@ -11,7 +11,14 @@ const materialSchema = new mongoose.Schema({
   currentStock: { type: Number, default: 0, min: 0 },
   threshold: { type: Number, default: 10, min: 0 },
   location: { type: String, trim: true }, // Shelf/Cabinet location
-  supplier: { type: String, trim: true }, // Supplier info
+  supplier: {
+    name: { type: String, trim: true },
+    address: { type: String, trim: true },
+    phone: { type: String, trim: true },
+    email: { type: String, trim: true },
+    contactPerson: { type: String, trim: true },
+    notes: { type: String, trim: true }
+  },
   description: String,
   isActive: { type: Boolean, default: true }
 }, {

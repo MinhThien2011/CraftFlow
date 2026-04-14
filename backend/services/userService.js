@@ -26,7 +26,7 @@ export const updateUser = async (userId, updateData) => {
         const user = await User.findOneAndUpdate(
             { _id: userId },
             { $set: updatePayload },
-            { new: true, runValidators: true }
+            { returnDocument: 'after', runValidators: true }
         ).select('-password').populate('role', 'roleName').lean();
 
         if (!user) return { success: false, message: 'User not found.', data: null };

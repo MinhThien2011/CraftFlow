@@ -10,6 +10,7 @@ import {
 } from '../validations/materialValidation.js';
 import { TRANSACTION_TYPE } from '../utils/constants.js';
 import { logActivity } from '../utils/logger.js';
+import mongoose from 'mongoose';
 
 /**
  * Get all materials with filtering, search, and pagination.
@@ -203,6 +204,13 @@ export const createMaterial = async (req, res) => {
 export const updateMaterial = async (req, res) => {
   try {
     const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: 'Material ID is required for update.',
+        data: null
+      });
+    }
     const { error, value } = updateMaterialValidator(req.body);
     if (error) {
       return res.status(StatusCodes.BAD_REQUEST).json({

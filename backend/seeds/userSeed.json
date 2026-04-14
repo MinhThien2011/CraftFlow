@@ -6,8 +6,15 @@
         "password": "CraftFlow@2026",
         "phone": "0908123456",
         "address": "Số 15, Đường Lê Lợi, Quận 1, TP. Hồ Chí Minh",
-        "isActive": true,
-        "role": "admin"
+        "birthDay": "1995-03-15",
+        "gender": "male",
+        "avatar": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRBgHP9VR3PI61v6fM1RhIUBXk77MT6xsa2Sg",
+        "role": "admin",
+        "maxDailyCapacity": 100,
+        "currentAssignedQuantity": 0,
+        "timeoutCountLast30d": 0,
+        "hasWarningFlag": false,
+        "isActive": true
     },
     {
         "username": "TranTri.IvanIV",
@@ -16,8 +23,15 @@
         "password": "CraftFlow@2026",
         "phone": "0912345678",
         "address": "24/5 Trần Hưng Đạo, Quận Hoàn Kiếm, Hà Nội",
-        "isActive": true,
-        "role": "admin"
+        "birthDay": "1990-07-22",
+        "gender": "male",
+        "avatar": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRBgHP9VR3PI61v6fM1RhIUBXk77MT6xsa2Sg",
+        "role": "admin",
+        "maxDailyCapacity": 100,
+        "currentAssignedQuantity": 0,
+        "timeoutCountLast30d": 0,
+        "hasWarningFlag": false,
+        "isActive": true
     },
     {
         "username": "linh.tran",
@@ -26,8 +40,15 @@
         "password": "CraftFlow@2026",
         "phone": "0933456789",
         "address": "102 Nguyễn Văn Linh, Quận Hải Châu, Đà Nẵng",
-        "isActive": true,
-        "role": "admin"
+        "birthDay": "1992-11-08",
+        "gender": "female",
+        "avatar": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRBgHP9VR3PI61v6fM1RhIUBXk77MT6xsa2Sg",
+        "role": "admin",
+        "maxDailyCapacity": 100,
+        "currentAssignedQuantity": 0,
+        "timeoutCountLast30d": 0,
+        "hasWarningFlag": false,
+        "isActive": true
     },
     {
         "username": "hung.vu",
@@ -36,8 +57,15 @@
         "password": "CraftFlow@2026",
         "phone": "0987654321",
         "address": "Kho số 2, KCN Sóng Thần, Dĩ An, Bình Dương",
-        "isActive": true,
-        "role": "kho_manager"
+        "birthDay": "1988-05-30",
+        "gender": "male",
+        "avatar": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRBgHP9VR3PI61v6fM1RhIUBXk77MT6xsa2Sg",
+        "role": "kho_manager",
+        "maxDailyCapacity": 100,
+        "currentAssignedQuantity": 0,
+        "timeoutCountLast30d": 0,
+        "hasWarningFlag": false,
+        "isActive": true
     },
     {
         "username": "mai.le",
@@ -46,8 +74,15 @@
         "password": "CraftFlow@2026",
         "phone": "0945123456",
         "address": "Căn hộ B12, Chung cư Blue Sky, Quận Tân Bình, TP. HCM",
-        "isActive": true,
-        "role": "kho_manager"
+        "birthDay": "1993-09-12",
+        "gender": "female",
+        "avatar": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRBgHP9VR3PI61v6fM1RhIUBXk77MT6xsa2Sg",
+        "role": "kho_manager",
+        "maxDailyCapacity": 100,
+        "currentAssignedQuantity": 0,
+        "timeoutCountLast30d": 0,
+        "hasWarningFlag": false,
+        "isActive": true
     },
     {
         "username": "dung.hoang",
@@ -56,8 +91,15 @@
         "password": "CraftFlow@2026",
         "phone": "0356123456",
         "address": "Xưởng sản xuất A, Hẻm 45, Đường số 8, Quận Thủ Đức, TP. HCM",
-        "isActive": true,
-        "role": "staff"
+        "birthDay": "1996-01-25",
+        "gender": "male",
+        "avatar": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRBgHP9VR3PI61v6fM1RhIUBXk77MT6xsa2Sg",
+        "role": "staff",
+        "maxDailyCapacity": 100,
+        "currentAssignedQuantity": 0,
+        "timeoutCountLast30d": 0,
+        "hasWarningFlag": false,
+        "isActive": true
     },
     {
         "username": "phuong.ngo",
@@ -66,8 +108,15 @@
         "password": "CraftFlow@2026",
         "phone": "0367234567",
         "address": "12/8B Nguyễn Trãi, Phường 2, Quận 5, TP. HCM",
-        "isActive": true,
-        "role": "staff"
+        "birthDay": "1997-04-18",
+        "gender": "female",
+        "avatar": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRBgHP9VR3PI61v6fM1RhIUBXk77MT6xsa2Sg",
+        "role": "staff",
+        "maxDailyCapacity": 100,
+        "currentAssignedQuantity": 0,
+        "timeoutCountLast30d": 0,
+        "hasWarningFlag": false,
+        "isActive": true
     },
     {
         "username": "son.dang",
@@ -76,8 +125,15 @@
         "password": "CraftFlow@2026",
         "phone": "0378345678",
         "address": "Số 5, Ngõ 12, Phố Huế, Quận Hai Bà Trưng, Hà Nội",
-        "isActive": true,
-        "role": "staff"
+        "birthDay": "1994-08-05",
+        "gender": "male",
+        "avatar": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRBgHP9VR3PI61v6fM1RhIUBXk77MT6xsa2Sg",
+        "role": "staff",
+        "maxDailyCapacity": 100,
+        "currentAssignedQuantity": 0,
+        "timeoutCountLast30d": 0,
+        "hasWarningFlag": false,
+        "isActive": true
     },
     {
         "username": "thao.nguyen",
@@ -86,8 +142,15 @@
         "password": "CraftFlow@2026",
         "phone": "0389456789",
         "address": "456 CMT8, Phường 11, Quận 3, TP. HCM",
-        "isActive": true,
-        "role": "staff"
+        "birthDay": "1998-12-10",
+        "gender": "female",
+        "avatar": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRBgHP9VR3PI61v6fM1RhIUBXk77MT6xsa2Sg",
+        "role": "staff",
+        "maxDailyCapacity": 100,
+        "currentAssignedQuantity": 0,
+        "timeoutCountLast30d": 0,
+        "hasWarningFlag": false,
+        "isActive": true
     },
     {
         "username": "tuan.ly",
@@ -96,8 +159,15 @@
         "password": "CraftFlow@2026",
         "phone": "0390567890",
         "address": "78 Phan Đình Phùng, Phường 2, TP. Đà Lạt",
-        "isActive": true,
-        "role": "staff"
+        "birthDay": "1991-06-28",
+        "gender": "male",
+        "avatar": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRBgHP9VR3PI61v6fM1RhIUBXk77MT6xsa2Sg",
+        "role": "staff",
+        "maxDailyCapacity": 100,
+        "currentAssignedQuantity": 0,
+        "timeoutCountLast30d": 0,
+        "hasWarningFlag": false,
+        "isActive": true
     },
     {
         "username": "quynh.do",
@@ -106,8 +176,15 @@
         "password": "CraftFlow@2026",
         "phone": "0812678901",
         "address": "Số 23, Đường Võ Văn Kiệt, Quận Ninh Kiều, Cần Thơ",
-        "isActive": true,
-        "role": "staff"
+        "birthDay": "1999-02-14",
+        "gender": "female",
+        "avatar": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRBgHP9VR3PI61v6fM1RhIUBXk77MT6xsa2Sg",
+        "role": "staff",
+        "maxDailyCapacity": 100,
+        "currentAssignedQuantity": 0,
+        "timeoutCountLast30d": 0,
+        "hasWarningFlag": false,
+        "isActive": true
     },
     {
         "username": "huy.pham",
@@ -116,8 +193,15 @@
         "password": "CraftFlow@2026",
         "phone": "0823789012",
         "address": "156/7 Lê Văn Sỹ, Quận Phú Nhuận, TP. HCM",
-        "isActive": true,
-        "role": "staff"
+        "birthDay": "1995-10-03",
+        "gender": "male",
+        "avatar": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRBgHP9VR3PI61v6fM1RhIUBXk77MT6xsa2Sg",
+        "role": "staff",
+        "maxDailyCapacity": 100,
+        "currentAssignedQuantity": 0,
+        "timeoutCountLast30d": 0,
+        "hasWarningFlag": false,
+        "isActive": true
     },
     {
         "username": "trang.bui",
@@ -126,8 +210,15 @@
         "password": "CraftFlow@2026",
         "phone": "0834890123",
         "address": "99 Kim Mã, Quận Ba Đình, Hà Nội",
-        "isActive": true,
-        "role": "staff"
+        "birthDay": "1996-07-21",
+        "gender": "female",
+        "avatar": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRBgHP9VR3PI61v6fM1RhIUBXk77MT6xsa2Sg",
+        "role": "staff",
+        "maxDailyCapacity": 100,
+        "currentAssignedQuantity": 0,
+        "timeoutCountLast30d": 0,
+        "hasWarningFlag": false,
+        "isActive": true
     },
     {
         "username": "thanh.vo",
@@ -136,8 +227,15 @@
         "password": "CraftFlow@2026",
         "phone": "0845901234",
         "address": "Khu dân cư Trung Sơn, Bình Chánh, TP. HCM",
-        "isActive": true,
-        "role": "staff"
+        "birthDay": "1993-03-09",
+        "gender": "male",
+        "avatar": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRBgHP9VR3PI61v6fM1RhIUBXk77MT6xsa2Sg",
+        "role": "staff",
+        "maxDailyCapacity": 100,
+        "currentAssignedQuantity": 0,
+        "timeoutCountLast30d": 0,
+        "hasWarningFlag": false,
+        "isActive": true
     },
     {
         "username": "ngoc.phan",
@@ -146,7 +244,14 @@
         "password": "CraftFlow@2026",
         "phone": "0856012345",
         "address": "Số 12, Đường số 4, KDC Cityland, Quận Gò Vấp, TP. HCM",
-        "isActive": true,
-        "role": "staff"
+        "birthDay": "1997-11-17",
+        "gender": "female",
+        "avatar": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRBgHP9VR3PI61v6fM1RhIUBXk77MT6xsa2Sg",
+        "role": "staff",
+        "maxDailyCapacity": 100,
+        "currentAssignedQuantity": 0,
+        "timeoutCountLast30d": 0,
+        "hasWarningFlag": false,
+        "isActive": true
     }
 ]

@@ -75,7 +75,7 @@ export const getMaterialByIdOrCode = async ({ id, code }) => {
     return {
       success: true,
       message: 'Material retrieved successfully.',
-      data: standardlizeResponseDataHelper(material)
+      data: standardlizeResponseDataHelper([material])[0]
     };
   } catch (error) {
     console.error('[materialService] getMaterialByIdOrCode error:', error);

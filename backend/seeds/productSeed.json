@@ -20,7 +20,13 @@
         "quantity": 1
       }
     ],
-    "isActive": true
+    "isActive": true,
+    "baseCost": 0,
+    "productImage": "https://res.cloudinary.com/dvjop6kew/image/upload/v1775898313/products/akyfj6xpovcyhaupebmb.jpg",
+    "currentStock": 5,
+    "threshold": 5,
+    "location": "Kệ P-01",
+    "totalProduced": 0
   },
   {
     "name": "Túi Tote Canvas Basic",
@@ -39,7 +45,13 @@
         "quantity": 1
       }
     ],
-    "isActive": true
+    "isActive": true,
+    "baseCost": 0,
+    "productImage": "https://res.cloudinary.com/dvjop6kew/image/upload/v1775898313/products/akyfj6xpovcyhaupebmb.jpg",
+    "currentStock": 10,
+    "threshold": 5,
+    "location": "Kệ P-02",
+    "totalProduced": 0
   },
   {
     "name": "Khăn Trải Bàn Linen Thêu Hoa",
@@ -58,7 +70,13 @@
         "quantity": 2
       }
     ],
-    "isActive": true
+    "isActive": true,
+    "baseCost": 0,
+    "productImage": "https://res.cloudinary.com/dvjop6kew/image/upload/v1775898313/products/akyfj6xpovcyhaupebmb.jpg",
+    "currentStock": 3,
+    "threshold": 3,
+    "location": "Kệ P-03",
+    "totalProduced": 0
   },
   {
     "name": "Vòng Tay Cườm Lấp Lánh",
@@ -73,7 +91,13 @@
         "quantity": 0.2
       }
     ],
-    "isActive": true
+    "isActive": true,
+    "baseCost": 0,
+    "productImage": "https://res.cloudinary.com/dvjop6kew/image/upload/v1775898313/products/akyfj6xpovcyhaupebmb.jpg",
+    "currentStock": 20,
+    "threshold": 10,
+    "location": "Kệ P-04",
+    "totalProduced": 0
   },
   {
     "name": "Móc Treo Tường Macrame Boho",
@@ -92,7 +116,13 @@
         "quantity": 0.1
       }
     ],
-    "isActive": true
+    "isActive": true,
+    "baseCost": 0,
+    "productImage": "https://res.cloudinary.com/dvjop6kew/image/upload/v1775898313/products/akyfj6xpovcyhaupebmb.jpg",
+    "currentStock": 8,
+    "threshold": 5,
+    "location": "Kệ P-05",
+    "totalProduced": 0
   },
   {
     "name": "Gối Tựa Nhung Mềm",
@@ -111,7 +141,13 @@
         "quantity": 0.5
       }
     ],
-    "isActive": true
+    "isActive": true,
+    "baseCost": 0,
+    "productImage": "https://res.cloudinary.com/dvjop6kew/image/upload/v1775898313/products/akyfj6xpovcyhaupebmb.jpg",
+    "currentStock": 4,
+    "threshold": 3,
+    "location": "Kệ P-06",
+    "totalProduced": 0
   },
   {
     "name": "Kẹp Tóc Đất Sét Nặn Tay",
@@ -130,6 +166,12 @@
         "quantity": 1
       }
     ],
-    "isActive": true
+    "isActive": true,
+    "baseCost": 0,
+    "productImage": "https://res.cloudinary.com/dvjop6kew/image/upload/v1775898313/products/akyfj6xpovcyhaupebmb.jpg",
+    "currentStock": 15,
+    "threshold": 8,
+    "location": "Kệ P-07",
+    "totalProduced": 0
   }
 ]

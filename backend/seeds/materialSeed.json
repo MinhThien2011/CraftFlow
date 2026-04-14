@@ -5,8 +5,18 @@
         "unit": "Cuộn",
         "color": "Trắng sữa",
         "price": 35000,
+        "currency": "VND",
         "currentStock": 50,
         "threshold": 10,
+        "location": "Kệ A-01",
+        "supplier": {
+            "name": "Tiệm Len Sài Gòn",
+            "address": "123 Lê Lợi, Quận 1, TP.HCM",
+            "phone": "02812345678",
+            "email": "tiemlensaigon@gmail.com",
+            "contactPerson": "Nguyễn Văn A",
+            "notes": "Liên hệ trước khi đặt hàng"
+        },
         "description": "Len cotton mềm mại, thích hợp đan móc thú bông và quần áo bé em.",
         "isActive": true
     },
@@ -16,8 +26,18 @@
         "unit": "Cuộn",
         "color": "Xanh Pastel",
         "price": 35000,
+        "currency": "VND",
         "currentStock": 40,
         "threshold": 10,
+        "location": "Kệ A-02",
+        "supplier": {
+            "name": "Tiệm Len Sài Gòn",
+            "address": "123 Lê Lợi, Quận 1, TP.HCM",
+            "phone": "02812345678",
+            "email": "tiemlensaigon@gmail.com",
+            "contactPerson": "Nguyễn Văn A",
+            "notes": "Liên hệ trước khi đặt hàng"
+        },
         "description": "Len cotton mềm mại, thích hợp đan móc thú bông và quần áo bé em.",
         "isActive": true
     },
@@ -27,8 +47,18 @@
         "unit": "Cuộn",
         "color": "Hồng phấn",
         "price": 45000,
+        "currency": "VND",
         "currentStock": 20,
         "threshold": 5,
+        "location": "Kệ A-03",
+        "supplier": {
+            "name": "Tiệm Len Sài Gòn",
+            "address": "123 Lê Lợi, Quận 1, TP.HCM",
+            "phone": "02812345678",
+            "email": "tiemlensaigon@gmail.com",
+            "contactPerson": "Nguyễn Văn A",
+            "notes": "Liên hệ trước khi đặt hàng"
+        },
         "description": "Sợi nhung lớn, cực kỳ mềm mại, dùng làm thảm hoặc gối tựa.",
         "isActive": true
     },
@@ -38,8 +68,18 @@
         "unit": "Mét",
         "color": "Be tự nhiên",
         "price": 85000,
+        "currency": "VND",
         "currentStock": 100,
         "threshold": 15,
+        "location": "Kệ B-01",
+        "supplier": {
+            "name": "Vải Minh Khoa",
+            "address": "456 Nguyễn Trãi, Quận 5, TP.HCM",
+            "phone": "02823456789",
+            "email": "vaikhoa@gmail.com",
+            "contactPerson": "Trần Văn B",
+            "notes": "Có giao hàng miễn phí cho đơn trên 500k"
+        },
         "description": "Vải linen cao cấp, thoáng mát, dùng may túi tote hoặc khăn trải bàn.",
         "isActive": true
     },
@@ -49,8 +89,18 @@
         "unit": "Mét",
         "color": "Trắng ngà",
         "price": 60000,
+        "currency": "VND",
         "currentStock": 80,
         "threshold": 20,
+        "location": "Kệ B-02",
+        "supplier": {
+            "name": "Vải Minh Khoa",
+            "address": "456 Nguyễn Trãi, Quận 5, TP.HCM",
+            "phone": "02823456789",
+            "email": "vaikhoa@gmail.com",
+            "contactPerson": "Trần Văn B",
+            "notes": "Có giao hàng miễn phí cho đơn trên 500k"
+        },
         "description": "Vải canvas bền bỉ, thích hợp làm túi xách và đồ decor handmade.",
         "isActive": true
     },
@@ -60,8 +110,18 @@
         "unit": "Gói (50g)",
         "color": "Trong suốt",
         "price": 15000,
+        "currency": "VND",
         "currentStock": 200,
         "threshold": 30,
+        "location": "Kệ C-01",
+        "supplier": {
+            "name": "Đồ Phụ Kiện Phú Thọ",
+            "address": "789 Đinh Tiên Hoàng, Quận 1, TP.HCM",
+            "phone": "02834567890",
+            "email": "phukienphutho@gmail.com",
+            "contactPerson": "Lê Thị C",
+            "notes": "Nhập sỉ từ 10 gói trở lên được giảm 10%"
+        },
         "description": "Hạt cườm thủy tinh lấp lánh dùng kết vòng tay, trang sức.",
         "isActive": true
     },
@@ -71,8 +131,18 @@
         "unit": "Túi (100 hạt)",
         "color": "Nâu gỗ",
         "price": 25000,
+        "currency": "VND",
         "currentStock": 150,
         "threshold": 20,
+        "location": "Kệ C-02",
+        "supplier": {
+            "name": "Đồ Phụ Kiện Phú Thọ",
+            "address": "789 Đinh Tiên Hoàng, Quận 1, TP.HCM",
+            "phone": "02834567890",
+            "email": "phukienphutho@gmail.com",
+            "contactPerson": "Lê Thị C",
+            "notes": "Nhập sỉ từ 10 gói trở lên được giảm 10%"
+        },
         "description": "Hạt gỗ tự nhiên dùng làm rèm hoặc phụ kiện macrame.",
         "isActive": true
     },
@@ -82,8 +152,18 @@
         "unit": "Thỏi",
         "color": "Đỏ tươi",
         "price": 42000,
+        "currency": "VND",
         "currentStock": 30,
         "threshold": 8,
+        "location": "Kệ D-01",
+        "supplier": {
+            "name": "Art Supply HCM",
+            "address": "321 Lý Tự Trọng, Quận 1, TP.HCM",
+            "phone": "02845678901",
+            "email": "artsupplyhcm@gmail.com",
+            "contactPerson": "Phạm Thị D",
+            "notes": "Hàng nhập khẩu chính hãng"
+        },
         "description": "Đất sét nung cao cấp, không co ngót, dùng làm trang sức thủ công.",
         "isActive": true
     },
@@ -93,8 +173,18 @@
         "unit": "Gói (500g)",
         "color": "Trắng",
         "price": 55000,
+        "currency": "VND",
         "currentStock": 25,
         "threshold": 5,
+        "location": "Kệ D-02",
+        "supplier": {
+            "name": "Art Supply HCM",
+            "address": "321 Lý Tự Trọng, Quận 1, TP.HCM",
+            "phone": "02845678901",
+            "email": "artsupplyhcm@gmail.com",
+            "contactPerson": "Phạm Thị D",
+            "notes": "Hàng nhập khẩu chính hãng"
+        },
         "description": "Đất sét tự khô trong không khí, dễ tạo hình đồ gốm mini.",
         "isActive": true
     },
@@ -104,8 +194,18 @@
         "unit": "Cuộn (100m)",
         "color": "Trắng kem",
         "price": 120000,
+        "currency": "VND",
         "currentStock": 15,
         "threshold": 3,
+        "location": "Kệ E-01",
+        "supplier": {
+            "name": "Dây Thừng Việt",
+            "address": "654 Trần Hưng Đạo, Quận 5, TP.HCM",
+            "phone": "02856789012",
+            "email": "daythungviet@gmail.com",
+            "contactPerson": "Hoàng Văn E",
+            "notes": "Hàng trong nước, chất lượng tốt"
+        },
         "description": "Dây thừng cotton xoắn dùng đan macrame trang trí tường.",
         "isActive": true
     },
@@ -115,8 +215,18 @@
         "unit": "Cây",
         "color": "Trong",
         "price": 2000,
+        "currency": "VND",
         "currentStock": 500,
         "threshold": 50,
+        "location": "Kệ F-01",
+        "supplier": {
+            "name": "Văn Phòng Phẩm Bình Tây",
+            "address": "987 Nguyễn Tri Phương, Quận 10, TP.HCM",
+            "phone": "02867890123",
+            "email": "vppbinhtay@gmail.com",
+            "contactPerson": "Đặng Thị F",
+            "notes": "Giá sỉ tốt cho cửa hàng handmade"
+        },
         "description": "Keo nến dùng cho súng bắn keo, dán hoa lụa và phụ kiện.",
         "isActive": true
     },
@@ -126,8 +236,18 @@
         "unit": "Cuộn (20m)",
         "color": "Đỏ đô",
         "price": 28000,
+        "currency": "VND",
         "currentStock": 60,
         "threshold": 10,
+        "location": "Kệ F-02",
+        "supplier": {
+            "name": "Văn Phòng Phẩm Bình Tây",
+            "address": "987 Nguyễn Tri Phương, Quận 10, TP.HCM",
+            "phone": "02867890123",
+            "email": "vppbinhtay@gmail.com",
+            "contactPerson": "Đặng Thị F",
+            "notes": "Giá sỉ tốt cho cửa hàng handmade"
+        },
         "description": "Ruy băng bóng mượt dùng thắt nơ hộp quà, trang trí.",
         "isActive": true
     },
@@ -137,8 +257,18 @@
         "unit": "Cặp",
         "color": "Đen",
         "price": 3000,
+        "currency": "VND",
         "currentStock": 300,
         "threshold": 50,
+        "location": "Kệ G-01",
+        "supplier": {
+            "name": "Đồ Phụ Kiện Phú Thọ",
+            "address": "789 Đinh Tiên Hoàng, Quận 1, TP.HCM",
+            "phone": "02834567890",
+            "email": "phukienphutho@gmail.com",
+            "contactPerson": "Lê Thị C",
+            "notes": "Nhập sỉ từ 10 gói trở lên được giảm 10%"
+        },
         "description": "Mắt nhựa đen bóng dùng cho thú bông móc len.",
         "isActive": true
     },
@@ -148,8 +278,18 @@
         "unit": "Cái",
         "color": "Trắng",
         "price": 5000,
+        "currency": "VND",
         "currentStock": 100,
         "threshold": 20,
+        "location": "Kệ G-02",
+        "supplier": {
+            "name": "Đồ Phụ Kiện Phú Thọ",
+            "address": "789 Đinh Tiên Hoàng, Quận 1, TP.HCM",
+            "phone": "02834567890",
+            "email": "phukienphutho@gmail.com",
+            "contactPerson": "Lê Thị C",
+            "notes": "Nhập sỉ từ 10 gói trở lên được giảm 10%"
+        },
         "description": "Khóa kéo giọt nước dùng cho túi xách và gối.",
         "isActive": true
     },
@@ -159,8 +299,18 @@
         "unit": "Kg",
         "color": "Trắng",
         "price": 90000,
+        "currency": "VND",
         "currentStock": 10,
         "threshold": 2,
+        "location": "Kệ H-01",
+        "supplier": {
+            "name": "Bông Nhật Việt",
+            "address": "147 Cái Khế, Quận Ninh Kiều, Cần Thơ",
+            "phone": "02927890134",
+            "email": "bongnhatviet@gmail.com",
+            "contactPerson": "Trương Văn G",
+            "notes": "Hàng nhập khẩu từ Nhật Bản"
+        },
         "description": "Bông gòn tơi xốp, đàn hồi tốt, dùng nhồi thú bông.",
         "isActive": true
     }

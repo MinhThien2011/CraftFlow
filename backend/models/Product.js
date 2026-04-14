@@ -117,7 +117,8 @@ productSchema.statics.syncMaterialChanges = async function (materialId, updateDa
             }
           }
         }
-      ]
+      ],
+      { updatePipeline: true }
     );
     console.log(`[ProductSync] Successfully updated material ${materialId} in all related products.`);
   } catch (error) {

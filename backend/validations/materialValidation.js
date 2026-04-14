@@ -24,8 +24,16 @@ const materialSchema = Joi.object({
   currentStock: Joi.number().min(0).default(0),
   threshold: Joi.number().min(0).default(10),
   location: Joi.string().trim().allow('', null).max(100),
-  supplier: Joi.string().trim().allow('', null).max(100),
+  supplier: Joi.object({
+    name: Joi.string().trim().allow('', null).max(100),
+    address: Joi.string().trim().allow('', null).max(200),
+    phone: Joi.string().trim().allow('', null).max(20),
+    email: Joi.string().trim().allow('', null).max(100),
+    contactPerson: Joi.string().trim().allow('', null).max(100),
+    notes: Joi.string().trim().allow('', null).max(300)
+  }).allow(null),
   description: Joi.string().trim().allow('', null).max(500),
+  currency: Joi.string().trim().allow('', null).max(100),
   isActive: Joi.boolean().default(true)
 }).required();
 
@@ -39,8 +47,16 @@ const updateMaterialSchema = Joi.object({
   price: Joi.number().min(0),
   threshold: Joi.number().min(0),
   location: Joi.string().trim().allow('', null).max(100),
-  supplier: Joi.string().trim().allow('', null).max(100),
+  supplier: Joi.object({
+    name: Joi.string().trim().allow('', null).max(100),
+    address: Joi.string().trim().allow('', null).max(200),
+    phone: Joi.string().trim().allow('', null).max(20),
+    email: Joi.string().trim().allow('', null).max(100),
+    contactPerson: Joi.string().trim().allow('', null).max(100),
+    notes: Joi.string().trim().allow('', null).max(300)
+  }).allow(null),
   description: Joi.string().trim().allow('', null).max(500),
+  currency: Joi.string().trim().allow('', null).max(100),
   isActive: Joi.boolean()
 }).min(1).required().messages({
   'object.min': 'At least one field must be provided for update.'
@@ -72,7 +88,7 @@ const adjustStockByCodeSchema = adjustStockSchema.keys({
   })
 });
 
-export const createMaterialValidator = (body) => materialSchema.validate(body, { abortEarly: false });
-export const updateMaterialValidator = (body) => updateMaterialSchema.validate(body, { abortEarly: false });
-export const adjustStockValidator = (body) => adjustStockSchema.validate(body, { abortEarly: false });
-export const adjustStockByCodeValidator = (body) => adjustStockByCodeSchema.validate(body, { abortEarly: false });
+export const createMaterialValidator = (body) => materialSchema.validate(body, { abortEarly: false , stripUnknown: true });
+export const updateMaterialValidator = (body) => updateMaterialSchema.validate(body, { abortEarly: false , stripUnknown: true });
+export const adjustStockValidator = (body) => adjustStockSchema.validate(body, { abortEarly: false , stripUnknown: true });
+export const adjustStockByCodeValidator = (body) => adjustStockByCodeSchema.validate(body, { abortEarly: false , stripUnknown: true });
