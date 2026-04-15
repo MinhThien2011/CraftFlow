@@ -284,7 +284,7 @@ export const updateAssignmentStatus = async (assignmentId, status, completedQuan
       const completedOrder = await ProductionOrder.findByIdAndUpdate(parentOrderId, {
         status: ORDER_STATUS.COMPLETED,
         completedAt: new Date()
-      }, { new: true }).lean();
+      }, { returnDocument: 'after' }).lean();
 
       // Record product production into inventory
       if (completedOrder) {

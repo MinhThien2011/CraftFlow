@@ -220,7 +220,7 @@ export const updateMaterial = async (req, res) => {
       });
     }
 
-    const material = await Material.findByIdAndUpdate(id, value, { new: true });
+    const material = await Material.findByIdAndUpdate(id, value, { returnDocument: 'after' });
     if (!material) {
       return res.status(StatusCodes.NOT_FOUND).json({
         success: false,

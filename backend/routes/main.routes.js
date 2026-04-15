@@ -11,10 +11,10 @@ import dashboardRouter from "./dashboard.routes.js";
 
 const mainRouter = Router();
 
-mainRouter.get('/',(req , res)=>{
+mainRouter.get('/', (req, res) => {
     res.status(200).json({
         success: true,
-        message: "Welcome to the Crab Flow API",
+        message: "Welcome to the Craft Flow API",
     })
 })
 mainRouter.use('/auth', authRouter);

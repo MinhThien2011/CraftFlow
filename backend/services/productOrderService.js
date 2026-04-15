@@ -26,7 +26,7 @@ export const deleteOrder = async (orderId) => {
 
 export const updateOrder = async (orderId, updateData) => {
     try {
-        const order = await ProductionOrder.findByIdAndUpdate(orderId, updateData, { new: true }).lean();
+        const order = await ProductionOrder.findByIdAndUpdate(orderId, updateData, { returnDocument: 'after' }).lean();
         if (!order) return { success: false, message: 'Order not found.', data: null };
         return { success: true, message: 'Order updated successfully.', data: order };
     } catch (error) {

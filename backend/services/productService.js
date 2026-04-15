@@ -334,7 +334,7 @@ export const updateProduct = async (id, updateData) => {
       updateData.baseCost = totalBaseCost;
     }
 
-    const updatedProduct = await Product.findByIdAndUpdate(id, updateData, { new: true, runValidators: true });
+    const updatedProduct = await Product.findByIdAndUpdate(id, updateData, { returnDocument: 'after' }).lean();
     return {
       status: 'success',
       message: 'Product updated successfully.',
@@ -351,11 +351,11 @@ export const updateProduct = async (id, updateData) => {
  */
 export const deleteProduct = async (id) => {
   try {
-    const product = await Product.findByIdAndUpdate(id, { isActive: false }, { new: true });
+    const product = await Product.findByIdAndUpdate(id, { isActive: false }, { returnDocument: 'after' }).lean();
     if (!product) {
       return { status: 'error', message: 'Product not found.', data: null };
     }
-    return { status: 'success', message: 'Product deactivated successfully.', data: null };
+    return { status: 'success', message: 'Product deactivated successfully.', data: product };
   } catch (error) {
     console.error('[ProductService] deleteProduct error:', error);
     return { status: 'error', message: 'An error occurred while deleting the product.', data: null };
