@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import {
   Package,
   AlertTriangle,
@@ -40,20 +40,20 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { importHistory, materialCategories } from "@/lib/mock-data"
-import type { Material, MaterialCategory, PaginationData } from "@/lib/types"
+import { importHistory, materialCategories, products, exportHistory, productCategories } from "@/lib/mock-data"
+import type { Material, PaginationData, Product, ExportHistory } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { CurrencyDisplay } from "@/components/ui/currency-display"
 import { materialApi } from "@/api/material.api"
 import { toast } from "sonner"
 import { Spinner } from "@/components/ui/spinner"
 
-type TabType = "list" | "history"
+type TabType = "list" | "history" | "products" | "stockOut"
 
 export default function InventoryPage() {
   const [activeTab, setActiveTab] = useState<TabType>("list")
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedCategory, setSelectedCategory] = useState<MaterialCategory | "All">("All")
+  const [selectedCategory, setSelectedCategory] = useState<string>("All")
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -149,11 +149,37 @@ export default function InventoryPage() {
     }
   }
 
-  // Filter materials based on category (since we handle search via API)
-  const filteredMaterials = materials.filter((material) => {
-    // Search is handled by API, we can filter by other criteria here if needed
-    return true
-  })
+  const activeCategoryOptions = activeTab === "products" ? productCategories : materialCategories
+
+  const filteredMaterials = useMemo(
+    () =>
+      materials.filter((material) =>
+        material.name.toLowerCase().includes(searchQuery.toLowerCase())
+      ),
+    [materials, searchQuery]
+  )
+
+  const filteredProducts = useMemo(
+    () =>
+      products.filter((product) => {
+        const matchesSearch =
+          product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          product.category.toLowerCase().includes(searchQuery.toLowerCase())
+        const matchesCategory =
+          selectedCategory === "All" || product.category === selectedCategory
+        return matchesSearch && matchesCategory
+      }),
+    [products, searchQuery, selectedCategory]
+  )
+
+  const filteredStockOut = useMemo(
+    () =>
+      exportHistory.filter((record) =>
+        record.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        record.destination.toLowerCase().includes(searchQuery.toLowerCase())
+      ),
+    [exportHistory, searchQuery]
+  )
 
   const totalMaterials = pagination?.total || 0
 
@@ -199,7 +225,7 @@ export default function InventoryPage() {
               Quản lý kho hàng
             </h2>
             <p className="text-sm text-muted-foreground">
-              Quản lý nguyên liệu, tồn kho và lịch sử nhập hàng
+              Quản lý nguyên liệu, sản phẩm, tồn kho và lịch sử nhập/xuất
             </p>
           </div>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
@@ -473,37 +499,67 @@ export default function InventoryPage() {
             >
               Lịch sử nhập kho
             </button>
+            <button
+              onClick={() => setActiveTab("products")}
+              className={cn(
+                "rounded-md px-4 py-2 text-sm font-medium transition-colors",
+                activeTab === "products"
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Danh sách sản phẩm
+            </button>
+            <button
+              onClick={() => setActiveTab("stockOut")}
+              className={cn(
+                "rounded-md px-4 py-2 text-sm font-medium transition-colors",
+                activeTab === "stockOut"
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Lịch sử xuất kho
+            </button>
           </div>
 
           <div className="flex items-center gap-3">
             <div className="relative flex-1 md:w-64">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Tìm kiếm nguyên liệu..."
+                placeholder={
+                  activeTab === "products"
+                    ? "Tìm kiếm sản phẩm..."
+                    : activeTab === "stockOut"
+                    ? "Tìm kiếm lịch sử xuất kho..."
+                    : "Tìm kiếm nguyên liệu..."
+                }
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
               />
             </div>
-            <div className="flex gap-2">
-              <Button
-                variant={selectedCategory === "All" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setSelectedCategory("All")}
-              >
-                Tất cả
-              </Button>
-              {materialCategories.map((cat) => (
+            {(activeTab === "list" || activeTab === "products") && (
+              <div className="flex gap-2">
                 <Button
-                  key={cat}
-                  variant={selectedCategory === cat ? "default" : "outline"}
+                  variant={selectedCategory === "All" ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setSelectedCategory(cat)}
+                  onClick={() => setSelectedCategory("All")}
                 >
-                  {cat}
+                  Tất cả
                 </Button>
-              ))}
-            </div>
+                {activeCategoryOptions.map((cat) => (
+                  <Button
+                    key={cat}
+                    variant={selectedCategory === cat ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setSelectedCategory(cat)}
+                  >
+                    {cat}
+                  </Button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -576,7 +632,7 @@ export default function InventoryPage() {
               </Table>
             </CardContent>
           </Card>
-        ) : (
+        ) : activeTab === "history" ? (
           <Card>
             <CardContent className="p-0">
               <Table>
@@ -609,6 +665,88 @@ export default function InventoryPage() {
                       <TableCell>{record.importDate}</TableCell>
                     </TableRow>
                   ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        ) : activeTab === "products" ? (
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Sản phẩm</TableHead>
+                    <TableHead>Danh mục</TableHead>
+                    <TableHead className="text-right">Giá gốc</TableHead>
+                    <TableHead className="text-right">Giá đề xuất</TableHead>
+                    <TableHead>Ngày tạo</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredProducts.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                        Không tìm thấy sản phẩm nào
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredProducts.map((product) => (
+                      <TableRow key={product.id}>
+                        <TableCell className="font-medium">{product.name}</TableCell>
+                        <TableCell>{product.category}</TableCell>
+                        <TableCell className="text-right">
+                          <CurrencyDisplay value={product.basePrice} />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <CurrencyDisplay value={product.suggestedPrice ?? product.basePrice} />
+                        </TableCell>
+                        <TableCell>{product.createdAt}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Sản phẩm</TableHead>
+                    <TableHead>Điểm đến</TableHead>
+                    <TableHead className="text-right">Số lượng</TableHead>
+                    <TableHead className="text-right">Đơn giá</TableHead>
+                    <TableHead className="text-right">Tổng cộng</TableHead>
+                    <TableHead>Ngày xuất</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredStockOut.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                        Không tìm thấy lịch sử xuất kho nào
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredStockOut.map((record) => (
+                      <TableRow key={record.id}>
+                        <TableCell className="font-medium">{record.productName}</TableCell>
+                        <TableCell>{record.destination}</TableCell>
+                        <TableCell className="text-right">
+                          {record.quantity} {record.unit}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <CurrencyDisplay value={record.unitPrice} />
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          <CurrencyDisplay value={record.totalPrice} />
+                        </TableCell>
+                        <TableCell>{record.exportDate}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </CardContent>

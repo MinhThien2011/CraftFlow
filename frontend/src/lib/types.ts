@@ -115,6 +115,19 @@ export interface ImportHistory {
   note?: string
 }
 
+export interface ExportHistory {
+  id: string
+  productId: string
+  productName: string
+  quantity: number
+  unit: MaterialUnit
+  destination: string
+  unitPrice: number
+  totalPrice: number
+  exportDate: string
+  note?: string
+}
+
 export interface Product {
   id: string
   name: string
