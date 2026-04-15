@@ -90,6 +90,7 @@ export const login = async (req, res) => {
       email: user.email,
       fullName: user.fullName,
       phone: user.phone,
+      avatar: user.avatar,
       role: user.role?.roleName ?? null,
       isActive: user.isActive,
     };
