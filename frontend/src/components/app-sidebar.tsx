@@ -17,6 +17,7 @@ import {
   ChevronDown,
   User,
   Users,
+  FileSearch,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -61,21 +62,14 @@ const navigation = [
     icon: AlertTriangle,
   },
   {
+    name: "Nhật ký hệ thống",
+    href: "/system-log",
+    icon: FileSearch,
+  },
+  {
     name: "Người dùng",
     href: "/users",
     icon: Users,
-  },
-  {
-    name: "Định giá thông minh",
-    href: "/ai-pricing",
-    icon: Sparkles,
-    badge: true,
-  },
-  {
-    name: "Marketing AI",
-    href: "/ai-marketing",
-    icon: Megaphone,
-    badge: true,
   },
   {
     name: "Báo cáo",

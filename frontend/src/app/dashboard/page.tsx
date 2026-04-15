@@ -190,7 +190,7 @@ export default function DashboardPage() {
                     ))}
                   </Pie>
                   <Tooltip
-                    formatter={(value: number) => [`${value}%`, "Tỷ lệ"]}
+                    formatter={(value) => [value ? `${value}%` : "0%", "Tỷ lệ"]}
                     contentStyle={{
                       backgroundColor: "#fff",
                       border: "1px solid #E5DDD3",
@@ -235,12 +235,12 @@ export default function DashboardPage() {
                     size="sm"
                     className={cn(
                       "text-xs",
-                      alert.status === "Critical"
+                      alert.status === "Nguy cấp"
                         ? "border-[#DC3545] text-[#DC3545] hover:bg-[#DC3545]/10"
                         : "border-[#FFA500] text-[#FFA500] hover:bg-[#FFA500]/10"
                     )}
                   >
-                    {alert.status === "Critical" ? "Cấp bách" : "Cảnh báo"}
+                    {alert.status === "Nguy cấp" ? "Cấp bách" : "Cảnh báo"}
                   </Button>
                 </div>
               ))}

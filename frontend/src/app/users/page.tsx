@@ -51,7 +51,7 @@ import {
 } from "@/components/ui/pagination"
 import { userApi } from "@/api/user.api"
 import type { User, PaginationData } from "@/lib/types"
-import { toast } from "sonner"
+import { useToast } from "@/hooks/use-toast"
 import { Spinner } from "@/components/ui/spinner"
 import { getAvatarUrl } from "@/lib/utils"
 
@@ -117,6 +117,8 @@ export default function UsersPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
 
+  const { toast } = useToast()
+
   // API States
   const [users, setUsers] = useState<User[]>([])
   const [pagination, setPagination] = useState<PaginationData | null>(null)
@@ -152,7 +154,11 @@ export default function UsersPage() {
         setPagination(response.data.pagination || null)
       }
     } catch (error: any) {
-      toast.error(error.message || "Không thể tải danh sách người dùng")
+      toast({
+        title: "Lỗi",
+        description: error.message || "Không thể tải danh sách người dùng",
+        variant: "destructive",
+      })
     } finally {
       setIsLoading(false)
     }
@@ -172,12 +178,19 @@ export default function UsersPage() {
 
   const handleAddUser = async () => {
     if (!newUser.name || !newUser.email || !newUser.username || !newUser.password) {
-      toast.error("Vui lòng điền đầy đủ các trường bắt buộc")
+      toast({
+        title: "Lỗi",
+        description: "Vui lòng điền đầy đủ các trường bắt buộc",
+        variant: "destructive",
+      })
       return
     }
 
     // In a real app, we would call an API here
-    toast.info("Chức năng thêm người dùng đang được triển khai")
+    toast({
+      title: "Thông báo",
+      description: "Chức năng thêm người dùng đang được triển khai",
+    })
     resetForm()
   }
 
@@ -211,7 +224,10 @@ export default function UsersPage() {
 
   const toggleUserStatus = (userId: string) => {
     // API call would go here
-    toast.info("Chức năng thay đổi trạng thái đang được triển khai")
+    toast({
+      title: "Thông báo",
+      description: "Chức năng thay đổi trạng thái đang được triển khai",
+    })
   }
 
   const getUserRoleName = (role: User["role"]): string => {
@@ -434,7 +450,7 @@ export default function UsersPage() {
                           <Switch
                             id="isActive"
                             checked={newUser.isActive}
-                            onCheckedChange={(checked) =>
+                            onCheckedChange={(checked: boolean) =>
                               setNewUser({ ...newUser, isActive: checked })
                             }
                           />

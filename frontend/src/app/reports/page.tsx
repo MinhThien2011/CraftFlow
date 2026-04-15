@@ -130,7 +130,7 @@ export default function ReportsPage() {
 
         {/* Export Data Section */}
         {showExportForm && (
-          <Card className="bg-gradient-to-r from-[#F5F0EB] to-[#FAF7F4] border-[#D4A574]/30">
+          <Card className="bg-linear-to-r from-[#F5F0EB] to-[#FAF7F4] border-[#D4A574]/30">
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <FileJson className="h-5 w-5 text-[#D4A574]" />
@@ -304,9 +304,12 @@ export default function ReportsPage() {
                       tickFormatter={(value) => `${(value / 1000000).toFixed(0)}M`}
                     />
                     <Tooltip
-                      formatter={(value: number) => [
-                        `${(value / 1000000).toFixed(1)}M VND`,
-                      ]}
+                      formatter={(value) => {
+                        if (typeof value === 'number') {
+                          return `${(value / 1000000).toFixed(1)}M VND`
+                        }
+                        return ''
+                      }}
                       contentStyle={{
                         backgroundColor: "#fff",
                         border: "1px solid #E5DDD3",

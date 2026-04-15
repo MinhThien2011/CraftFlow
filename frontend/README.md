@@ -28,9 +28,8 @@ src/
 │   ├── inventory/         # Inventory management
 │   ├── reports/           # Reports page
 │   ├── production/        # Production management
-│   ├── ai-pricing/        # AI pricing page
-│   ├── ai-marketing/      # AI marketing page
 │   ├── alerts/            # Alerts page
+│   ├── system-log/        # System log page
 │   └── settings/          # Settings page
 ├── components/            # Reusable components
 │   ├── app-header.tsx    # Header component
@@ -113,9 +112,8 @@ See `package.json` for complete dependency list.
 | Inventory | `/inventory` | Inventory tracking |
 | Reports | `/reports` | Data reports and analysis |
 | Production | `/production` | Production workflows |
-| AI Pricing | `/ai-pricing` | AI-powered pricing tools |
-| AI Marketing | `/ai-marketing` | Marketing automation |
 | Alerts | `/alerts` | Alert management |
+| System Log | `/system-log` | System activity log |
 | Settings | `/settings` | User settings |
 
 ## 🎨 UI Components
