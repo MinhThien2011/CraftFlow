@@ -54,7 +54,8 @@ export const getUserByQuery = async (query, page = 1, limit = 10, search = '') =
             finalQuery.$or = [
                 { fullName: searchRegex },
                 { phone: searchRegex },
-                { username: searchRegex }
+                { username: searchRegex },
+                { email: searchRegex },
             ];
         }
 

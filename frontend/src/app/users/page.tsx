@@ -124,15 +124,17 @@ export default function UsersPage() {
 
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [avatarPreview, setAvatarPreview] = useState<string>("")
+  const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [newUser, setNewUser] = useState({
     name: "",
     email: "",
     username: "",
     password: "",
     phone: "",
+    birthDay: "",
     gender: "male",
     address: "",
-    role: "",
+    role: "staff",
     maxDailyCapacity: 100,
     isActive: true,
   })
@@ -171,19 +173,48 @@ export default function UsersPage() {
   }, [searchQuery, roleFilter])
 
   const handleAddUser = async () => {
-    if (!newUser.name || !newUser.email || !newUser.username || !newUser.password) {
+    if (!newUser.name || !newUser.email || !newUser.username || !newUser.password || !newUser.role) {
       toast.error("Vui lòng điền đầy đủ các trường bắt buộc")
       return
     }
 
-    // In a real app, we would call an API here
-    toast.info("Chức năng thêm người dùng đang được triển khai")
-    resetForm()
+    try {
+      const formData = new FormData();
+      formData.append("fullName", newUser.name);
+      formData.append("email", newUser.email);
+      formData.append("username", newUser.username);
+      formData.append("password", newUser.password);
+      formData.append("phone", newUser.phone);
+      formData.append("birthDay", newUser.birthDay);
+      formData.append("gender", newUser.gender);
+      formData.append("address", newUser.address);
+      formData.append("role", newUser.role);
+
+      if (newUser.role === "staff") {
+        formData.append("maxDailyCapacity", newUser.maxDailyCapacity.toString());
+      }
+
+      formData.append("isActive", newUser.isActive.toString());
+
+      if (avatarFile) {
+        formData.append("avatar", avatarFile);
+      }
+
+      const response = await userApi.createUser(formData);
+      if (response.success) {
+        toast.success("Tạo tài khoản thành công");
+        fetchUsers(searchQuery, roleFilterToValue[roleFilter], currentPage);
+        resetForm();
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Không thể tạo tài khoản mới");
+    }
   }
 
   const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
+      setAvatarFile(file)
       const reader = new FileReader()
       reader.onloadend = () => {
         setAvatarPreview(reader.result as string)
@@ -199,6 +230,7 @@ export default function UsersPage() {
       username: "",
       password: "",
       phone: "",
+      birthDay: "",
       gender: "male",
       address: "",
       role: "staff",
@@ -206,6 +238,7 @@ export default function UsersPage() {
       isActive: true,
     })
     setAvatarPreview("")
+    setAvatarFile(null)
     setIsAddDialogOpen(false)
   }
 
@@ -353,6 +386,19 @@ export default function UsersPage() {
                             }
                           />
                         </div>
+
+                        {/* Ngày sinh */}
+                        <div className="space-y-2">
+                          <Label htmlFor="birthDay">Ngày sinh</Label>
+                          <Input
+                            id="birthDay"
+                            type="date"
+                            value={newUser.birthDay}
+                            onChange={(e) =>
+                              setNewUser({ ...newUser, birthDay: e.target.value })
+                            }
+                          />
+                        </div>
                       </div>
 
                       {/* Right Column */}
@@ -411,22 +457,24 @@ export default function UsersPage() {
                           />
                         </div>
 
-                        {/* Định mức công việc tối đa */}
-                        <div className="space-y-2">
-                          <Label htmlFor="maxDailyCapacity">Định mức công việc tối đa</Label>
-                          <Input
-                            id="maxDailyCapacity"
-                            type="number"
-                            min="0"
-                            value={newUser.maxDailyCapacity}
-                            onChange={(e) =>
-                              setNewUser({
-                                ...newUser,
-                                maxDailyCapacity: Number(e.target.value),
-                              })
-                            }
-                          />
-                        </div>
+                        {/* Định mức công việc tối đa - Chỉ hiện cho staff */}
+                        {newUser.role === "staff" && (
+                          <div className="space-y-2">
+                            <Label htmlFor="maxDailyCapacity">Định mức công việc tối đa</Label>
+                            <Input
+                              id="maxDailyCapacity"
+                              type="number"
+                              min="0"
+                              value={newUser.maxDailyCapacity}
+                              onChange={(e) =>
+                                setNewUser({
+                                  ...newUser,
+                                  maxDailyCapacity: Number(e.target.value),
+                                })
+                              }
+                            />
+                          </div>
+                        )}
 
                         {/* Trạng thái hoạt động */}
                         <div className="flex items-center justify-between pt-2">
