@@ -19,20 +19,20 @@ const materialItemSchema = new mongoose.Schema({
 }, {
   _id: true,
   toJSON: {
-    virtuals: true,
+    // virtuals: true,
     versionKey: false,
-    transform: function (doc, ret) {
-      delete ret._id;
-      return ret;
-    }
+    // transform: function (doc, ret) {
+    //   delete ret._id;
+    //   return ret;
+    // }
   },
   toObject: {
-    virtuals: true,
+    // virtuals: true,
     versionKey: false,
-    transform: function (doc, ret) {
-      delete ret._id;
-      return ret;
-    }
+    // transform: function (doc, ret) {
+    //   delete ret._id;
+    //   return ret;
+    // }
   }
 });
 

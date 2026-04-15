@@ -30,11 +30,9 @@ const transactionSchema = new mongoose.Schema({
 }, {
   timestamps: true,
   toJSON: {
-    virtuals: true,
     versionKey: false,
   },
   toObject: {
-    virtuals: true,
     versionKey: false,
   }
 });

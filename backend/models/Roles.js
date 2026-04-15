@@ -5,11 +5,9 @@ const roleSchema = new mongoose.Schema({
     roleName: { type: String, enum: Object.values(ROLES), default: ROLES.STAFF, index: true },
 }, {
     toJSON: {
-        virtuals: true,
         versionKey: false,
     },
     toObject: {
-        virtuals: true,
         versionKey: false,
     }
 });

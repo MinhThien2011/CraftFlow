@@ -14,20 +14,12 @@ const bomItemSchema = new mongoose.Schema({
     unit: { type: String, required: true },
     note: String,
 }, {
-    _id: true,
     toJSON: {
-        virtuals: true,
         versionKey: false,
-        transform: function (doc, ret) {
-            return ret;
-        }
     },
     toObject: {
-        virtuals: true,
+        // virtuals: true,
         versionKey: false,
-        transform: function (doc, ret) {
-            return ret;
-        }
     }
 });
 
@@ -43,11 +35,11 @@ const bomSchema = new mongoose.Schema({
 }, {
     timestamps: true,
     toJSON: {
-        virtuals: true,
+        // virtuals: true,
         versionKey: false,
     },
     toObject: {
-        virtuals: true,
+        // virtuals: true,
         versionKey: false,
     }
 });
