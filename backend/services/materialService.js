@@ -141,7 +141,7 @@ export const adjustMaterialStock = async (materialId, { type, quantity, note, se
 /**
  * Get material history with pagination and filtering.
  */
-export const getMaterialHistoryService = async ({ materialId, page = 1, limit = 10 }) => {
+export const getMaterialHistoryService = async ({ materialId, type, direction, page = 1, limit = 10 }) => {
   try {
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(MAX_LIMIT, Math.max(1, parseInt(limit)));
@@ -149,10 +149,14 @@ export const getMaterialHistoryService = async ({ materialId, page = 1, limit = 
 
     const filter = materialId ? { material: materialId } : {};
 
+    if (type) filter.type = type;
+    if (direction === 'in') filter.quantity = { $gt: 0 };
+    if (direction === 'out') filter.quantity = { $lt: 0 };
+
     const [history, total] = await Promise.all([
       InventoryTransaction.find(filter)
         .populate('performedBy', 'fullName username')
-        .populate('material', 'name code unit color')
+        .populate('material', 'name code unit color supplier price')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limitNum)

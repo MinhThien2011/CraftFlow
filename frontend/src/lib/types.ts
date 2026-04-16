@@ -110,6 +110,39 @@ export interface MaterialListResponse {
   }
 }
 
+export interface InventoryTransaction {
+  _id: string
+  material?: Material
+  product?: Product
+  type: string
+  quantity: number
+  beforeStock: number
+  afterStock: number
+  performedBy: {
+    _id: string
+    fullName: string
+    username: string
+  }
+  sender?: string
+  receiver?: string
+  customer?: string
+  orderRef?: string
+  location?: string
+  note?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface InventoryHistoryResponse {
+  success?: boolean
+  status?: string
+  message: string
+  data: {
+    history: InventoryTransaction[]
+    pagination: PaginationData
+  }
+}
+
 export interface ImportHistory {
   id: string
   materialId: string
@@ -269,13 +302,15 @@ export interface BOM {
   updatedAt: string
 }
 
+export interface InventoryStats {
+  totalItems: number
+  totalValue: number
+  lowStockCount: number
+}
+
 export interface InventoryOverview {
-  totalMaterials: number
-  lowStockMaterials: number
-  criticalMaterials: number
-  totalInventoryValue: number
-  totalProducts: number
-  lowStockProducts: number
+  materials: InventoryStats
+  products: InventoryStats
 }
 
 

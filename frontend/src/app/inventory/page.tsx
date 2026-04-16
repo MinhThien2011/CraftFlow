@@ -43,8 +43,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { importHistory, materialCategories, exportHistory, productCategories } from "@/lib/mock-data"
-import type { Material, PaginationData, Product, InventoryOverview } from "@/lib/types"
+import { materialCategories, productCategories } from "@/lib/mock-data"
+import type { Material, PaginationData, Product, InventoryOverview, InventoryTransaction } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { CurrencyDisplay } from "@/components/ui/currency-display"
 import { materialApi } from "@/api/material.api"
@@ -91,6 +91,8 @@ export default function InventoryPage() {
   // API States
   const [materials, setMaterials] = useState<Material[]>([])
   const [productsStock, setProductsStock] = useState<Product[]>([])
+  const [materialHistory, setMaterialHistory] = useState<InventoryTransaction[]>([])
+  const [productHistory, setProductHistory] = useState<InventoryTransaction[]>([])
   const [overview, setOverview] = useState<InventoryOverview | null>(null)
   const [pagination, setPagination] = useState<PaginationData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -155,6 +157,52 @@ export default function InventoryPage() {
     }
   }, [searchQuery, selectedCategory, currentPage])
 
+  const fetchMaterialHistory = useCallback(async (showSkeleton = false) => {
+    if (showSkeleton) setIsLoading(true)
+    else setIsRefreshing(true)
+
+    try {
+      const response = await inventoryApi.getMaterialHistory({
+        page: currentPage,
+        limit: 10,
+        direction: 'in' // Import history
+      })
+      if (response.success && response.data) {
+        setMaterialHistory(response.data.history || [])
+        setPagination(response.data.pagination)
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Không thể tải lịch sử nhập nguyên liệu")
+      setMaterialHistory([])
+    } finally {
+      setIsLoading(false)
+      setIsRefreshing(false)
+    }
+  }, [currentPage])
+
+  const fetchProductHistory = useCallback(async (showSkeleton = false) => {
+    if (showSkeleton) setIsLoading(true)
+    else setIsRefreshing(true)
+
+    try {
+      const response = await inventoryApi.getProductHistory({
+        page: currentPage,
+        limit: 10,
+        direction: 'out' // Export history
+      })
+      if (response.success && response.data) {
+        setProductHistory(response.data.history || [])
+        setPagination(response.data.pagination)
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Không thể tải lịch sử xuất sản phẩm")
+      setProductHistory([])
+    } finally {
+      setIsLoading(false)
+      setIsRefreshing(false)
+    }
+  }, [currentPage])
+
   useEffect(() => {
     fetchOverview()
   }, [fetchOverview])
@@ -165,10 +213,14 @@ export default function InventoryPage() {
         fetchMaterials((materials?.length || 0) === 0)
       } else if (activeTab === "products") {
         fetchProducts((productsStock?.length || 0) === 0)
+      } else if (activeTab === "history-import") {
+        fetchMaterialHistory((materialHistory?.length || 0) === 0)
+      } else if (activeTab === "history-export") {
+        fetchProductHistory((productHistory?.length || 0) === 0)
       }
     }, 400)
     return () => clearTimeout(timer)
-  }, [activeTab, fetchMaterials, fetchProducts, materials?.length, productsStock?.length])
+  }, [activeTab, fetchMaterials, fetchProducts, fetchMaterialHistory, fetchProductHistory, materials?.length, productsStock?.length, materialHistory?.length, productHistory?.length])
 
   // Reset page when switching tabs or filtering
   useEffect(() => {
@@ -179,6 +231,8 @@ export default function InventoryPage() {
     fetchOverview()
     if (activeTab === "materials") fetchMaterials()
     else if (activeTab === "products") fetchProducts()
+    else if (activeTab === "history-import") fetchMaterialHistory()
+    else if (activeTab === "history-export") fetchProductHistory()
   }
 
   const getStatusBadge = (item: Material | Product) => {
@@ -254,7 +308,7 @@ export default function InventoryPage() {
                   </div>
                   <div>
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Tổng nguyên liệu</p>
-                    <p className="text-2xl font-bold text-[#8B7355]">{overview.totalMaterials}</p>
+                    <p className="text-2xl font-bold text-[#8B7355]">{overview.materials.totalItems}</p>
                   </div>
                 </CardContent>
               </Card>
@@ -265,7 +319,7 @@ export default function InventoryPage() {
                   </div>
                   <div>
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Sắp hết hàng</p>
-                    <p className="text-2xl font-bold text-[#FFA500]">{(overview?.lowStockMaterials || 0) + (overview?.lowStockProducts || 0)}</p>
+                    <p className="text-2xl font-bold text-[#FFA500]">{(overview.materials.lowStockCount || 0) + (overview.products.lowStockCount || 0)}</p>
                   </div>
                 </CardContent>
               </Card>
@@ -276,7 +330,7 @@ export default function InventoryPage() {
                   </div>
                   <div>
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Mức nguy cấp</p>
-                    <p className="text-2xl font-bold text-[#DC3545]">{overview?.criticalMaterials || 0}</p>
+                    <p className="text-2xl font-bold text-[#DC3545]">{overview.materials.lowStockCount}</p>
                   </div>
                 </CardContent>
               </Card>
@@ -288,7 +342,7 @@ export default function InventoryPage() {
                   <div>
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Giá trị tồn kho</p>
                     <p className="text-xl font-bold text-[#4A7C23]">
-                      <CurrencyDisplay value={overview?.totalInventoryValue || 0} />
+                      <CurrencyDisplay value={(overview.materials.totalValue || 0) + (overview.products.totalValue || 0)} />
                     </p>
                   </div>
                 </CardContent>
@@ -490,27 +544,77 @@ export default function InventoryPage() {
                     ))
                   )
                 ) : activeTab === "history-import" ? (
-                  importHistory.map((record) => (
-                    <TableRow key={record.id} className="hover:bg-muted/20 transition-colors">
-                      <TableCell className="font-bold py-4">{record.materialName}</TableCell>
-                      <TableCell><Badge variant="outline">{record.supplier}</Badge></TableCell>
-                      <TableCell className="text-right">{record.quantity} {record.unit}</TableCell>
-                      <TableCell className="text-right"><CurrencyDisplay value={record.unitPrice} /></TableCell>
-                      <TableCell className="text-right font-bold text-[#4A7C23]"><CurrencyDisplay value={record.totalPrice} /></TableCell>
-                      <TableCell className="text-muted-foreground text-sm">{record.importDate}</TableCell>
-                    </TableRow>
-                  ))
+                  materialHistory.length === 0 ? (
+                    <TableRow><TableCell colSpan={6} className="h-32 text-center text-muted-foreground italic">Không có lịch sử nhập nguyên liệu</TableCell></TableRow>
+                  ) : (
+                    materialHistory.map((record) => (
+                      <TableRow key={record._id} className="hover:bg-muted/20 transition-colors">
+                        <TableCell className="font-bold py-4">
+                          <div className="flex flex-col">
+                            <span>{record.material?.name || "N/A"}</span>
+                            <span className="text-[10px] text-muted-foreground font-mono uppercase tracking-tighter">Loại: {record.type}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="max-w-[150px] truncate">
+                            {record.sender || record.material?.supplier?.name || "N/A"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className={cn("text-right font-bold", record.quantity > 0 ? "text-[#4A7C23]" : "text-[#DC3545]")}>
+                          {record.quantity > 0 ? "+" : ""}{record.quantity} {record.material?.unit}
+                        </TableCell>
+                        <TableCell className="text-right"><CurrencyDisplay value={record.material?.price || 0} /></TableCell>
+                        <TableCell className="text-right font-bold text-[#4A7C23]">
+                          <CurrencyDisplay value={Math.abs(record.quantity * (record.material?.price || 0))} />
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-sm">
+                          {new Date(record.createdAt).toLocaleDateString("vi-VN", {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )
                 ) : (
-                  exportHistory.map((record) => (
-                    <TableRow key={record.id} className="hover:bg-muted/20 transition-colors">
-                      <TableCell className="font-bold py-4">{record.productName}</TableCell>
-                      <TableCell><Badge variant="outline">{record.destination}</Badge></TableCell>
-                      <TableCell className="text-right">{record.quantity} {record.unit}</TableCell>
-                      <TableCell className="text-right"><CurrencyDisplay value={record.unitPrice} /></TableCell>
-                      <TableCell className="text-right font-bold text-[#4A7C23]"><CurrencyDisplay value={record.totalPrice} /></TableCell>
-                      <TableCell className="text-muted-foreground text-sm">{record.exportDate}</TableCell>
-                    </TableRow>
-                  ))
+                  productHistory.length === 0 ? (
+                    <TableRow><TableCell colSpan={6} className="h-32 text-center text-muted-foreground italic">Không có lịch sử xuất sản phẩm</TableCell></TableRow>
+                  ) : (
+                    productHistory.map((record) => (
+                      <TableRow key={record._id} className="hover:bg-muted/20 transition-colors">
+                        <TableCell className="font-bold py-4">
+                          <div className="flex flex-col">
+                            <span>{record.product?.name || "N/A"}</span>
+                            <span className="text-[10px] text-muted-foreground font-mono uppercase tracking-tighter">Loại: {record.type}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="max-w-[150px] truncate">
+                            {record.receiver || record.customer || "N/A"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className={cn("text-right font-bold", record.quantity > 0 ? "text-[#4A7C23]" : "text-[#DC3545]")}>
+                          {record.quantity > 0 ? "+" : ""}{record.quantity} {record.product?.unit}
+                        </TableCell>
+                        <TableCell className="text-right"><CurrencyDisplay value={record.product?.baseCost || 0} /></TableCell>
+                        <TableCell className="text-right font-bold text-[#4A7C23]">
+                          <CurrencyDisplay value={Math.abs(record.quantity * (record.product?.baseCost || 0))} />
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-sm">
+                          {new Date(record.createdAt).toLocaleDateString("vi-VN", {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )
                 )}
               </TableBody>
             </Table>

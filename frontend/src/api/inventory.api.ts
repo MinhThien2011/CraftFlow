@@ -1,4 +1,4 @@
-import { ApiResponse, Material, Product, PaginationData } from "@/lib/types";
+import { ApiResponse, Material, Product, PaginationData, InventoryHistoryResponse } from "@/lib/types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
 
@@ -93,5 +93,31 @@ export const inventoryApi = {
         if (params.limit) queryParams.append("limit", params.limit.toString());
 
         return fetcher<ProductStockResponse>(`/inventory/products?${queryParams.toString()}`);
+    },
+
+    getMaterialHistory: async (params: {
+        page?: number;
+        limit?: number;
+        direction?: 'in' | 'out';
+    } = {}): Promise<InventoryHistoryResponse> => {
+        const queryParams = new URLSearchParams();
+        if (params.page) queryParams.append("page", params.page.toString());
+        if (params.limit) queryParams.append("limit", params.limit.toString());
+        if (params.direction) queryParams.append("direction", params.direction);
+
+        return fetcher<InventoryHistoryResponse>(`/materials/history?${queryParams.toString()}`);
+    },
+
+    getProductHistory: async (params: {
+        page?: number;
+        limit?: number;
+        direction?: 'in' | 'out';
+    } = {}): Promise<InventoryHistoryResponse> => {
+        const queryParams = new URLSearchParams();
+        if (params.page) queryParams.append("page", params.page.toString());
+        if (params.limit) queryParams.append("limit", params.limit.toString());
+        if (params.direction) queryParams.append("direction", params.direction);
+
+        return fetcher<InventoryHistoryResponse>(`/products/history?${queryParams.toString()}`);
     }
 };
