@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useCallback, useMemo, Fragment } from "react"
+import React, { useState, useEffect, useCallback, Fragment } from "react"
 import { Plus, Search, MoreVertical, Shield, Warehouse, User as UserIcon, Upload, ChevronLeft, ChevronRight, Factory, Mail, Lock, Phone, MapPin, Calendar, Settings, Briefcase, Info } from "lucide-react"
 import { AppShell } from "@/components/app-shell"
 import { Button } from "@/components/ui/button"
@@ -51,9 +51,9 @@ import {
 } from "@/components/ui/pagination"
 import { userApi } from "@/api/user.api"
 import type { User, PaginationData } from "@/lib/types"
-import { toast } from "sonner"
+import { useToast } from "@/hooks/use-toast"
 import { Spinner } from "@/components/ui/spinner"
-import { getAvatarUrl } from "@/lib/utils"
+import { getAvatarUrl, cn } from "@/lib/utils"
 
 const roleFilters = ["Tất cả", "Quản trị viên", "Quản lý sản xuất", "Quản lý kho", "Nhân viên"] as const
 type RoleFilter = (typeof roleFilters)[number]
@@ -117,6 +117,8 @@ export default function UsersPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
 
+  const { toast } = useToast()
+
   // API States
   const [users, setUsers] = useState<User[]>([])
   const [pagination, setPagination] = useState<PaginationData | null>(null)
@@ -154,7 +156,11 @@ export default function UsersPage() {
         setPagination(response.data.pagination || null)
       }
     } catch (error: any) {
-      toast.error(error.message || "Không thể tải danh sách người dùng")
+      toast({
+        title: "Lỗi",
+        description: error.message || "Không thể tải danh sách người dùng",
+        variant: "destructive",
+      })
     } finally {
       setIsLoading(false)
     }
@@ -174,7 +180,11 @@ export default function UsersPage() {
 
   const handleAddUser = async () => {
     if (!newUser.name || !newUser.email || !newUser.username || !newUser.password || !newUser.role) {
-      toast.error("Vui lòng điền đầy đủ các trường bắt buộc")
+      toast({
+        title: "Lỗi",
+        description: "Vui lòng điền đầy đủ các trường bắt buộc",
+        variant: "destructive",
+      })
       return
     }
 
@@ -202,12 +212,19 @@ export default function UsersPage() {
 
       const response = await userApi.createUser(formData);
       if (response.success) {
-        toast.success("Tạo tài khoản thành công");
+        toast({
+          title: "Thành công",
+          description: "Tạo tài khoản thành công",
+        });
         fetchUsers(searchQuery, roleFilterToValue[roleFilter], currentPage);
         resetForm();
       }
     } catch (error: any) {
-      toast.error(error.message || "Không thể tạo tài khoản mới");
+      toast({
+        title: "Lỗi",
+        description: error.message || "Không thể tạo tài khoản mới",
+        variant: "destructive",
+      });
     }
   }
 
@@ -244,7 +261,10 @@ export default function UsersPage() {
 
   const toggleUserStatus = (userId: string) => {
     // API call would go here
-    toast.info("Chức năng thay đổi trạng thái đang được triển khai")
+    toast({
+      title: "Thông báo",
+      description: "Chức năng thay đổi trạng thái đang được triển khai",
+    })
   }
 
   const getUserRoleName = (role: User["role"]): string => {
@@ -278,125 +298,124 @@ export default function UsersPage() {
                     Thêm tài khoản
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="w-[95vw] sm:max-w-[90vw] lg:max-w-6xl p-0 overflow-hidden border-none shadow-2xl flex flex-col max-h-[90vh]">
-                  {/* Header */}
-                  <div className="bg-gradient-to-r from-pink-50 via-purple-50 to-indigo-50 px-6 py-6 shrink-0 border-b border-purple-100">
+                <DialogContent className="w-[98vw] max-w-6xl p-0 overflow-hidden border-none shadow-2xl flex flex-col max-h-[95vh]">
+                  {/* Header - Optimized Spacing */}
+                  <div className="bg-gradient-to-r from-pink-50 via-purple-50 to-indigo-50 px-8 py-6 shrink-0 border-b border-purple-100">
                     <DialogHeader>
                       <div className="flex items-center gap-4">
-                        <div className="p-2 bg-white rounded-xl shadow-sm border border-purple-200">
+                        <div className="p-2.5 bg-white rounded-xl shadow-sm border border-purple-200">
                           <UserIcon className="h-6 w-6 text-purple-600" />
                         </div>
                         <div>
-                          <DialogTitle className="text-xl font-bold text-purple-900">Thêm tài khoản mới</DialogTitle>
+                          <DialogTitle className="text-xl font-bold text-purple-900 tracking-tight">Thêm tài khoản mới</DialogTitle>
                           <DialogDescription className="text-purple-700/70 text-sm font-medium">
-                            Nhập đầy đủ thông tin để khởi tạo thành viên mới
+                            Nhập đầy đủ thông tin để khởi tạo thành viên mới trong hệ thống
                           </DialogDescription>
                         </div>
                       </div>
                     </DialogHeader>
                   </div>
 
-                  {/* Body */}
-                  <div className="flex-1 overflow-y-auto custom-scrollbar p-8 bg-white">
-                    <div className="max-w-5xl mx-auto space-y-10">
-                      {/* Avatar Section - Compact */}
-                      <div className="flex flex-col md:flex-row items-start gap-10 pb-8 border-b border-gray-50">
-                        <div className="flex flex-col items-center gap-4 shrink-0">
+                  {/* Body - Flexible Grid */}
+                  <div className="flex-1 overflow-y-auto custom-scrollbar p-6 sm:p-10 bg-white">
+                    <div className="max-w-5xl mx-auto space-y-12">
+                      {/* Avatar & Guidance Row */}
+                      <div className="flex flex-col lg:flex-row items-start gap-12 pb-10 border-b border-gray-50">
+                        <div className="flex flex-col items-center gap-4 shrink-0 mx-auto lg:mx-0">
                           <div className="relative group">
-                            <div className="w-32 h-32 rounded-2xl bg-gray-50 flex items-center justify-center overflow-hidden border-2 border-dashed border-purple-200 group-hover:border-purple-400 transition-colors">
+                            <div className="w-36 h-36 rounded-3xl bg-gray-50 flex items-center justify-center overflow-hidden border-2 border-dashed border-purple-200 group-hover:border-purple-400 transition-all duration-300 shadow-inner">
                               {avatarPreview ? (
                                 <img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover" />
                               ) : (
-                                <Upload className="h-8 w-8 text-purple-200" />
+                                <Upload className="h-10 w-10 text-purple-200" />
                               )}
                             </div>
                             <label className="absolute -bottom-2 -right-2 cursor-pointer">
                               <input type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" />
-                              <div className="p-2 bg-purple-600 text-white rounded-lg shadow-lg hover:bg-purple-700 transition-colors">
-                                <Plus className="h-4 w-4" />
+                              <div className="p-2.5 bg-purple-600 text-white rounded-xl shadow-lg hover:bg-purple-700 hover:scale-110 transition-all active:scale-95">
+                                <Plus className="h-4.5 w-4.5 stroke-[3px]" />
                               </div>
                             </label>
                           </div>
-                          <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider">Ảnh đại diện</span>
+                          <span className="text-[10px] font-bold text-purple-400 uppercase tracking-[0.2em]">Ảnh đại diện</span>
                         </div>
 
-                        <div className="flex-1 space-y-4">
+                        <div className="flex-1 space-y-5">
                           <h4 className="text-xs font-bold text-gray-900 uppercase tracking-widest flex items-center gap-2">
-                            <Info className="h-3 w-3 text-purple-500" /> Lưu ý khi tạo tài khoản
+                            <Info className="h-4 w-4 text-purple-500" /> Lưu ý quan trọng
                           </h4>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
-                            <div className="flex items-center gap-2 text-xs text-gray-500">
-                              <div className="h-1 w-1 rounded-full bg-purple-400" />
-                              <span>Trường <strong className="text-purple-600">*</strong> là bắt buộc nhập.</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-xs text-gray-500">
-                              <div className="h-1 w-1 rounded-full bg-purple-400" />
-                              <span>Mật khẩu tối thiểu 8 ký tự gồm chữ số chữ in hoa, ký tự đặc biệt.</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-xs text-gray-500">
-                              <div className="h-1 w-1 rounded-full bg-purple-400" />
-                              <span>Tên đăng nhập không được trùng lặp.</span>
-                            </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-3">
+                            {[
+                              { text: "Trường có dấu * là bắt buộc.", color: "text-purple-600" },
+                              { text: "Mật khẩu tối thiểu 8 ký tự.", color: "text-gray-500" },
+                              { text: "Tên đăng nhập là duy nhất.", color: "text-gray-500" },
+                              { text: "Email phải đúng định dạng.", color: "text-gray-500" }
+                            ].map((item, idx) => (
+                              <div key={idx} className="flex items-center gap-3 text-xs text-gray-500">
+                                <div className="h-1.5 w-1.5 rounded-full bg-purple-400 shadow-[0_0_8px_rgba(168,85,247,0.4)]" />
+                                <span>{item.text}</span>
+                              </div>
+                            ))}
                           </div>
                         </div>
                       </div>
 
-                      {/* Main Form Fields */}
-                      <div className="space-y-10">
+                      {/* Form Sections */}
+                      <div className="space-y-12">
                         {/* Section 1: Thông tin cá nhân */}
-                        <div className="space-y-6">
-                          <h3 className="text-sm font-bold text-purple-900 flex items-center gap-2 uppercase tracking-widest">
-                            <div className="h-1.5 w-6 bg-purple-600 rounded-full" />
-                            Thông tin cá nhân
-                          </h3>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div className="space-y-8">
+                          <div className="flex items-center gap-3">
+                            <div className="h-6 w-1 bg-pink-500 rounded-full" />
+                            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest">Thông tin cá nhân</h3>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-6">
                             <div className="space-y-2">
-                              <Label className="text-[11px] font-bold text-gray-500 uppercase">Họ và tên *</Label>
+                              <Label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider ml-1">Họ và tên *</Label>
                               <Input
                                 placeholder="Nguyễn Văn An"
-                                className="h-10 rounded-lg border-gray-200 focus:ring-purple-100"
+                                className="h-11 rounded-xl border-gray-200 focus:border-purple-300 focus:ring-purple-50 transition-all"
                                 value={newUser.name}
                                 onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
                               />
                             </div>
                             <div className="space-y-2">
-                              <Label className="text-[11px] font-bold text-gray-500 uppercase">Email *</Label>
+                              <Label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider ml-1">Email *</Label>
                               <Input
                                 type="email"
                                 placeholder="email@craftflow.vn"
-                                className="h-10 rounded-lg border-gray-200 focus:ring-purple-100"
+                                className="h-11 rounded-xl border-gray-200 focus:border-purple-300 focus:ring-purple-50 transition-all"
                                 value={newUser.email}
                                 onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
                               />
                             </div>
                             <div className="space-y-2">
-                              <Label className="text-[11px] font-bold text-gray-500 uppercase">Số điện thoại</Label>
+                              <Label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider ml-1">Số điện thoại</Label>
                               <Input
                                 placeholder="+84 9xx xxx xxx"
-                                className="h-10 rounded-lg border-gray-200 focus:ring-purple-100"
+                                className="h-11 rounded-xl border-gray-200 focus:border-purple-300 focus:ring-purple-50 transition-all"
                                 value={newUser.phone}
                                 onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })}
                               />
                             </div>
                             <div className="space-y-2">
-                              <Label className="text-[11px] font-bold text-gray-500 uppercase">Ngày sinh</Label>
+                              <Label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider ml-1">Ngày sinh</Label>
                               <Input
                                 type="date"
-                                className="h-10 rounded-lg border-gray-200 focus:ring-purple-100"
+                                className="h-11 rounded-xl border-gray-200 focus:border-purple-300 focus:ring-purple-50 transition-all"
                                 value={newUser.birthDay}
                                 onChange={(e) => setNewUser({ ...newUser, birthDay: e.target.value })}
                               />
                             </div>
                             <div className="space-y-2">
-                              <Label className="text-[11px] font-bold text-gray-500 uppercase">Giới tính</Label>
+                              <Label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider ml-1">Giới tính</Label>
                               <Select
                                 value={newUser.gender}
                                 onValueChange={(value: any) => setNewUser({ ...newUser, gender: value })}
                               >
-                                <SelectTrigger className="h-10 rounded-lg border-gray-200 focus:ring-purple-100">
+                                <SelectTrigger className="h-11 rounded-xl border-gray-200 focus:ring-purple-50 transition-all">
                                   <SelectValue />
                                 </SelectTrigger>
-                                <SelectContent>
+                                <SelectContent className="rounded-xl shadow-xl">
                                   <SelectItem value="male">Nam</SelectItem>
                                   <SelectItem value="female">Nữ</SelectItem>
                                   <SelectItem value="other">Khác</SelectItem>
@@ -404,10 +423,10 @@ export default function UsersPage() {
                               </Select>
                             </div>
                             <div className="space-y-2">
-                              <Label className="text-[11px] font-bold text-gray-500 uppercase">Địa chỉ</Label>
+                              <Label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider ml-1">Địa chỉ</Label>
                               <Input
                                 placeholder="123 Đường ABC, Quận 1..."
-                                className="h-10 rounded-lg border-gray-200 focus:ring-purple-100"
+                                className="h-11 rounded-xl border-gray-200 focus:border-purple-300 focus:ring-purple-50 transition-all"
                                 value={newUser.address}
                                 onChange={(e) => setNewUser({ ...newUser, address: e.target.value })}
                               />
@@ -415,42 +434,42 @@ export default function UsersPage() {
                           </div>
                         </div>
 
-                        {/* Section 2: Tài khoản & Phân quyền */}
-                        <div className="space-y-6">
-                          <h3 className="text-sm font-bold text-purple-900 flex items-center gap-2 uppercase tracking-widest">
-                            <div className="h-1.5 w-6 bg-purple-600 rounded-full" />
-                            Tài khoản & Phân quyền
-                          </h3>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                            <div className="space-y-2">
-                              <Label className="text-[11px] font-bold text-gray-500 uppercase">Tên đăng nhập *</Label>
+                        {/* Section 2: Tài khoản & Bảo mật */}
+                        <div className="space-y-8">
+                          <div className="flex items-center gap-3">
+                            <div className="h-6 w-1 bg-purple-500 rounded-full" />
+                            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest">Tài khoản & Bảo mật</h3>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+                            <div className="space-y-2 lg:col-span-1">
+                              <Label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider ml-1">Tên đăng nhập *</Label>
                               <Input
                                 placeholder="nguyen.van.an"
-                                className="h-10 rounded-lg border-gray-200 focus:ring-purple-100"
+                                className="h-11 rounded-xl border-gray-200 focus:border-purple-300 focus:ring-purple-50 transition-all"
                                 value={newUser.username}
                                 onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
                               />
                             </div>
-                            <div className="space-y-2">
-                              <Label className="text-[11px] font-bold text-gray-500 uppercase">Mật khẩu *</Label>
+                            <div className="space-y-2 lg:col-span-1">
+                              <Label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider ml-1">Mật khẩu *</Label>
                               <Input
                                 type="password"
                                 placeholder="••••••••"
-                                className="h-10 rounded-lg border-gray-200 focus:ring-purple-100"
+                                className="h-11 rounded-xl border-gray-200 focus:border-purple-300 focus:ring-purple-50 transition-all"
                                 value={newUser.password}
                                 onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
                               />
                             </div>
-                            <div className="space-y-2">
-                              <Label className="text-[11px] font-bold text-gray-500 uppercase">Vai trò *</Label>
+                            <div className="space-y-2 lg:col-span-1">
+                              <Label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider ml-1">Vai trò hệ thống *</Label>
                               <Select
                                 value={newUser.role}
                                 onValueChange={(value: string) => setNewUser({ ...newUser, role: value })}
                               >
-                                <SelectTrigger className="h-10 rounded-lg border-gray-200 focus:ring-purple-100">
+                                <SelectTrigger className="h-11 rounded-xl border-gray-200 focus:ring-purple-50 transition-all">
                                   <SelectValue placeholder="Chọn vai trò" />
                                 </SelectTrigger>
-                                <SelectContent>
+                                <SelectContent className="rounded-xl shadow-xl">
                                   <SelectItem value="admin">Quản trị viên</SelectItem>
                                   <SelectItem value="production_manager">Quản lý sản xuất</SelectItem>
                                   <SelectItem value="kho_manager">Quản lý kho</SelectItem>
@@ -458,12 +477,12 @@ export default function UsersPage() {
                                 </SelectContent>
                               </Select>
                             </div>
-                            <div className="space-y-2">
-                              <Label className="text-[11px] font-bold text-gray-500 uppercase">Định mức công việc</Label>
+                            <div className="space-y-2 lg:col-span-1">
+                              <Label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider ml-1">Định mức công việc</Label>
                               <Input
                                 type="number"
                                 disabled={newUser.role !== "staff"}
-                                className="h-10 rounded-lg border-gray-200 focus:ring-purple-100 bg-gray-50 disabled:opacity-50"
+                                className="h-11 rounded-xl border-gray-200 focus:ring-purple-50 bg-gray-50/50 disabled:opacity-40 transition-all"
                                 value={newUser.maxDailyCapacity}
                                 onChange={(e) => setNewUser({ ...newUser, maxDailyCapacity: Number(e.target.value) })}
                               />
@@ -471,37 +490,37 @@ export default function UsersPage() {
                           </div>
                         </div>
 
-                        {/* Activation Switch */}
-                        <div className="flex items-center justify-between p-4 bg-purple-50/50 rounded-xl border border-purple-100 shadow-sm">
-                          <div className="space-y-0.5">
-                            <Label className="text-sm font-bold text-purple-900">Kích hoạt tài khoản</Label>
-                            <p className="text-xs text-purple-600/60">Cho phép người dùng truy cập hệ thống ngay lập tức</p>
+                        {/* Activation Switch - Compact & Clean */}
+                        <div className="flex items-center justify-between p-6 bg-purple-50/30 rounded-2xl border border-purple-100 shadow-sm transition-all hover:bg-purple-50/50">
+                          <div className="space-y-1">
+                            <Label className="text-sm font-bold text-purple-900">Kích hoạt tài khoản người dùng</Label>
+                            <p className="text-xs text-purple-600/60 font-medium">Cho phép thành viên truy cập và làm việc trên hệ thống ngay lập tức</p>
                           </div>
                           <Switch
                             checked={newUser.isActive}
-                            onCheckedChange={(checked) => setNewUser({ ...newUser, isActive: checked })}
-                            className="data-[state=checked]:bg-purple-600"
+                            onCheckedChange={(checked: boolean) => setNewUser({ ...newUser, isActive: checked })}
+                            className="data-[state=checked]:bg-purple-600 scale-110 transition-all"
                           />
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Footer */}
-                  <div className="px-8 py-5 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3 shrink-0">
+                  {/* Footer - Solid & Fixed */}
+                  <div className="px-8 py-6 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-4 shrink-0">
                     <Button
                       variant="ghost"
                       onClick={resetForm}
-                      className="h-10 px-6 font-bold text-gray-500 hover:bg-gray-200 transition-colors"
+                      className="h-11 px-8 font-bold text-gray-500 hover:bg-gray-200 hover:text-gray-900 rounded-xl transition-all"
                     >
                       Hủy bỏ
                     </Button>
                     <Button
                       onClick={handleAddUser}
-                      className="h-10 px-8 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg shadow-md transition-all active:scale-95 flex items-center gap-2"
+                      className="h-11 px-10 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl shadow-[0_4px_12px_rgba(147,51,234,0.3)] hover:shadow-[0_6px_20px_rgba(147,51,234,0.4)] transition-all active:scale-95 flex items-center gap-2.5"
                     >
-                      <Plus className="h-4 w-4" />
-                      Tạo tài khoản
+                      <Plus className="h-5 w-5 stroke-[3px]" />
+                      Tạo tài khoản mới
                     </Button>
                   </div>
                 </DialogContent>
@@ -712,21 +731,22 @@ export default function UsersPage() {
                 <Pagination className="mx-0 w-auto">
                   <PaginationContent>
                     <PaginationItem>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                        disabled={currentPage === 1}
-                        className="gap-1 pl-2.5"
+                      <PaginationLink
+                        aria-label="Trang trước"
+                        size="default"
+                        onClick={() => currentPage > 1 && setCurrentPage((prev) => prev - 1)}
+                        className={cn(
+                          "gap-1 px-2.5 sm:pl-2.5 cursor-pointer",
+                          currentPage === 1 && "pointer-events-none opacity-50"
+                        )}
                       >
                         <ChevronLeft className="h-4 w-4" />
-                        <span>Trước</span>
-                      </Button>
+                        <span className="hidden sm:block">Trước</span>
+                      </PaginationLink>
                     </PaginationItem>
 
                     {Array.from({ length: pagination.pages }, (_, i) => i + 1)
                       .filter((page) => {
-                        // Show first, last, current, and pages around current
                         return (
                           page === 1 ||
                           page === pagination.pages ||
@@ -736,37 +756,38 @@ export default function UsersPage() {
                       .map((page, index, array) => {
                         const showEllipsis = index > 0 && page - array[index - 1] > 1
                         return (
-                          <React.Fragment key={page}>
+                          <Fragment key={page}>
                             {showEllipsis && (
                               <PaginationItem>
                                 <PaginationEllipsis />
                               </PaginationItem>
                             )}
                             <PaginationItem>
-                              <Button
-                                variant={currentPage === page ? "default" : "ghost"}
-                                size="sm"
+                              <PaginationLink
+                                isActive={currentPage === page}
                                 onClick={() => setCurrentPage(page)}
-                                className="h-9 w-9 p-0"
+                                className="cursor-pointer"
                               >
                                 {page}
-                              </Button>
+                              </PaginationLink>
                             </PaginationItem>
-                          </React.Fragment>
+                          </Fragment>
                         )
                       })}
 
                     <PaginationItem>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setCurrentPage((prev) => Math.min(pagination.pages, prev + 1))}
-                        disabled={currentPage === pagination.pages}
-                        className="gap-1 pr-2.5"
+                      <PaginationLink
+                        aria-label="Trang sau"
+                        size="default"
+                        onClick={() => currentPage < pagination.pages && setCurrentPage((prev) => prev + 1)}
+                        className={cn(
+                          "gap-1 px-2.5 sm:pr-2.5 cursor-pointer",
+                          currentPage === pagination.pages && "pointer-events-none opacity-50"
+                        )}
                       >
-                        <span>Sau</span>
+                        <span className="hidden sm:block">Sau</span>
                         <ChevronRight className="h-4 w-4" />
-                      </Button>
+                      </PaginationLink>
                     </PaginationItem>
                   </PaginationContent>
                 </Pagination>

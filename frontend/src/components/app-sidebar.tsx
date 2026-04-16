@@ -17,6 +17,7 @@ import {
   ChevronDown,
   User,
   Users,
+  FileSearch,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -66,16 +67,9 @@ const navigation = [
     icon: Users,
   },
   {
-    name: "Định giá thông minh",
-    href: "/ai-pricing",
-    icon: Sparkles,
-    badge: true,
-  },
-  {
-    name: "Marketing AI",
-    href: "/ai-marketing",
-    icon: Megaphone,
-    badge: true,
+    name: "Nhật ký hệ thống",
+    href: "/system-log",
+    icon: FileSearch,
   },
   {
     name: "Báo cáo",
@@ -131,8 +125,10 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
                     <p className="text-sm font-medium text-sidebar-foreground">
                       {user?.fullName || user?.username || "Người dùng"}
                     </p>
-                    <span className="inline-flex items-center rounded-md bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground uppercase">
-                      {user?.role || "user"}
+                    <span className="inline-flex items-center rounded-md bg-primary px-2 py-0.5 text-[10px] font-bold text-primary-foreground uppercase">
+                      {typeof user?.role === "string"
+                        ? user.role
+                        : (user?.role as any)?.roleName || "user"}
                     </span>
                   </div>
                   <ChevronDown className="h-4 w-4 text-muted-foreground" />

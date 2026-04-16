@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import {
   Package,
   AlertTriangle,
@@ -40,20 +40,21 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { importHistory, materialCategories } from "@/lib/mock-data"
-import type { Material, MaterialCategory, PaginationData } from "@/lib/types"
+import { importHistory, materialCategories, products, exportHistory, productCategories } from "@/lib/mock-data"
+import type { Material, PaginationData, Product, ExportHistory } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { CurrencyDisplay } from "@/components/ui/currency-display"
 import { materialApi } from "@/api/material.api"
 import { toast } from "sonner"
 import { Spinner } from "@/components/ui/spinner"
+import { Allan } from "next/font/google"
 
-type TabType = "list" | "history"
+type TabType = "list" | "history" | "products" | "stockOut"
 
 export default function InventoryPage() {
   const [activeTab, setActiveTab] = useState<TabType>("list")
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedCategory, setSelectedCategory] = useState<MaterialCategory | "All">("All")
+  const [selectedCategory, setSelectedCategory] = useState<string>("All")
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -149,11 +150,41 @@ export default function InventoryPage() {
     }
   }
 
-  // Filter materials based on category (since we handle search via API)
-  const filteredMaterials = materials.filter((material) => {
-    // Search is handled by API, we can filter by other criteria here if needed
-    return true
-  })
+  const activeCategoryOptions = activeTab === "products" ? productCategories : materialCategories
+
+  const filteredMaterials = useMemo(
+    () =>
+      materials?.filter((material) => {
+        if (!material || !material.name) return false
+        return material.name.toLowerCase().includes(searchQuery.toLowerCase())
+      }) || [],
+    [materials, searchQuery]
+  )
+
+  const filteredProducts = useMemo(
+    () =>
+      products?.filter((product) => {
+        if (!product || !product.name || !product.category) return false
+        const matchesSearch =
+          product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          product.category.toLowerCase().includes(searchQuery.toLowerCase())
+        const matchesCategory =
+          selectedCategory === "All" || product.category === selectedCategory
+        return matchesSearch && matchesCategory
+      }) || [],
+    [products, searchQuery, selectedCategory]
+  )
+
+  const filteredStockOut = useMemo(
+    () =>
+      exportHistory?.filter((record) => {
+        if (!record || !record.productName || !record.destination) return false
+        return record.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          record.destination.toLowerCase().includes(searchQuery.toLowerCase())
+      }) || [],
+    [exportHistory, searchQuery]
+  )
+
 
   const totalMaterials = pagination?.total || 0
 
@@ -195,11 +226,11 @@ export default function InventoryPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-semibold text-foreground">
+            <h2 className="text-3xl font-bold bg-gradient-to-r from-[#8B7355] to-[#4A7C23] bg-clip-text text-transparent">
               Quản lý kho hàng
             </h2>
-            <p className="text-sm text-muted-foreground">
-              Quản lý nguyên liệu, tồn kho và lịch sử nhập hàng
+            <p className="text-sm text-muted-foreground mt-1">
+              Quản lý nguyên liệu, sản phẩm, tồn kho và lịch sử nhập/xuất
             </p>
           </div>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
@@ -462,6 +493,19 @@ export default function InventoryPage() {
             >
               Danh sách nguyên liệu
             </button>
+
+            <button
+              onClick={() => setActiveTab("products")}
+              className={cn(
+                "rounded-md px-4 py-2 text-sm font-medium transition-colors",
+                activeTab === "products"
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Danh sách sản phẩm
+            </button>
+
             <button
               onClick={() => setActiveTab("history")}
               className={cn(
@@ -473,37 +517,52 @@ export default function InventoryPage() {
             >
               Lịch sử nhập kho
             </button>
+
+            <button
+              onClick={() => setActiveTab("stockOut")}
+              className={cn(
+                "rounded-md px-4 py-2 text-sm font-medium transition-colors",
+                activeTab === "stockOut"
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Lịch sử xuất kho
+            </button>
+
           </div>
 
           <div className="flex items-center gap-3">
             <div className="relative flex-1 md:w-64">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Tìm kiếm nguyên liệu..."
+                placeholder={
+                  activeTab === "products"
+                    ? "Tìm kiếm sản phẩm..."
+                    : activeTab === "stockOut"
+                      ? "Tìm kiếm lịch sử xuất kho..."
+                      : "Tìm kiếm nguyên liệu..."
+                }
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
               />
             </div>
-            <div className="flex gap-2">
-              <Button
-                variant={selectedCategory === "All" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setSelectedCategory("All")}
-              >
-                Tất cả
-              </Button>
-              {materialCategories.map((cat) => (
-                <Button
-                  key={cat}
-                  variant={selectedCategory === cat ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setSelectedCategory(cat)}
-                >
-                  {cat}
-                </Button>
-              ))}
-            </div>
+            {(activeTab === "list" || activeTab === "products") && (
+              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="Chọn danh mục" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">Tất cả</SelectItem>
+                  {activeCategoryOptions.map((cat) => (
+                    <SelectItem key={cat} value={cat}>
+                      {cat}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
         </div>
 
@@ -514,12 +573,12 @@ export default function InventoryPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Nguyên liệu</TableHead>
-                    <TableHead>Loại</TableHead>
-                    <TableHead className="text-right">Tồn kho</TableHead>
-                    <TableHead className="text-right">Tối thiểu</TableHead>
-                    <TableHead className="text-right">Đơn giá</TableHead>
-                    <TableHead className="text-center">Trạng thái</TableHead>
+                    <TableHead className="text-[#8B7355] font-bold">Nguyên liệu</TableHead>
+                    <TableHead className="text-[#4A7C23] font-bold">Loại</TableHead>
+                    <TableHead className="text-right text-[#FFA500] font-bold">Tồn kho</TableHead>
+                    <TableHead className="text-right text-[#007BFF] font-bold">Tối thiểu</TableHead>
+                    <TableHead className="text-right text-[#DC3545] font-bold">Đơn giá</TableHead>
+                    <TableHead className="text-center text-[#6C757D] font-bold">Trạng thái</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -539,38 +598,123 @@ export default function InventoryPage() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredMaterials.map((material) => (
-                      <TableRow key={material._id}>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium">{material.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              Mã: {material.code} | {material.location || "N/A"}
-                            </p>
-                          </div>
+                    filteredMaterials.map((material) => {
+                      if (!material || !material._id || !material.name) return null
+                      return (
+                        <TableRow key={material._id}>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{material.name || "N/A"}</p>
+                              <p className="text-xs text-muted-foreground">
+                                Mã: {material.code || "N/A"} | {material.location || "N/A"}
+                              </p>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">{material.supplier?.name || "N/A"}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <span className="font-medium">
+                              {material.currentStock || 0}
+                            </span>{" "}
+                            <span className="text-muted-foreground text-xs uppercase">
+                              {material.unit || ""}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {material.threshold || 0} {material.unit || ""}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <CurrencyDisplay value={material.price || 0} />
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {getStatusBadge(material)}
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        ) : activeTab === "history" ? (
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-[#8B7355] font-bold">Nguyên liệu</TableHead>
+                    <TableHead className="text-[#4A7C23] font-bold">Nhà cung cấp</TableHead>
+                    <TableHead className="text-right text-[#FFA500] font-bold">Số lượng</TableHead>
+                    <TableHead className="text-right text-[#DC3545] font-bold">Đơn giá</TableHead>
+                    <TableHead className="text-right text-[#007BFF] font-bold">Tổng cộng</TableHead>
+                    <TableHead className="text-[#6C757D] font-bold">Ngày</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {importHistory?.map((record) => {
+                    if (!record || !record.materialName) return null
+                    return (
+                      <TableRow key={record.id}>
+                        <TableCell className="font-medium">
+                          {record.materialName}
                         </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary">{material.supplier.name}</Badge>
+                        <TableCell>{record.supplier || "N/A"}</TableCell>
+                        <TableCell className="text-right">
+                          {record.quantity} {record.unit}
                         </TableCell>
                         <TableCell className="text-right">
-                          <span className="font-medium">
-                            {material.currentStock}
-                          </span>{" "}
-                          <span className="text-muted-foreground text-xs uppercase">
-                            {material.unit}
-                          </span>
+                          <CurrencyDisplay value={record.unitPrice} />
                         </TableCell>
-                        <TableCell className="text-right">
-                          {material.threshold} {material.unit}
+                        <TableCell className="text-right font-medium">
+                          <CurrencyDisplay value={record.totalPrice} />
                         </TableCell>
-                        <TableCell className="text-right">
-                          <CurrencyDisplay value={material.price} />
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {getStatusBadge(material)}
-                        </TableCell>
+                        <TableCell>{record.importDate}</TableCell>
                       </TableRow>
-                    ))
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        ) : activeTab === "products" ? (
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-[#8B7355] font-bold">Sản phẩm</TableHead>
+                    <TableHead className="text-[#4A7C23] font-bold">Danh mục</TableHead>
+                    <TableHead className="text-right text-[#FFA500] font-bold">Giá gốc</TableHead>
+                    <TableHead className="text-right text-[#DC3545] font-bold">Giá đề xuất</TableHead>
+                    <TableHead className="text-[#6C757D] font-bold">Ngày tạo</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredProducts.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                        Không tìm thấy sản phẩm nào
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredProducts.map((product) => {
+                      if (!product || !product._id) return null
+                      return (
+                        <TableRow key={product._id || product.id}>
+                          <TableCell className="font-medium">{product.name || "N/A"}</TableCell>
+                          <TableCell>{product.category || "N/A"}</TableCell>
+                          <TableCell className="text-right">
+                            <CurrencyDisplay value={product.basePrice || 0} />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <CurrencyDisplay value={product.suggestedPrice ?? product.basePrice ?? 0} />
+                          </TableCell>
+                          <TableCell>{product.createdAt || "N/A"}</TableCell>
+                        </TableRow>
+                      )
+                    })
                   )}
                 </TableBody>
               </Table>
@@ -582,33 +726,43 @@ export default function InventoryPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Nguyên liệu</TableHead>
-                    <TableHead>Nhà cung cấp</TableHead>
-                    <TableHead className="text-right">Số lượng</TableHead>
-                    <TableHead className="text-right">Đơn giá</TableHead>
-                    <TableHead className="text-right">Tổng cộng</TableHead>
-                    <TableHead>Ngày</TableHead>
+                    <TableHead>Sản phẩm</TableHead>
+                    <TableHead className="text-[#8B7355] font-bold">Sản phẩm</TableHead>
+                    <TableHead className="text-[#4A7C23] font-bold">Điểm đến</TableHead>
+                    <TableHead className="text-right text-[#FFA500] font-bold">Số lượng</TableHead>
+                    <TableHead className="text-right text-[#DC3545] font-bold">Đơn giá</TableHead>
+                    <TableHead className="text-right text-[#007BFF] font-bold">Tổng cộng</TableHead>
+                    <TableHead className="text-[#6C757D] font-bold">Ngày xuất</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {importHistory.map((record) => (
-                    <TableRow key={record.id}>
-                      <TableCell className="font-medium">
-                        {record.materialName}
+                  {filteredStockOut?.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                        Không tìm thấy lịch sử xuất kho nào
                       </TableCell>
-                      <TableCell>{record.supplier}</TableCell>
-                      <TableCell className="text-right">
-                        {record.quantity} {record.unit}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <CurrencyDisplay value={record.unitPrice} />
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        <CurrencyDisplay value={record.totalPrice} />
-                      </TableCell>
-                      <TableCell>{record.importDate}</TableCell>
                     </TableRow>
-                  ))}
+                  ) : (
+                    filteredStockOut?.map((record) => {
+                      if (!record || !record.productName) return null
+                      return (
+                        <TableRow key={record.id}>
+                          <TableCell className="font-medium">{record.productName || "N/A"}</TableCell>
+                          <TableCell>{record.destination || "N/A"}</TableCell>
+                          <TableCell className="text-right">
+                            {record.quantity || 0} {record.unit || ""}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <CurrencyDisplay value={record.unitPrice || 0} />
+                          </TableCell>
+                          <TableCell className="text-right font-medium">
+                            <CurrencyDisplay value={record.totalPrice || 0} />
+                          </TableCell>
+                          <TableCell>{record.exportDate || "N/A"}</TableCell>
+                        </TableRow>
+                      )
+                    })
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
