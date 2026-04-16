@@ -127,17 +127,62 @@ export interface ExportHistory {
   note?: string
 }
 
-export interface ExportHistory {
-  id: string
-  productId: string
-  productName: string
-  quantity: number
-  unit: MaterialUnit
-  destination: string
-  unitPrice: number
-  totalPrice: number
-  exportDate: string
-  note?: string
+export type SystemLogAction =
+  | "LOGIN"
+  | "LOGIN_SUCCESS"
+  | "LOGIN_FAILED"
+  | "LOGOUT"
+  | "CREATE_MATERIAL"
+  | "UPDATE_MATERIAL"
+  | "DELETE_MATERIAL"
+  | "CREATE_IMPORT"
+  | "APPROVE_IMPORT"
+  | "STOCK_ADJUSTMENT"
+  | "CREATE_PRODUCTION"
+  | "UPDATE_SETTINGS"
+  | "VIEW_REPORT"
+  | "CREATE_USER"
+  | "UPDATE_USER"
+  | "DELETE_USER"
+  | string
+
+export type SystemLogModule =
+  | "AUTH"
+  | "USER"
+  | "MATERIAL"
+  | "INVENTORY"
+  | "PRODUCTION"
+  | "SYSTEM"
+  | "ORDER"
+  | string
+
+export interface SystemLogAuthor {
+  _id: string
+  username: string
+  fullName: string
+  role?: { _id: string; roleName: string }
+}
+
+export interface SystemLog {
+  _id: string
+  author: SystemLogAuthor | null
+  action: SystemLogAction
+  module: SystemLogModule
+  details: string
+  targetId?: string
+  metadata?: Record<string, unknown>
+  ipAddress?: string
+  userAgent?: string
+  createdAt: string
+}
+
+export interface SystemLogListResponse {
+  success: boolean
+  message: string
+  data: {
+    logs: SystemLog[]
+    pagination: PaginationData
+  }
 }
 
 export interface Product {

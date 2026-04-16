@@ -72,11 +72,6 @@ const navigation = [
     icon: Users,
   },
   {
-    name: "Nhật ký hệ thống",
-    href: "/system-log",
-    icon: FileSearch,
-  },
-  {
     name: "Báo cáo",
     href: "/reports",
     icon: BarChart3,
