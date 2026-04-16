@@ -566,13 +566,13 @@ export default function InventoryPage() {
             <CardContent className="p-0">
               <Table>
                 <TableHeader>
-                  <TableRow className="bg-gradient-to-r from-[#8B7355]/10 via-[#4A7C23]/10 to-[#FFA500]/10">
-                    <TableHead className="text-[#8B7355] font-bold text-base">Nguyên liệu</TableHead>
-                    <TableHead className="text-[#4A7C23] font-bold text-base">Loại</TableHead>
-                    <TableHead className="text-right text-[#FFA500] font-bold text-base">Tồn kho</TableHead>
-                    <TableHead className="text-right text-[#007BFF] font-bold text-base">Tối thiểu</TableHead>
-                    <TableHead className="text-right text-[#DC3545] font-bold text-base">Đơn giá</TableHead>
-                    <TableHead className="text-center text-[#6C757D] font-bold text-base">Trạng thái</TableHead>
+                  <TableRow>
+                    <TableHead className="text-[#8B7355] font-bold">Nguyên liệu</TableHead>
+                    <TableHead className="text-[#4A7C23] font-bold">Loại</TableHead>
+                    <TableHead className="text-right text-[#FFA500] font-bold">Tồn kho</TableHead>
+                    <TableHead className="text-right text-[#007BFF] font-bold">Tối thiểu</TableHead>
+                    <TableHead className="text-right text-[#DC3545] font-bold">Đơn giá</TableHead>
+                    <TableHead className="text-center text-[#6C757D] font-bold">Trạng thái</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
