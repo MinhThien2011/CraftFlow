@@ -62,6 +62,11 @@ const navigation = [
     icon: AlertTriangle,
   },
   {
+    name: "Nhật ký hệ thống",
+    href: "/system-log",
+    icon: FileSearch,
+  },
+  {
     name: "Người dùng",
     href: "/users",
     icon: Users,

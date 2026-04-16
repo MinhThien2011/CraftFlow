@@ -185,7 +185,6 @@ export default function InventoryPage() {
     [exportHistory, searchQuery]
   )
 
-
   const totalMaterials = pagination?.total || 0
 
   // Calculate stats from the loaded materials (or API should provide these)
@@ -529,7 +528,6 @@ export default function InventoryPage() {
             >
               Lịch sử xuất kho
             </button>
-
           </div>
 
           <div className="flex items-center gap-3">
@@ -540,6 +538,7 @@ export default function InventoryPage() {
                   activeTab === "products"
                     ? "Tìm kiếm sản phẩm..."
                     : activeTab === "stockOut"
+
                       ? "Tìm kiếm lịch sử xuất kho..."
                       : "Tìm kiếm nguyên liệu..."
                 }
@@ -726,7 +725,6 @@ export default function InventoryPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Sản phẩm</TableHead>
                     <TableHead className="text-[#8B7355] font-bold">Sản phẩm</TableHead>
                     <TableHead className="text-[#4A7C23] font-bold">Điểm đến</TableHead>
                     <TableHead className="text-right text-[#FFA500] font-bold">Số lượng</TableHead>

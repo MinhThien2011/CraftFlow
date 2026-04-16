@@ -88,6 +88,44 @@ export const exportHistory: ExportHistory[] = [
   },
 ]
 
+export const exportHistory: ExportHistory[] = [
+  {
+    id: "1",
+    productId: "1",
+    productName: "Gấu bông Teddy",
+    quantity: 20,
+    unit: "cái",
+    destination: "Cửa hàng A",
+    unitPrice: 420000,
+    totalPrice: 8400000,
+    exportDate: "2026-04-10",
+    note: "Giao đơn hàng online",
+  },
+  {
+    id: "2",
+    productId: "3",
+    productName: "Khăn choàng cổ",
+    quantity: 5,
+    unit: "cái",
+    destination: "Khách lẻ B",
+    unitPrice: 550000,
+    totalPrice: 2750000,
+    exportDate: "2026-04-12",
+  },
+  {
+    id: "3",
+    productId: "2",
+    productName: "Túi đeo chéo handmade",
+    quantity: 10,
+    unit: "cái",
+    destination: "Shop C",
+    unitPrice: 350000,
+    totalPrice: 3500000,
+    exportDate: "2026-04-13",
+    note: "Giao nhanh",
+  },
+]
+
 // Products
 export const products: Product[] = [
   {
