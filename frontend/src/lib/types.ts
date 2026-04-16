@@ -58,6 +58,12 @@ export interface Supplier {
   notes?: string
 }
 
+export interface StockLevelInfo {
+  label: string
+  color: string
+  priority: number
+}
+
 export interface Material {
   _id: string
   name: string
@@ -74,7 +80,9 @@ export interface Material {
   isActive: boolean
   createdAt: string
   updatedAt: string
+  isLowStock?: boolean
   stockLevel?: string
+  stockLevelInfo?: StockLevelInfo
   id?: string
 }
 
@@ -97,7 +105,7 @@ export interface MaterialListResponse {
   success: boolean
   message: string
   data: {
-    materials: Material[]
+    items: Material[]
     pagination: PaginationData
   }
 }
@@ -185,33 +193,91 @@ export interface SystemLogListResponse {
   }
 }
 
+export interface ProductMaterialCost {
+  material: string | Material
+  quantity: number
+  materialCode: string
+  unit: string
+  priceAtTime: number
+  currency: string
+  _id?: string
+}
+
 export interface Product {
-  id: any
+  _id: string
   name: string
-  description: string
+  code: string
+  description?: string
   category: string
-  basePrice: number
-  suggestedPrice?: number
-  image?: string
+  unit: string
+  estimatedProductionTime: number
+  estimateMaterialCost: ProductMaterialCost[]
+  isActive: boolean
+  baseCost: number
+  productImage: string
+  currentStock: number
+  threshold: number
+  location?: string
+  totalProduced: number
   createdAt: string
+  updatedAt: string
+  isLowStock?: boolean
+  stockLevel?: string
+  stockLevelInfo?: StockLevelInfo
+  id?: string // For compatibility with existing code
+}
+
+export interface ProductListResponse {
+  status: string
+  success?: boolean
+  message: string
+  data: {
+    items: Product[]
+    pagination: {
+      total: number
+      totalPages: number
+      currentPage: number
+      limit: number
+    }
+  }
+}
+
+export interface ProductResponse {
+  status: string
+  success?: boolean
+  message: string
+  data: {
+    product: Product
+  }
 }
 
 export interface BOMItem {
-  materialId: string
-  materialName: string
-  quantity: number
-  unit: MaterialUnit
+  material: string | Material
+  qtyPerUnit: number
+  unit: string
+  note?: string
+  _id?: string
 }
 
 export interface BOM {
-  id: string
-  productId: string
-  productName: string
+  _id: string
+  product: string | Product
   items: BOMItem[]
-  totalCost: number
+  version: string
+  isActive: boolean
   createdAt: string
   updatedAt: string
 }
+
+export interface InventoryOverview {
+  totalMaterials: number
+  lowStockMaterials: number
+  criticalMaterials: number
+  totalInventoryValue: number
+  totalProducts: number
+  lowStockProducts: number
+}
+
 
 export interface ProductionOrder {
   id: string

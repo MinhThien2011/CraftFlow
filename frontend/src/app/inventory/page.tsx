@@ -7,10 +7,14 @@ import {
   TrendingDown,
   Plus,
   Search,
+  RefreshCw,
+  History,
+  ShoppingCart,
+  Boxes,
 } from "lucide-react"
 
 import { AppShell } from "@/components/app-shell"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -39,525 +43,343 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
-import { importHistory, materialCategories, products, exportHistory, productCategories } from "@/lib/mock-data"
-import type { Material, PaginationData, Product, ExportHistory } from "@/lib/types"
+import { importHistory, materialCategories, exportHistory, productCategories } from "@/lib/mock-data"
+import type { Material, PaginationData, Product, InventoryOverview } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { CurrencyDisplay } from "@/components/ui/currency-display"
 import { materialApi } from "@/api/material.api"
+import { inventoryApi } from "@/api/inventory.api"
 import { toast } from "sonner"
 import { Spinner } from "@/components/ui/spinner"
-import { Allan } from "next/font/google"
 
-type TabType = "list" | "history" | "products" | "stockOut"
+type TabType = "materials" | "products" | "history-import" | "history-export"
+
+function SkeletonRow({ cols }: { cols: number }) {
+  return (
+    <TableRow>
+      {Array(cols).fill(0).map((_, i) => (
+        <TableCell key={i}>
+          <div className="h-4 bg-muted animate-pulse rounded" />
+        </TableCell>
+      ))}
+    </TableRow>
+  )
+}
+
+function StatCardSkeleton() {
+  return (
+    <Card>
+      <CardContent className="flex items-center gap-4 p-5">
+        <div className="h-12 w-12 rounded-lg bg-muted animate-pulse" />
+        <div className="space-y-2">
+          <div className="h-3 w-20 bg-muted animate-pulse rounded" />
+          <div className="h-6 w-12 bg-muted animate-pulse rounded" />
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
 
 export default function InventoryPage() {
-  const [activeTab, setActiveTab] = useState<TabType>("list")
+  const [activeTab, setActiveTab] = useState<TabType>("materials")
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState<string>("All")
+  const [currentPage, setCurrentPage] = useState(1)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Form State
-  const [formData, setFormData] = useState({
-    name: "",
-    code: "",
-    unit: "Cuộn",
-    color: "",
-    price: 0,
-    currency: "VND",
-    currentStock: 0,
-    threshold: 10,
-    location: "",
-    description: "",
-    supplier: {
-      name: "",
-      address: "",
-      phone: "",
-      email: "",
-      contactPerson: "",
-      notes: "",
-    },
-  })
-
   // API States
   const [materials, setMaterials] = useState<Material[]>([])
+  const [productsStock, setProductsStock] = useState<Product[]>([])
+  const [overview, setOverview] = useState<InventoryOverview | null>(null)
   const [pagination, setPagination] = useState<PaginationData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
-  const fetchMaterials = useCallback(async (search?: string) => {
-    setIsLoading(true)
+  const fetchOverview = useCallback(async () => {
     try {
-      const response = await materialApi.getMaterials({ search, limit: 10, page: 1 })
-      if (response.success && response.data) {
-        setMaterials(response.data.materials || [])
-        setPagination(response.data.pagination || null)
+      const response = await inventoryApi.getOverview()
+      if (response.success) {
+        setOverview(response.data)
       }
-    } catch (error: any) {
-      toast.error(error.message || "Không thể tải danh sách nguyên liệu")
-    } finally {
-      setIsLoading(false)
+    } catch (error) {
+      console.error("Failed to fetch inventory overview", error)
     }
   }, [])
 
-  useEffect(() => {
-    // Debounce search if needed, but for now simple fetch
-    const delayDebounceFn = setTimeout(() => {
-      fetchMaterials(searchQuery)
-    }, 500)
+  const fetchMaterials = useCallback(async (showSkeleton = false) => {
+    if (showSkeleton) setIsLoading(true)
+    else setIsRefreshing(true)
 
-    return () => clearTimeout(delayDebounceFn)
-  }, [searchQuery, fetchMaterials])
-
-  const handleAddMaterial = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsSubmitting(true)
     try {
-      const response = await materialApi.createMaterial({
-        ...formData,
-        isActive: true,
+      const response = await inventoryApi.getMaterialsStock({
+        search: searchQuery,
+        category: selectedCategory,
+        page: currentPage,
+        limit: 10
       })
-      if (response.success) {
-        toast.success("Thêm nguyên liệu thành công")
-        setIsAddDialogOpen(false)
-        fetchMaterials() // Refresh list
-        // Reset form
-        setFormData({
-          name: "",
-          code: "",
-          unit: "Cuộn",
-          color: "",
-          price: 0,
-          currency: "VND",
-          currentStock: 0,
-          threshold: 10,
-          location: "",
-          description: "",
-          supplier: {
-            name: "",
-            address: "",
-            phone: "",
-            email: "",
-            contactPerson: "",
-            notes: "",
-          },
-        })
+      if (response.success && response.data) {
+        setMaterials(response.data.items || [])
+        setPagination(response.data.pagination)
       }
     } catch (error: any) {
-      toast.error(error.message || "Không thể thêm nguyên liệu")
+      toast.error(error.message || "Không thể tải danh sách nguyên liệu")
+      setMaterials([])
     } finally {
-      setIsSubmitting(false)
+      setIsLoading(false)
+      setIsRefreshing(false)
     }
+  }, [searchQuery, selectedCategory, currentPage])
+
+  const fetchProducts = useCallback(async (showSkeleton = false) => {
+    if (showSkeleton) setIsLoading(true)
+    else setIsRefreshing(true)
+
+    try {
+      const response = await inventoryApi.getProductsStock({
+        search: searchQuery,
+        category: selectedCategory,
+        page: currentPage,
+        limit: 10
+      })
+      if (response.success && response.data) {
+        setProductsStock(response.data.items || [])
+        setPagination(response.data.pagination)
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Không thể tải danh sách sản phẩm")
+      setProductsStock([])
+    } finally {
+      setIsLoading(false)
+      setIsRefreshing(false)
+    }
+  }, [searchQuery, selectedCategory, currentPage])
+
+  useEffect(() => {
+    fetchOverview()
+  }, [fetchOverview])
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (activeTab === "materials") {
+        fetchMaterials((materials?.length || 0) === 0)
+      } else if (activeTab === "products") {
+        fetchProducts((productsStock?.length || 0) === 0)
+      }
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [activeTab, fetchMaterials, fetchProducts, materials?.length, productsStock?.length])
+
+  // Reset page when switching tabs or filtering
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [activeTab, searchQuery, selectedCategory])
+
+  const handleRefresh = () => {
+    fetchOverview()
+    if (activeTab === "materials") fetchMaterials()
+    else if (activeTab === "products") fetchProducts()
   }
 
-  const activeCategoryOptions = activeTab === "products" ? productCategories : materialCategories
-
-  const filteredMaterials = useMemo(
-    () =>
-      materials?.filter((material) => {
-        if (!material || !material.name) return false
-        return material.name.toLowerCase().includes(searchQuery.toLowerCase())
-      }) || [],
-    [materials, searchQuery]
-  )
-
-  const filteredProducts = useMemo(
-    () =>
-      products?.filter((product) => {
-        if (!product || !product.name || !product.category) return false
-        const matchesSearch =
-          product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          product.category.toLowerCase().includes(searchQuery.toLowerCase())
-        const matchesCategory =
-          selectedCategory === "All" || product.category === selectedCategory
-        return matchesSearch && matchesCategory
-      }) || [],
-    [products, searchQuery, selectedCategory]
-  )
-
-  const filteredStockOut = useMemo(
-    () =>
-      exportHistory?.filter((record) => {
-        if (!record || !record.productName || !record.destination) return false
-        return record.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          record.destination.toLowerCase().includes(searchQuery.toLowerCase())
-      }) || [],
-    [exportHistory, searchQuery]
-  )
-
-  const totalMaterials = pagination?.total || 0
-
-  // Calculate stats from the loaded materials (or API should provide these)
-  const lowStockItems = filteredMaterials.filter(
-    (m) => m.currentStock <= m.threshold && m.currentStock > 0
-  ).length
-  const criticalStock = filteredMaterials.filter((m) => m.currentStock === 0).length
-  const totalValue = filteredMaterials.reduce(
-    (sum, m) => sum + m.currentStock * m.price,
-    0
-  )
-
-  const getStatusBadge = (material: Material) => {
-    if (material.currentStock === 0) {
+  const getStatusBadge = (item: Material | Product) => {
+    if (item.stockLevelInfo) {
       return (
-        <Badge className="bg-[#DC3545] text-white hover:bg-[#DC3545]/90">
+        <Badge
+          className="text-white border-none shadow-sm"
+          style={{ backgroundColor: item.stockLevelInfo.color }}
+        >
+          {item.stockLevelInfo.label}
+        </Badge>
+      )
+    }
+
+    const stock = item.currentStock || 0
+    const threshold = item.threshold || 0
+
+    if (stock === 0) {
+      return (
+        <Badge className="bg-[#DC3545] text-white hover:bg-[#DC3545]/90 border-none shadow-sm">
           🔴 Nguy cấp
         </Badge>
       )
     }
-    if (material.currentStock <= material.threshold) {
+    if (stock <= threshold) {
       return (
-        <Badge className="bg-[#FFA500] text-white hover:bg-[#FFA500]/90">
+        <Badge className="bg-[#FFA500] text-white hover:bg-[#FFA500]/90 border-none shadow-sm">
           🟠 Sắp hết
         </Badge>
       )
     }
     return (
-      <Badge className="bg-[#4A7C23] text-white hover:bg-[#4A7C23]/90">
+      <Badge className="bg-[#4A7C23] text-white hover:bg-[#4A7C23]/90 border-none shadow-sm">
         🟢 Ổn định
       </Badge>
     )
   }
 
   return (
-    <AppShell title="Kho hàng" subtitle="Chào mừng đến với CRAFTFLOW">
+    <AppShell title="Kho hàng" subtitle="Quản lý tồn kho nguyên liệu và sản phẩm">
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-3xl font-bold bg-gradient-to-r from-[#8B7355] to-[#4A7C23] bg-clip-text text-transparent">
               Quản lý kho hàng
             </h2>
             <p className="text-sm text-muted-foreground mt-1">
-              Quản lý nguyên liệu, sản phẩm, tồn kho và lịch sử nhập/xuất
+              Theo dõi biến động tồn kho thực tế của xưởng
             </p>
           </div>
-          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2">
-                <Plus className="h-4 w-4" />
-                Thêm nguyên liệu
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Thêm nguyên liệu mới</DialogTitle>
-                <DialogDescription>
-                  Điền thông tin nguyên liệu cần thêm vào kho
-                </DialogDescription>
-              </DialogHeader>
-              <form onSubmit={handleAddMaterial}>
-                <div className="grid gap-4 py-4">
-                  {/* Basic Info */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="name">Tên nguyên liệu *</Label>
-                      <Input
-                        id="name"
-                        placeholder="VD: Len cotton cao cấp"
-                        required
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="code">Mã nguyên liệu *</Label>
-                      <Input
-                        id="code"
-                        placeholder="VD: LEN-COTTON-01"
-                        required
-                        value={formData.code}
-                        onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="unit">Đơn vị *</Label>
-                      <Select
-                        value={formData.unit}
-                        onValueChange={(value) => setFormData({ ...formData, unit: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Chọn đơn vị" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Cuộn">Cuộn</SelectItem>
-                          <SelectItem value="Gram">Gram</SelectItem>
-                          <SelectItem value="Cái">Cái</SelectItem>
-                          <SelectItem value="Bộ">Bộ</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="color">Màu sắc</Label>
-                      <Input
-                        id="color"
-                        placeholder="VD: Trắng sữa"
-                        value={formData.color}
-                        onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="stock">Số lượng *</Label>
-                      <Input
-                        id="stock"
-                        type="number"
-                        placeholder="0"
-                        required
-                        value={formData.currentStock}
-                        onChange={(e) => setFormData({ ...formData, currentStock: parseInt(e.target.value) || 0 })}
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="minStock">Tồn tối thiểu *</Label>
-                      <Input
-                        id="minStock"
-                        type="number"
-                        placeholder="10"
-                        required
-                        value={formData.threshold}
-                        onChange={(e) => setFormData({ ...formData, threshold: parseInt(e.target.value) || 0 })}
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="location">Vị trí kho</Label>
-                      <Input
-                        id="location"
-                        placeholder="VD: Kệ A-01"
-                        value={formData.location}
-                        onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="price">Đơn giá (VND) *</Label>
-                      <Input
-                        id="price"
-                        type="number"
-                        placeholder="0"
-                        required
-                        value={formData.price}
-                        onChange={(e) => setFormData({ ...formData, price: parseInt(e.target.value) || 0 })}
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="description">Mô tả</Label>
-                      <Input
-                        id="description"
-                        placeholder="Mô tả ngắn gọn"
-                        value={formData.description}
-                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Supplier Info */}
-                  <div className="border-t pt-4">
-                    <h3 className="mb-2 text-sm font-medium">Thông tin nhà cung cấp</h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="grid gap-2">
-                        <Label htmlFor="supplierName">Tên NCC *</Label>
-                        <Input
-                          id="supplierName"
-                          placeholder="VD: Tiệm Len Sài Gòn"
-                          required
-                          value={formData.supplier.name}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            supplier: { ...formData.supplier, name: e.target.value }
-                          })}
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="supplierPhone">Số điện thoại</Label>
-                        <Input
-                          id="supplierPhone"
-                          placeholder="028..."
-                          value={formData.supplier.phone}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            supplier: { ...formData.supplier, phone: e.target.value }
-                          })}
-                        />
-                      </div>
-                    </div>
-                    <div className="grid gap-2 mt-2">
-                      <Label htmlFor="supplierAddress">Địa chỉ NCC</Label>
-                      <Input
-                        id="supplierAddress"
-                        placeholder="Địa chỉ chi tiết"
-                        value={formData.supplier.address}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          supplier: { ...formData.supplier, address: e.target.value }
-                        })}
-                      />
-                    </div>
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setIsAddDialogOpen(false)}
-                    disabled={isSubmitting}
-                  >
-                    Hủy
-                  </Button>
-                  <Button type="submit" disabled={isSubmitting}>
-                    {isSubmitting ? (
-                      <>
-                        <Spinner className="mr-2 h-4 w-4" />
-                        Đang thêm...
-                      </>
-                    ) : (
-                      "Thêm nguyên liệu"
-                    )}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="icon" onClick={handleRefresh} disabled={isRefreshing}>
+              <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+            </Button>
+            <Button className="gap-2">
+              <Plus className="h-4 w-4" />
+              Tạo phiếu nhập
+            </Button>
+          </div>
         </div>
 
         {/* Stats Cards */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardContent className="flex items-center gap-4 p-5">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#F5F0EB]">
-                <Package className="h-6 w-6 text-[#8B7355]" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Tổng nguyên liệu</p>
-                <p className="text-2xl font-bold">{totalMaterials}</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="flex items-center gap-4 p-5">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#FFF3E0]">
-                <TrendingDown className="h-6 w-6 text-[#FFA500]" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Sắp hết</p>
-                <p className="text-2xl font-bold text-[#FFA500]">
-                  {lowStockItems}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="flex items-center gap-4 p-5">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#FFEBEE]">
-                <AlertTriangle className="h-6 w-6 text-[#DC3545]" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Nguy cấp</p>
-                <p className="text-2xl font-bold text-[#DC3545]">
-                  {criticalStock}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-5">
-              <p className="text-sm text-muted-foreground">
-                Tổng giá trị tồn kho
-              </p>
-              <p className="text-xl font-bold text-[#4A7C23]">
-                <CurrencyDisplay value={totalValue} />
-              </p>
-            </CardContent>
-          </Card>
+          {!overview ? (
+            Array(4).fill(0).map((_, i) => <StatCardSkeleton key={i} />)
+          ) : (
+            <>
+              <Card className="border-none shadow-sm bg-white">
+                <CardContent className="flex items-center gap-4 p-5">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#F5F0EB]">
+                    <Package className="h-6 w-6 text-[#8B7355]" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Tổng nguyên liệu</p>
+                    <p className="text-2xl font-bold text-[#8B7355]">{overview.totalMaterials}</p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-none shadow-sm bg-white">
+                <CardContent className="flex items-center gap-4 p-5">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#FFF3E0]">
+                    <TrendingDown className="h-6 w-6 text-[#FFA500]" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Sắp hết hàng</p>
+                    <p className="text-2xl font-bold text-[#FFA500]">{(overview?.lowStockMaterials || 0) + (overview?.lowStockProducts || 0)}</p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-none shadow-sm bg-white">
+                <CardContent className="flex items-center gap-4 p-5">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#FFEBEE]">
+                    <AlertTriangle className="h-6 w-6 text-[#DC3545]" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Mức nguy cấp</p>
+                    <p className="text-2xl font-bold text-[#DC3545]">{overview?.criticalMaterials || 0}</p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-none shadow-sm bg-white">
+                <CardContent className="flex items-center gap-4 p-5">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#E8F5E9]">
+                    <Boxes className="h-6 w-6 text-[#4A7C23]" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Giá trị tồn kho</p>
+                    <p className="text-xl font-bold text-[#4A7C23]">
+                      <CurrencyDisplay value={overview?.totalInventoryValue || 0} />
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
         </div>
 
         {/* Tabs and Filters */}
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex rounded-lg bg-muted p-1">
+          <div className="flex rounded-xl bg-muted/50 p-1 border border-muted">
             <button
-              onClick={() => setActiveTab("list")}
+              onClick={() => setActiveTab("materials")}
               className={cn(
-                "rounded-md px-4 py-2 text-sm font-medium transition-colors",
-                activeTab === "list"
-                  ? "bg-card text-foreground shadow-sm"
+                "rounded-lg px-4 py-2 text-sm font-semibold transition-all",
+                activeTab === "materials"
+                  ? "bg-white text-primary shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              Danh sách nguyên liệu
+              <div className="flex items-center gap-2">
+                <Package className="h-4 w-4" />
+                Nguyên liệu
+              </div>
             </button>
 
             <button
               onClick={() => setActiveTab("products")}
               className={cn(
-                "rounded-md px-4 py-2 text-sm font-medium transition-colors",
+                "rounded-lg px-4 py-2 text-sm font-semibold transition-all",
                 activeTab === "products"
-                  ? "bg-card text-foreground shadow-sm"
+                  ? "bg-white text-primary shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              Danh sách sản phẩm
+              <div className="flex items-center gap-2">
+                <Boxes className="h-4 w-4" />
+                Sản phẩm
+              </div>
             </button>
 
             <button
-              onClick={() => setActiveTab("history")}
+              onClick={() => setActiveTab("history-import")}
               className={cn(
-                "rounded-md px-4 py-2 text-sm font-medium transition-colors",
-                activeTab === "history"
-                  ? "bg-card text-foreground shadow-sm"
+                "rounded-lg px-4 py-2 text-sm font-semibold transition-all",
+                activeTab === "history-import"
+                  ? "bg-white text-primary shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              Lịch sử nhập kho
+              <div className="flex items-center gap-2">
+                <ShoppingCart className="h-4 w-4" />
+                Lịch sử nhập
+              </div>
             </button>
 
             <button
-              onClick={() => setActiveTab("stockOut")}
+              onClick={() => setActiveTab("history-export")}
               className={cn(
-                "rounded-md px-4 py-2 text-sm font-medium transition-colors",
-                activeTab === "stockOut"
-                  ? "bg-card text-foreground shadow-sm"
+                "rounded-lg px-4 py-2 text-sm font-semibold transition-all",
+                activeTab === "history-export"
+                  ? "bg-white text-primary shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              Lịch sử xuất kho
+              <div className="flex items-center gap-2">
+                <History className="h-4 w-4" />
+                Lịch sử xuất
+              </div>
             </button>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="relative flex-1 md:w-64">
+            <div className="relative flex-1 md:w-80">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder={
-                  activeTab === "products"
-                    ? "Tìm kiếm sản phẩm..."
-                    : activeTab === "stockOut"
-
-                      ? "Tìm kiếm lịch sử xuất kho..."
-                      : "Tìm kiếm nguyên liệu..."
-                }
+                placeholder="Tìm kiếm theo tên hoặc mã..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
+                className="pl-9 rounded-xl border-muted bg-white h-11"
               />
             </div>
-            {(activeTab === "list" || activeTab === "products") && (
+            {(activeTab === "materials" || activeTab === "products") && (
               <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                <SelectTrigger className="w-48">
-                  <SelectValue placeholder="Chọn danh mục" />
+                <SelectTrigger className="w-48 rounded-xl border-muted bg-white h-11">
+                  <SelectValue placeholder="Tất cả danh mục" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="All">Tất cả</SelectItem>
-                  {activeCategoryOptions.map((cat) => (
-                    <SelectItem key={cat} value={cat}>
-                      {cat}
-                    </SelectItem>
+                <SelectContent className="rounded-xl">
+                  <SelectItem value="All">Tất cả danh mục</SelectItem>
+                  {(activeTab === "materials" ? materialCategories : productCategories).map((cat) => (
+                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -565,207 +387,164 @@ export default function InventoryPage() {
           </div>
         </div>
 
-        {/* Content */}
-        {activeTab === "list" ? (
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-[#8B7355] font-bold">Nguyên liệu</TableHead>
-                    <TableHead className="text-[#4A7C23] font-bold">Loại</TableHead>
-                    <TableHead className="text-right text-[#FFA500] font-bold">Tồn kho</TableHead>
-                    <TableHead className="text-right text-[#007BFF] font-bold">Tối thiểu</TableHead>
-                    <TableHead className="text-right text-[#DC3545] font-bold">Đơn giá</TableHead>
-                    <TableHead className="text-center text-[#6C757D] font-bold">Trạng thái</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoading ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="h-24 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <Spinner className="h-4 w-4" />
-                          <span>Đang tải nguyên liệu...</span>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ) : filteredMaterials.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                        Không tìm thấy nguyên liệu nào
-                      </TableCell>
-                    </TableRow>
+        {/* Content Table */}
+        <Card className="border-none shadow-sm overflow-hidden">
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader className="bg-muted/30">
+                <TableRow className="hover:bg-transparent border-none">
+                  {activeTab === "materials" ? (
+                    <>
+                      <TableHead className="font-bold py-4">Nguyên liệu</TableHead>
+                      <TableHead className="font-bold">Nhà cung cấp</TableHead>
+                      <TableHead className="text-right font-bold">Tồn kho</TableHead>
+                      <TableHead className="text-right font-bold">Tối thiểu</TableHead>
+                      <TableHead className="text-right font-bold">Giá trị tồn</TableHead>
+                      <TableHead className="font-bold">Cập nhật</TableHead>
+                      <TableHead className="text-center font-bold">Trạng thái</TableHead>
+                    </>
+                  ) : activeTab === "products" ? (
+                    <>
+                      <TableHead className="font-bold py-4">Sản phẩm</TableHead>
+                      <TableHead className="font-bold">Danh mục</TableHead>
+                      <TableHead className="text-right font-bold">Tồn kho</TableHead>
+                      <TableHead className="text-right font-bold">Tối thiểu</TableHead>
+                      <TableHead className="text-right font-bold">Giá trị tồn</TableHead>
+                      <TableHead className="font-bold">Cập nhật</TableHead>
+                      <TableHead className="text-center font-bold">Trạng thái</TableHead>
+                    </>
+                  ) : activeTab === "history-import" ? (
+                    <>
+                      <TableHead className="font-bold py-4">Nguyên liệu</TableHead>
+                      <TableHead className="font-bold">Nhà cung cấp</TableHead>
+                      <TableHead className="text-right font-bold">Số lượng</TableHead>
+                      <TableHead className="text-right font-bold">Đơn giá</TableHead>
+                      <TableHead className="text-right font-bold">Tổng cộng</TableHead>
+                      <TableHead className="font-bold">Ngày nhập</TableHead>
+                    </>
                   ) : (
-                    filteredMaterials.map((material) => {
-                      if (!material || !material._id || !material.name) return null
-                      return (
-                        <TableRow key={material._id}>
-                          <TableCell>
-                            <div>
-                              <p className="font-medium">{material.name || "N/A"}</p>
-                              <p className="text-xs text-muted-foreground">
-                                Mã: {material.code || "N/A"} | {material.location || "N/A"}
-                              </p>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="secondary">{material.supplier?.name || "N/A"}</Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <span className="font-medium">
-                              {material.currentStock || 0}
-                            </span>{" "}
-                            <span className="text-muted-foreground text-xs uppercase">
-                              {material.unit || ""}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {material.threshold || 0} {material.unit || ""}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <CurrencyDisplay value={material.price || 0} />
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {getStatusBadge(material)}
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })
+                    <>
+                      <TableHead className="font-bold py-4">Sản phẩm</TableHead>
+                      <TableHead className="font-bold">Điểm đến</TableHead>
+                      <TableHead className="text-right font-bold">Số lượng</TableHead>
+                      <TableHead className="text-right font-bold">Đơn giá</TableHead>
+                      <TableHead className="text-right font-bold">Tổng cộng</TableHead>
+                      <TableHead className="font-bold">Ngày xuất</TableHead>
+                    </>
                   )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        ) : activeTab === "history" ? (
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-[#8B7355] font-bold">Nguyên liệu</TableHead>
-                    <TableHead className="text-[#4A7C23] font-bold">Nhà cung cấp</TableHead>
-                    <TableHead className="text-right text-[#FFA500] font-bold">Số lượng</TableHead>
-                    <TableHead className="text-right text-[#DC3545] font-bold">Đơn giá</TableHead>
-                    <TableHead className="text-right text-[#007BFF] font-bold">Tổng cộng</TableHead>
-                    <TableHead className="text-[#6C757D] font-bold">Ngày</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {importHistory?.map((record) => {
-                    if (!record || !record.materialName) return null
-                    return (
-                      <TableRow key={record.id}>
-                        <TableCell className="font-medium">
-                          {record.materialName}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  Array(5).fill(0).map((_, i) => <SkeletonRow key={i} cols={7} />)
+                ) : activeTab === "materials" ? (
+                  materials.length === 0 ? (
+                    <TableRow><TableCell colSpan={7} className="h-32 text-center text-muted-foreground italic">Không tìm thấy nguyên liệu nào</TableCell></TableRow>
+                  ) : (
+                    materials.map((m) => (
+                      <TableRow key={m._id} className="group hover:bg-muted/20 transition-colors">
+                        <TableCell className="py-4">
+                          <div className="flex flex-col">
+                            <span className="font-bold text-foreground group-hover:text-primary transition-colors">{m.name}</span>
+                            <span className="text-[10px] text-muted-foreground font-mono uppercase tracking-tighter">Mã: {m.code} | {m.location || "Chưa gán vị trí"}</span>
+                          </div>
                         </TableCell>
-                        <TableCell>{record.supplier || "N/A"}</TableCell>
+                        <TableCell><Badge variant="outline" className="font-medium text-muted-foreground">{m.supplier?.name || "N/A"}</Badge></TableCell>
                         <TableCell className="text-right">
-                          {record.quantity} {record.unit}
+                          <div className="flex flex-col items-end">
+                            <span className="font-bold">{m.currentStock}</span>
+                            <span className="text-[10px] text-muted-foreground uppercase">{m.unit}</span>
+                          </div>
                         </TableCell>
-                        <TableCell className="text-right">
-                          <CurrencyDisplay value={record.unitPrice} />
-                        </TableCell>
-                        <TableCell className="text-right font-medium">
-                          <CurrencyDisplay value={record.totalPrice} />
-                        </TableCell>
-                        <TableCell>{record.importDate}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{m.threshold} {m.unit}</TableCell>
+                        <TableCell className="text-right font-bold text-[#4A7C23]"><CurrencyDisplay value={(m.currentStock || 0) * (m.price || 0)} /></TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{m.updatedAt ? new Date(m.updatedAt).toLocaleDateString("vi-VN") : "N/A"}</TableCell>
+                        <TableCell className="text-center">{getStatusBadge(m)}</TableCell>
                       </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        ) : activeTab === "products" ? (
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-[#8B7355] font-bold">Sản phẩm</TableHead>
-                    <TableHead className="text-[#4A7C23] font-bold">Danh mục</TableHead>
-                    <TableHead className="text-right text-[#FFA500] font-bold">Giá gốc</TableHead>
-                    <TableHead className="text-right text-[#DC3545] font-bold">Giá đề xuất</TableHead>
-                    <TableHead className="text-[#6C757D] font-bold">Ngày tạo</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredProducts.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                        Không tìm thấy sản phẩm nào
-                      </TableCell>
-                    </TableRow>
+                    ))
+                  )
+                ) : activeTab === "products" ? (
+                  productsStock.length === 0 ? (
+                    <TableRow><TableCell colSpan={7} className="h-32 text-center text-muted-foreground italic">Không tìm thấy sản phẩm nào</TableCell></TableRow>
                   ) : (
-                    filteredProducts.map((product) => {
-                      if (!product || !product._id) return null
-                      return (
-                        <TableRow key={product._id || product.id}>
-                          <TableCell className="font-medium">{product.name || "N/A"}</TableCell>
-                          <TableCell>{product.category || "N/A"}</TableCell>
-                          <TableCell className="text-right">
-                            <CurrencyDisplay value={product.basePrice || 0} />
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <CurrencyDisplay value={product.suggestedPrice ?? product.basePrice ?? 0} />
-                          </TableCell>
-                          <TableCell>{product.createdAt || "N/A"}</TableCell>
-                        </TableRow>
-                      )
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-[#8B7355] font-bold">Sản phẩm</TableHead>
-                    <TableHead className="text-[#4A7C23] font-bold">Điểm đến</TableHead>
-                    <TableHead className="text-right text-[#FFA500] font-bold">Số lượng</TableHead>
-                    <TableHead className="text-right text-[#DC3545] font-bold">Đơn giá</TableHead>
-                    <TableHead className="text-right text-[#007BFF] font-bold">Tổng cộng</TableHead>
-                    <TableHead className="text-[#6C757D] font-bold">Ngày xuất</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredStockOut?.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                        Không tìm thấy lịch sử xuất kho nào
-                      </TableCell>
+                    productsStock.map((p) => (
+                      <TableRow key={p._id} className="group hover:bg-muted/20 transition-colors">
+                        <TableCell className="py-4">
+                          <div className="flex flex-col">
+                            <span className="font-bold text-foreground group-hover:text-primary transition-colors">{p.name}</span>
+                            <span className="text-[10px] text-muted-foreground font-mono uppercase tracking-tighter">Mã: {p.code} | {p.location || "Chưa gán vị trí"}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell><Badge variant="outline" className="font-medium text-muted-foreground">{p.category}</Badge></TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex flex-col items-end">
+                            <span className="font-bold">{p.currentStock}</span>
+                            <span className="text-[10px] text-muted-foreground uppercase">{p.unit}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">{p.threshold} {p.unit}</TableCell>
+                        <TableCell className="text-right font-bold text-[#4A7C23]"><CurrencyDisplay value={(p.currentStock || 0) * (p.baseCost || 0)} /></TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{p.updatedAt ? new Date(p.updatedAt).toLocaleDateString("vi-VN") : "N/A"}</TableCell>
+                        <TableCell className="text-center">{getStatusBadge(p)}</TableCell>
+                      </TableRow>
+                    ))
+                  )
+                ) : activeTab === "history-import" ? (
+                  importHistory.map((record) => (
+                    <TableRow key={record.id} className="hover:bg-muted/20 transition-colors">
+                      <TableCell className="font-bold py-4">{record.materialName}</TableCell>
+                      <TableCell><Badge variant="outline">{record.supplier}</Badge></TableCell>
+                      <TableCell className="text-right">{record.quantity} {record.unit}</TableCell>
+                      <TableCell className="text-right"><CurrencyDisplay value={record.unitPrice} /></TableCell>
+                      <TableCell className="text-right font-bold text-[#4A7C23]"><CurrencyDisplay value={record.totalPrice} /></TableCell>
+                      <TableCell className="text-muted-foreground text-sm">{record.importDate}</TableCell>
                     </TableRow>
-                  ) : (
-                    filteredStockOut?.map((record) => {
-                      if (!record || !record.productName) return null
-                      return (
-                        <TableRow key={record.id}>
-                          <TableCell className="font-medium">{record.productName || "N/A"}</TableCell>
-                          <TableCell>{record.destination || "N/A"}</TableCell>
-                          <TableCell className="text-right">
-                            {record.quantity || 0} {record.unit || ""}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <CurrencyDisplay value={record.unitPrice || 0} />
-                          </TableCell>
-                          <TableCell className="text-right font-medium">
-                            <CurrencyDisplay value={record.totalPrice || 0} />
-                          </TableCell>
-                          <TableCell>{record.exportDate || "N/A"}</TableCell>
-                        </TableRow>
-                      )
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        )}
+                  ))
+                ) : (
+                  exportHistory.map((record) => (
+                    <TableRow key={record.id} className="hover:bg-muted/20 transition-colors">
+                      <TableCell className="font-bold py-4">{record.productName}</TableCell>
+                      <TableCell><Badge variant="outline">{record.destination}</Badge></TableCell>
+                      <TableCell className="text-right">{record.quantity} {record.unit}</TableCell>
+                      <TableCell className="text-right"><CurrencyDisplay value={record.unitPrice} /></TableCell>
+                      <TableCell className="text-right font-bold text-[#4A7C23]"><CurrencyDisplay value={record.totalPrice} /></TableCell>
+                      <TableCell className="text-muted-foreground text-sm">{record.exportDate}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+
+            {/* Pagination for Materials and Products */}
+            {(activeTab === "materials" || activeTab === "products") && pagination && pagination.pages > 1 && (
+              <div className="flex items-center justify-between px-6 py-4 border-t bg-muted/10">
+                <p className="text-sm text-muted-foreground">
+                  Trang <span className="font-medium">{pagination.page}</span> / {pagination.pages} • Tổng <span className="font-medium">{pagination.total}</span> mục
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage === 1 || isRefreshing}
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    className="rounded-lg"
+                  >
+                    Trước
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage === pagination.pages || isRefreshing}
+                    onClick={() => setCurrentPage(p => Math.min(pagination.pages, p + 1))}
+                    className="rounded-lg"
+                  >
+                    Sau
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </AppShell>
   )

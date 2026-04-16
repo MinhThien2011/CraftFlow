@@ -596,7 +596,7 @@ export default function SystemLogPage() {
               </Table>
             </div>
 
-            {pagination && pagination.pages > 1 && (
+            {pagination && pagination.total > 0 && (
               <div className="mt-6 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm text-muted-foreground">
                   Trang <span className="font-medium text-foreground">{pagination.page}</span> / {pagination.pages}
