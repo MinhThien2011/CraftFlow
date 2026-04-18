@@ -47,7 +47,6 @@ import { materialCategories, productCategories } from "@/lib/mock-data"
 import type { Material, PaginationData, Product, InventoryOverview, InventoryTransaction } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { CurrencyDisplay } from "@/components/ui/currency-display"
-import { materialApi } from "@/api/material.api"
 import { inventoryApi } from "@/api/inventory.api"
 import { toast } from "sonner"
 import { Spinner } from "@/components/ui/spinner"
@@ -330,7 +329,7 @@ export default function InventoryPage() {
                   </div>
                   <div>
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Mức nguy cấp</p>
-                    <p className="text-2xl font-bold text-[#DC3545]">{overview.materials.lowStockCount}</p>
+                    <p className="text-2xl font-bold text-[#DC3545]">{overview.materials.criticalCount || 0}</p>
                   </div>
                 </CardContent>
               </Card>

@@ -257,7 +257,7 @@ export interface Product {
   isLowStock?: boolean
   stockLevel?: string
   stockLevelInfo?: StockLevelInfo
-  id?: string // For compatibility with existing code
+  id?: string
 }
 
 export interface ProductListResponse {
@@ -306,6 +306,7 @@ export interface InventoryStats {
   totalItems: number
   totalValue: number
   lowStockCount: number
+  criticalCount?: number
 }
 
 export interface InventoryOverview {

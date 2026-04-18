@@ -95,7 +95,6 @@ export const products: Product[] = [
     name: "Gấu bông Teddy",
     description: "Gấu bông móc len cao cấp, kích thước 25cm",
     category: "Thú nhồi bông",
-    basePrice: 350000,
     suggestedPrice: 420000,
     createdAt: "2026-02-15",
   },

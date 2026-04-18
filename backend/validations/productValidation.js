@@ -42,7 +42,11 @@ export const createProductSchema = Joi.object({
   baseCost: Joi.number().min(0).default(0),
   currentStock: Joi.number().min(0).default(0),
   threshold: Joi.number().min(0).default(5),
-  location: Joi.string().trim().allow('', null).max(100),
+  shelf: Joi.string().hex().length(24).allow('', null).messages({
+    'string.hex': 'Shelf ID must be a valid hex string',
+    'string.length': 'Shelf ID must be 24 characters long',
+  }),
+  locationDetails: Joi.string().trim().allow('', null).max(100),
   productImage: Joi.string().optional().allow('', null)
 });
 
@@ -61,7 +65,11 @@ export const updateProductSchema = Joi.object({
   baseCost: Joi.number().min(0),
   currentStock: Joi.number().min(0),
   threshold: Joi.number().min(0),
-  location: Joi.string().trim().allow('', null).max(100),
+  shelf: Joi.string().hex().length(24).allow('', null).messages({
+    'string.hex': 'Shelf ID must be a valid hex string',
+    'string.length': 'Shelf ID must be 24 characters long',
+  }),
+  locationDetails: Joi.string().trim().allow('', null).max(100),
   productImage: Joi.string().optional().allow('', null)
 }).min(1);
 

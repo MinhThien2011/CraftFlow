@@ -67,6 +67,7 @@ export const getProductsByQuery = async (query) => {
         .skip(skip)
         .limit(limitNum)
         .populate('estimateMaterialCost.material', 'name code unit currency')
+        .populate('shelf', 'shelfCode warehouseSection')
         .lean(),
       Product.countDocuments(conditions)
     ]);
@@ -95,7 +96,10 @@ export const getProductsByQuery = async (query) => {
  */
 export const getProductById = async (id) => {
   try {
-    const product = await Product.findById(id).populate('estimateMaterialCost.material', 'name code unit currency').lean();
+    const product = await Product.findById(id)
+      .populate('estimateMaterialCost.material', 'name code unit currency')
+      .populate('shelf', 'shelfCode warehouseSection')
+      .lean();
     if (!product) {
       return { status: 'error', message: 'Product not found.', data: null };
     }

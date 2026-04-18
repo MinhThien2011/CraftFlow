@@ -6,13 +6,16 @@ import { ROLES } from '../utils/constants.js';
 
 const productionRouter = Router();
 
-productionRouter.use([jwtAuth, rolePermission([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER])]);
+productionRouter.use(jwtAuth);
 
-productionRouter.post('/', productionOrderController.createOrder);
-productionRouter.get('/suggestions', productionOrderController.getSuggestions);
-productionRouter.post('/assign', productionOrderController.assignOrder);
-productionRouter.post('/reassign', productionOrderController.reassignTask);
-productionRouter.patch('/assignments/:id/status', productionOrderController.updateAssignmentStatus);
-productionRouter.patch('/:id/check-materials', productionOrderController.checkMaterials);
+// Both Admin and Production Manager can view suggestions
+productionRouter.get('/suggestions', rolePermission([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER]), productionOrderController.getSuggestions);
+
+// Only Production Manager can create and manage production orders
+productionRouter.post('/', rolePermission([ROLES.PRODUCTION_MANAGER]), productionOrderController.createOrder);
+productionRouter.post('/assign', rolePermission([ROLES.PRODUCTION_MANAGER]), productionOrderController.assignOrder);
+productionRouter.post('/reassign', rolePermission([ROLES.PRODUCTION_MANAGER]), productionOrderController.reassignTask);
+productionRouter.patch('/assignments/:id/status', rolePermission([ROLES.PRODUCTION_MANAGER]), productionOrderController.updateAssignmentStatus);
+productionRouter.patch('/:id/check-materials', rolePermission([ROLES.PRODUCTION_MANAGER]), productionOrderController.checkMaterials);
 
 export default productionRouter;

@@ -23,7 +23,11 @@ const materialSchema = Joi.object({
   }),
   currentStock: Joi.number().min(0).default(0),
   threshold: Joi.number().min(0).default(10),
-  location: Joi.string().trim().allow('', null).max(100),
+  shelf: Joi.string().hex().length(24).allow('', null).messages({
+    'string.hex': 'Shelf ID must be a valid MongoDB ObjectId.',
+    'string.length': 'Shelf ID must be 24 characters long.'
+  }),
+  locationDetails: Joi.string().trim().allow('', null).max(100),
   supplier: Joi.object({
     name: Joi.string().trim().allow('', null).max(100),
     address: Joi.string().trim().allow('', null).max(200),
@@ -46,7 +50,11 @@ const updateMaterialSchema = Joi.object({
   color: Joi.string().trim(),
   price: Joi.number().min(0),
   threshold: Joi.number().min(0),
-  location: Joi.string().trim().allow('', null).max(100),
+  shelf: Joi.string().hex().length(24).allow('', null).messages({
+    'string.hex': 'Shelf ID must be a valid MongoDB ObjectId.',
+    'string.length': 'Shelf ID must be 24 characters long.'
+  }),
+  locationDetails: Joi.string().trim().allow('', null).max(100),
   supplier: Joi.object({
     name: Joi.string().trim().allow('', null).max(100),
     address: Joi.string().trim().allow('', null).max(200),
@@ -88,7 +96,7 @@ const adjustStockByCodeSchema = adjustStockSchema.keys({
   })
 });
 
-export const createMaterialValidator = (body) => materialSchema.validate(body, { abortEarly: false , stripUnknown: true });
-export const updateMaterialValidator = (body) => updateMaterialSchema.validate(body, { abortEarly: false , stripUnknown: true });
-export const adjustStockValidator = (body) => adjustStockSchema.validate(body, { abortEarly: false , stripUnknown: true });
-export const adjustStockByCodeValidator = (body) => adjustStockByCodeSchema.validate(body, { abortEarly: false , stripUnknown: true });
+export const createMaterialValidator = (body) => materialSchema.validate(body, { abortEarly: false, stripUnknown: true });
+export const updateMaterialValidator = (body) => updateMaterialSchema.validate(body, { abortEarly: false, stripUnknown: true });
+export const adjustStockValidator = (body) => adjustStockSchema.validate(body, { abortEarly: false, stripUnknown: true });
+export const adjustStockByCodeValidator = (body) => adjustStockByCodeSchema.validate(body, { abortEarly: false, stripUnknown: true });

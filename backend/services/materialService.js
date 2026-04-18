@@ -37,7 +37,8 @@ export const getMaterials = async ({ search = '', page = 1, limit = 10, filters 
 
   const [materials, total] = await Promise.all([
     Material.find(query)
-      .select('name code unit color price currentStock threshold location supplier isActive createdAt updatedAt')
+      .select('name code unit color price currentStock threshold shelf locationDetails supplier isActive createdAt updatedAt')
+      .populate('shelf', 'shelfCode warehouseSection')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limitNum)
@@ -66,7 +67,9 @@ export const getMaterials = async ({ search = '', page = 1, limit = 10, filters 
 export const getMaterialByIdOrCode = async ({ id, code }) => {
   try {
     const query = id ? { _id: id } : { code: code.toUpperCase() };
-    const material = await Material.findOne(query).lean();
+    const material = await Material.findOne(query)
+      .populate('shelf', 'shelfCode warehouseSection')
+      .lean();
 
     if (!material) {
       return { success: false, message: 'Material not found.', data: null };

@@ -27,13 +27,11 @@ materialRouter.get('/history', getMaterialHistory);
 materialRouter.get('/:id/history', getMaterialHistory);
 materialRouter.get('/:id', getMaterialById);
 
-// --- Admin & Kho Manager Routes ---
-materialRouter.use(rolePermission([ROLES.ADMIN, ROLES.KHO_MANAGER]));
-
-materialRouter.post('/', createMaterial);
-materialRouter.patch('/:id', updateMaterial);
-materialRouter.post('/adjust-by-code', adjustStockByCode);
-materialRouter.post('/:id/adjust-stock', adjustStock);
+// --- Admin & Kho Manager Routes (Admin only can view, Kho Manager can modify) ---
+materialRouter.post('/', rolePermission([ROLES.KHO_MANAGER]), createMaterial);
+materialRouter.patch('/:id', rolePermission([ROLES.KHO_MANAGER]), updateMaterial);
+materialRouter.post('/adjust-by-code', rolePermission([ROLES.KHO_MANAGER]), adjustStockByCode);
+materialRouter.post('/:id/adjust-stock', rolePermission([ROLES.KHO_MANAGER]), adjustStock);
 
 
 export default materialRouter;

@@ -36,7 +36,7 @@ productRouter.use(jwtAuth)
 // @desc    Create a new product with image upload
 productRouter.post(
     '/',
-    rolePermission([ROLES.ADMIN]),
+    rolePermission([ROLES.PRODUCTION_MANAGER]),
     imageUploader('products'),
     productController.createProduct
 );
@@ -45,20 +45,20 @@ productRouter.post(
 // @desc    Update an existing product with image upload
 productRouter.put(
     '/:id',
-    rolePermission([ROLES.ADMIN]),
+    rolePermission([ROLES.PRODUCTION_MANAGER]),
     imageUploader('products'),
     productController.updateProduct
 );
 
 // @route   DELETE /api/products/:id
 // @desc    Deactivate a product (soft delete)
-productRouter.delete('/:id', rolePermission([ROLES.ADMIN]), productController.deleteProduct);
+productRouter.delete('/:id', rolePermission([ROLES.PRODUCTION_MANAGER]), productController.deleteProduct);
 
 // @route   POST /api/products/incoming
 // @desc    Record incoming products (e.g., from production, returns)
 productRouter.post(
     '/incoming',
-    rolePermission([ROLES.ADMIN, ROLES.KHO_MANAGER, ROLES.PRODUCTION_MANAGER]),
+    rolePermission([ROLES.KHO_MANAGER, ROLES.PRODUCTION_MANAGER]),
     productController.incomingProduct
 );
 
@@ -66,7 +66,7 @@ productRouter.post(
 // @desc    Record outgoing products (e.g., sales, damage)
 productRouter.post(
     '/outgoing',
-    rolePermission([ROLES.ADMIN, ROLES.KHO_MANAGER]),
+    rolePermission([ROLES.KHO_MANAGER]),
     productController.outgoingProduct
 );
 

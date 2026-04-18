@@ -1,4 +1,4 @@
-import { ApiResponse, Material, Product, PaginationData, InventoryHistoryResponse } from "@/lib/types";
+import { ApiResponse, Material, Product, PaginationData, InventoryHistoryResponse, InventoryOverview } from "@/lib/types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
 
@@ -25,15 +25,6 @@ async function fetcher<T>(
     }
 
     return data;
-}
-
-export interface InventoryOverview {
-    totalMaterials: number;
-    lowStockMaterials: number;
-    criticalMaterials: number;
-    totalInventoryValue: number;
-    totalProducts: number;
-    lowStockProducts: number;
 }
 
 export interface InventoryOverviewResponse {
