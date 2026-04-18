@@ -54,7 +54,6 @@ shelfSchema.virtual('isEmpty').get(function () {
 });
 
 // Indexing for faster searches
-shelfSchema.index({ shelfCode: 1 });
 shelfSchema.index({ warehouseSection: 1 });
 shelfSchema.index({ category: 1 });
 shelfSchema.index({ status: 1 });

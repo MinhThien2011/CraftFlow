@@ -1,0 +1,92 @@
+[
+    {
+        "shelfCode": "Kệ A-01",
+        "warehouseSection": "Khu vực A",
+        "category": "Material",
+        "maxCapacity": 500,
+        "currentLoad": 0,
+        "status": "Available",
+        "description": "Kệ chứa nguyên liệu len sợi",
+        "isActive": true
+    },
+    {
+        "shelfCode": "Kệ A-02",
+        "warehouseSection": "Khu vực A",
+        "category": "Material",
+        "maxCapacity": 500,
+        "currentLoad": 0,
+        "status": "Available",
+        "description": "Kệ chứa nguyên liệu len sợi",
+        "isActive": true
+    },
+    {
+        "shelfCode": "Kệ A-03",
+        "warehouseSection": "Khu vực A",
+        "category": "Material",
+        "maxCapacity": 500,
+        "currentLoad": 0,
+        "status": "Available",
+        "description": "Kệ chứa nguyên liệu len sợi",
+        "isActive": true
+    },
+    {
+        "shelfCode": "Kệ B-01",
+        "warehouseSection": "Khu vực B",
+        "category": "Material",
+        "maxCapacity": 1000,
+        "currentLoad": 0,
+        "status": "Available",
+        "description": "Kệ chứa vải vóc",
+        "isActive": true
+    },
+    {
+        "shelfCode": "Kệ B-02",
+        "warehouseSection": "Khu vực B",
+        "category": "Material",
+        "maxCapacity": 1000,
+        "currentLoad": 0,
+        "status": "Available",
+        "description": "Kệ chứa vải vóc",
+        "isActive": true
+    },
+    {
+        "shelfCode": "Kệ P-01",
+        "warehouseSection": "Khu vực P",
+        "category": "Product",
+        "maxCapacity": 200,
+        "currentLoad": 0,
+        "status": "Available",
+        "description": "Kệ chứa thành phẩm gấu bông",
+        "isActive": true
+    },
+    {
+        "shelfCode": "Kệ P-02",
+        "warehouseSection": "Khu vực P",
+        "category": "Product",
+        "maxCapacity": 200,
+        "currentLoad": 0,
+        "status": "Available",
+        "description": "Kệ chứa thành phẩm túi xách",
+        "isActive": true
+    },
+    {
+        "shelfCode": "Kệ P-03",
+        "warehouseSection": "Khu vực P",
+        "category": "Product",
+        "maxCapacity": 200,
+        "currentLoad": 0,
+        "status": "Available",
+        "description": "Kệ chứa thành phẩm decor",
+        "isActive": true
+    },
+    {
+        "shelfCode": "Kệ P-04",
+        "warehouseSection": "Khu vực P",
+        "category": "Product",
+        "maxCapacity": 500,
+        "currentLoad": 0,
+        "status": "Available",
+        "description": "Kệ chứa phụ kiện nhỏ",
+        "isActive": true
+    }
+]
