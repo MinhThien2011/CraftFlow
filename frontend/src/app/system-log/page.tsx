@@ -239,7 +239,8 @@ export default function SystemLogPage() {
       },
       warehouse_manager: {
         label: "Quản lý kho",
-        className: "bg-secondary/10 text-secondary border-secondary/20",
+        className:
+          "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/30 dark:text-indigo-300 dark:border-indigo-800/50",
       },
       staff: {
         label: "Nhân viên",

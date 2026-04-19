@@ -5,6 +5,9 @@ import { usePathname } from "next/navigation"
 import {
   LayoutDashboard,
   Package,
+  PackageOpen,
+  PackagePlus,
+  PackageMinus,
   Boxes,
   Factory,
   AlertTriangle,
@@ -18,6 +21,7 @@ import {
   User,
   Users,
   FileSearch,
+  ClipboardList,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -45,6 +49,26 @@ const navigation = [
     name: "Kho hàng",
     href: "/inventory",
     icon: Package,
+  },
+  {
+    name: "Tổng quan kho (WMS)",
+    href: "/dashboard_warehouse",
+    icon: PackageOpen,
+  },
+  {
+    name: "Nhập kho",
+    href: "/receiving",
+    icon: PackagePlus,
+  },
+  {
+    name: "Xuất kho",
+    href: "/issuing",
+    icon: PackageMinus,
+  },
+  {
+    name: "Yêu cầu vật liệu",
+    href: "/requisitions/pending",
+    icon: ClipboardList,
   },
   {
     name: "Sản phẩm & BOM",
@@ -150,7 +174,9 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
       {/* Navigation */}
       <nav className="flex-1 space-y-1 overflow-y-auto p-3">
         {navigation.map((item) => {
-          const isActive = pathname === item.href
+          const isActive =
+            pathname === item.href ||
+            (item.href !== "/" && pathname.startsWith(`${item.href}/`))
           return (
             <Link
               key={item.name}
