@@ -1,4 +1,4 @@
-import { LoginResponse, ApiResponse, UserListResponse } from "@/lib/types";
+import { LoginResponse, ApiResponse, UserListResponse, User } from "@/lib/types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
 
@@ -81,5 +81,26 @@ export const userApi = {
         return fetcher<UserListResponse>(`/users/${queryString ? `?${queryString}` : ""}`, {
             method: "GET",
         });
+    },
+
+    /**
+     * Create a new user
+     */
+    createUser: async (formData: FormData): Promise<ApiResponse<User>> => {
+        // When using FormData, fetch automatically sets the correct Content-Type with boundary
+        // So we need to call fetch directly or adjust fetcher to handle FormData
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
+        const response = await fetch(`${API_BASE_URL}/users`, {
+            method: "POST",
+            body: formData,
+            credentials: 'include',
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+            const errorMessage = data.message || data.data?.message || "Could not create user";
+            throw new Error(errorMessage);
+        }
+        return data;
     }
 };

@@ -76,7 +76,8 @@ export const getMaterialInventory = async ({ search = '', page = 1, limit = 10 }
 
   const [materials, total] = await Promise.all([
     Material.find(query)
-      .select('name code unit currentStock threshold price color location supplier updatedAt')
+      .select('name code unit currentStock threshold price color shelf locationDetails supplier updatedAt')
+      .populate('shelf', 'shelfCode warehouseSection')
       .sort({ currentStock: 1 }) // Most critical first
       .skip(skip)
       .limit(limitNum)
@@ -126,7 +127,8 @@ export const getProductInventory = async ({ search = '', page = 1, limit = 10 })
 
   const [products, total] = await Promise.all([
     Product.find(query)
-      .select('name code unit currentStock threshold baseCost category location updatedAt')
+      .select('name code unit category currentStock threshold shelf locationDetails updatedAt')
+      .populate('shelf', 'shelfCode warehouseSection')
       .sort({ currentStock: 1 })
       .skip(skip)
       .limit(limitNum)

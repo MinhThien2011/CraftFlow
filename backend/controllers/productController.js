@@ -257,12 +257,14 @@ export const outgoingProduct = async (req, res) => {
 export const getProductHistory = async (req, res) => {
   try {
     const { id: idParam } = req.params;
-    const { id: idQuery, page = 1, limit = 10 } = req.query;
+    const { id: idQuery, type, direction, page = 1, limit = 10 } = req.query;
 
     const productId = idParam || idQuery;
 
     const result = await productService.getProductHistoryService({
       productId,
+      type,
+      direction,
       page: parseInt(page),
       limit: parseInt(limit)
     });

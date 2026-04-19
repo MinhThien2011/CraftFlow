@@ -18,7 +18,7 @@ const userSchema = new mongoose.Schema({
   },
 
   // Workload management - Critical for production planning
-  maxDailyCapacity: { type: Number, default: 100 },
+  maxDailyCapacity: { type: Number, default: 0 },
   currentAssignedQuantity: { type: Number, default: 0 },
 
   // Performance tracking

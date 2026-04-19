@@ -365,7 +365,7 @@ export const adjustStockByCode = async (req, res) => {
 export const getMaterialHistory = async (req, res) => {
   try {
     const { id: idParam } = req.params;
-    const { id: idQuery, code, page = 1, limit = 10 } = req.query;
+    const { id: idQuery, code, type, direction, page = 1, limit = 10 } = req.query;
 
     let materialId = (idParam && idParam !== 'all') ? idParam : idQuery;
 
@@ -381,6 +381,8 @@ export const getMaterialHistory = async (req, res) => {
     // 2. Fetch history
     const result = await materialService.getMaterialHistoryService({
       materialId,
+      type,
+      direction,
       page: parseInt(page),
       limit: parseInt(limit)
     });

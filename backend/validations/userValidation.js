@@ -36,7 +36,8 @@ const userSchema = Joi.object({
   gender: Joi.string().valid('male', 'female').default('male'),
   avatar: Joi.string().uri().optional().allow(''),
   role: Joi.string().optional(),
-  isActive: Joi.boolean().default(true)
+  isActive: Joi.boolean().default(true),
+  maxDailyCapacity: Joi.number().integer().min(0).default(100),
 }).required();
 
 const updateUserSchema = Joi.object({
@@ -45,7 +46,8 @@ const updateUserSchema = Joi.object({
   address: Joi.string(),
   birthDay: Joi.date().optional(),
   gender: Joi.string().valid('male', 'female'),
-  avatar: Joi.string().uri().optional().allow('')
+  avatar: Joi.string().uri().optional().allow(''),
+  maxDailyCapacity: Joi.number().integer().min(0).default(100),
 }).min(1).required();
 
 export const createUserValidator = (body) => userSchema.validate(body, { abortEarly: false });

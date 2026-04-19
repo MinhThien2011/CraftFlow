@@ -8,6 +8,7 @@ import requisitionRouter from "./requisition.routes.js";
 import productRouter from "./product.routes.js";
 import inventoryRouter from "./inventory.routes.js";
 import dashboardRouter from "./dashboard.routes.js";
+import shelfRouter from "./shelf.routes.js";
 
 const mainRouter = Router();
 
@@ -26,5 +27,6 @@ mainRouter.use('/requisitions', requisitionRouter);
 mainRouter.use('/products', productRouter);
 mainRouter.use('/inventory', inventoryRouter);
 mainRouter.use('/dashboard', dashboardRouter);
+mainRouter.use('/shelves', shelfRouter);
 
 export default mainRouter;

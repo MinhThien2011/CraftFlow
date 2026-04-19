@@ -8,6 +8,9 @@ import Role from "../models/Roles.js";
 import User from "../models/User.js";
 import Material from "../models/Material.js";
 import Product from "../models/Product.js";
+import Shelf from "../models/Shelf.js";
+import Bom from "../models/BOM.js";
+import ProductionOrder from "../models/ProductionOrder.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -54,8 +57,8 @@ export const initializeCollections = async (models) => {
 
     console.log(
         `🎉 Initialized ${initializedCount} collections of ${mongoose.connection.db.databaseName}.`
-        );
-   };
+    );
+};
 
 // Hàm seed categories chỉ khi chưa có data
 // const seedCategoriesIfEmpty = async () => {
@@ -99,7 +102,7 @@ const seedUsersIfEmpty = async () => {
         const count = await User.countDocuments();
         if (count === 0) {
             console.log("👥 Bảng User trống, đang seed users mặc định...");
-            
+
             // Đọc file seed
             const seedPath = path.join(__dirname, '..', 'seeds', 'userSeed.json');
             if (!fs.existsSync(seedPath)) {
@@ -138,13 +141,37 @@ const seedUsersIfEmpty = async () => {
     }
 };
 
+// Hàm seed shelves nếu bảng Shelf trống
+const seedShelvesIfEmpty = async () => {
+    try {
+        const count = await Shelf.countDocuments();
+        if (count === 0) {
+            console.log("🏪 Bảng Shelf trống, đang seed kệ kho mặc định...");
+            const seedPath = path.join(__dirname, '..', 'seeds', 'shelfSeed.json');
+            if (!fs.existsSync(seedPath)) {
+                console.warn(`⚠️ File seed không tồn tại tại: ${seedPath}`);
+                return;
+            }
+            const rawData = fs.readFileSync(seedPath, 'utf8');
+            const shelvesData = JSON.parse(rawData);
+            await Shelf.insertMany(shelvesData);
+            console.log(`✅ Đã seed ${shelvesData.length} kệ kho thành công!`);
+        } else {
+            console.log(`ℹ️ Bảng Shelf đã có ${count} bản ghi, bỏ qua seed shelves.`);
+        }
+    } catch (error) {
+        console.error("❌ Lỗi khi seed shelves:", error);
+        throw error;
+    }
+};
+
 // Hàm seed materials nếu bảng Material trống
 const seedMaterialsIfEmpty = async () => {
     try {
         const count = await Material.countDocuments();
         if (count === 0) {
             console.log("📦 Bảng Material trống, đang seed nguyên vật liệu mặc định...");
-            
+
             const seedPath = path.join(__dirname, '..', 'seeds', 'materialSeed.json');
             if (!fs.existsSync(seedPath)) {
                 console.warn(`⚠️ File seed không tồn tại tại: ${seedPath}`);
@@ -154,8 +181,20 @@ const seedMaterialsIfEmpty = async () => {
             const rawData = fs.readFileSync(seedPath, 'utf8');
             const materialsData = JSON.parse(rawData);
 
-            await Material.insertMany(materialsData);
-            console.log(`✅ Đã seed ${materialsData.length} nguyên vật liệu thành công!`);
+            // Lấy tất cả shelves để mapping location name sang ObjectId
+            const shelves = await Shelf.find({});
+            const shelfMap = shelves.reduce((acc, shelf) => {
+                acc[shelf.shelfCode] = shelf._id;
+                return acc;
+            }, {});
+
+            const materialsToSeed = materialsData.map(material => ({
+                ...material,
+                shelf: shelfMap[material.location] || null
+            }));
+
+            await Material.insertMany(materialsToSeed);
+            console.log(`✅ Đã seed ${materialsToSeed.length} nguyên vật liệu thành công!`);
         } else {
             console.log(`ℹ️ Bảng Material đã có ${count} bản ghi, bỏ qua seed materials.`);
         }
@@ -171,7 +210,7 @@ const seedProductsIfEmpty = async () => {
         const count = await Product.countDocuments();
         if (count === 0) {
             console.log("🎁 Bảng Product trống, đang seed sản phẩm handmade mặc định...");
-            
+
             const seedPath = path.join(__dirname, '..', 'seeds', 'productSeed.json');
             if (!fs.existsSync(seedPath)) {
                 console.warn(`⚠️ File seed không tồn tại tại: ${seedPath}`);
@@ -185,6 +224,13 @@ const seedProductsIfEmpty = async () => {
             const materials = await Material.find({ isActive: true }).lean();
             const materialMap = materials.reduce((acc, m) => {
                 acc[m.code] = m;
+                return acc;
+            }, {});
+
+            // Mapping shelves
+            const shelves = await Shelf.find({});
+            const shelfMap = shelves.reduce((acc, shelf) => {
+                acc[shelf.shelfCode] = shelf._id;
                 return acc;
             }, {});
 
@@ -211,7 +257,8 @@ const seedProductsIfEmpty = async () => {
                 return {
                     ...product,
                     estimateMaterialCost: updatedEstimate,
-                    baseCost
+                    baseCost,
+                    shelf: shelfMap[product.location] || null
                 };
             });
 
@@ -222,6 +269,86 @@ const seedProductsIfEmpty = async () => {
         }
     } catch (error) {
         console.error("❌ Lỗi khi seed products:", error);
+        throw error;
+    }
+};
+
+// Hàm seed BOMs nếu bảng Bom trống
+const seedBomsIfEmpty = async () => {
+    try {
+        const count = await Bom.countDocuments();
+        if (count === 0) {
+            console.log("📜 Bảng BOM trống, đang seed định mức nguyên vật liệu...");
+            const seedPath = path.join(__dirname, '..', 'seeds', 'bomSeed.json');
+            if (!fs.existsSync(seedPath)) {
+                console.warn(`⚠️ File seed không tồn tại tại: ${seedPath}`);
+                return;
+            }
+            const rawData = fs.readFileSync(seedPath, 'utf8');
+            const bomsData = JSON.parse(rawData);
+
+            const products = await Product.find({}).lean();
+            const productMap = products.reduce((acc, p) => { acc[p.code] = p._id; return acc; }, {});
+
+            const materials = await Material.find({}).lean();
+            const materialMap = materials.reduce((acc, m) => { acc[m.code] = m._id; return acc; }, {});
+
+            const bomsToSeed = bomsData.map(bom => ({
+                product: productMap[bom.productCode],
+                items: bom.items.map(item => ({
+                    material: materialMap[item.materialCode],
+                    qtyPerUnit: item.qtyPerUnit,
+                    unit: item.unit,
+                    note: item.note
+                })).filter(item => item.material),
+                version: bom.version,
+                isActive: bom.isActive
+            })).filter(bom => bom.product);
+
+            await Bom.insertMany(bomsToSeed);
+            console.log(`✅ Đã seed ${bomsToSeed.length} BOM thành công!`);
+        } else {
+            console.log(`ℹ️ Bảng BOM đã có ${count} bản ghi, bỏ qua seed BOMs.`);
+        }
+    } catch (error) {
+        console.error("❌ Lỗi khi seed BOMs:", error);
+        throw error;
+    }
+};
+
+// Hàm seed ProductionOrders nếu bảng ProductionOrder trống
+const seedProductionOrdersIfEmpty = async () => {
+    try {
+        const count = await ProductionOrder.countDocuments();
+        if (count === 0) {
+            console.log("📝 Bảng ProductionOrder trống, đang seed lệnh sản xuất...");
+            const seedPath = path.join(__dirname, '..', 'seeds', 'productionOrderSeed.json');
+            if (!fs.existsSync(seedPath)) {
+                console.warn(`⚠️ File seed không tồn tại tại: ${seedPath}`);
+                return;
+            }
+            const rawData = fs.readFileSync(seedPath, 'utf8');
+            const ordersData = JSON.parse(rawData);
+
+            const products = await Product.find({}).lean();
+            const productMap = products.reduce((acc, p) => { acc[p.code] = p._id; return acc; }, {});
+
+            const users = await User.find({}).lean();
+            const userMap = users.reduce((acc, u) => { acc[u.username] = u._id; return acc; }, {});
+
+            const ordersToSeed = ordersData.map(order => ({
+                ...order,
+                productId: productMap[order.productCode],
+                createdBy: userMap[order.createdByUsername]
+            })).filter(order => order.productId && order.createdBy);
+
+            await ProductionOrder.insertMany(ordersToSeed);
+            console.log(`✅ Đã seed ${ordersToSeed.length} lệnh sản xuất thành công!`);
+        } else {
+            console.log(`ℹ️ Bảng ProductionOrder đã có ${count} bản ghi, bỏ qua seed production orders.`);
+        }
+    } catch (error) {
+        console.error("❌ Lỗi khi seed production orders:", error);
         throw error;
     }
 };
@@ -380,8 +507,11 @@ export const connectToDatabase = async () => {
         // Seed data mặc định
         await seedRolesIfEmpty();
         await seedUsersIfEmpty();
+        await seedShelvesIfEmpty();
         await seedMaterialsIfEmpty();
         await seedProductsIfEmpty();
+        await seedBomsIfEmpty();
+        await seedProductionOrdersIfEmpty();
 
         // Setup event handlers (chỉ setup 1 lần)
         setupConnectionHandlers();

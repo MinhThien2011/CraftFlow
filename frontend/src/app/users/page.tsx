@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useCallback, useMemo, Fragment } from "react"
-import { Plus, Search, MoreVertical, Shield, Warehouse, User as UserIcon, Upload, ChevronLeft, ChevronRight, Factory } from "lucide-react"
+import { Plus, Search, MoreVertical, Shield, Warehouse, User as UserIcon, Upload, ChevronLeft, ChevronRight, Factory, Mail, Lock, Phone, MapPin, Calendar, Settings, Briefcase, Info } from "lucide-react"
 import { AppShell } from "@/components/app-shell"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -51,7 +51,7 @@ import {
 } from "@/components/ui/pagination"
 import { userApi } from "@/api/user.api"
 import type { User, PaginationData } from "@/lib/types"
-import { useToast } from "@/hooks/use-toast"
+import { toast } from "sonner"
 import { Spinner } from "@/components/ui/spinner"
 import { getAvatarUrl } from "@/lib/utils"
 
@@ -117,8 +117,6 @@ export default function UsersPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
 
-  const { toast } = useToast()
-
   // API States
   const [users, setUsers] = useState<User[]>([])
   const [pagination, setPagination] = useState<PaginationData | null>(null)
@@ -126,15 +124,17 @@ export default function UsersPage() {
 
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [avatarPreview, setAvatarPreview] = useState<string>("")
+  const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [newUser, setNewUser] = useState({
     name: "",
     email: "",
     username: "",
     password: "",
     phone: "",
+    birthDay: "",
     gender: "male",
     address: "",
-    role: "",
+    role: "staff",
     maxDailyCapacity: 100,
     isActive: true,
   })
@@ -154,11 +154,7 @@ export default function UsersPage() {
         setPagination(response.data.pagination || null)
       }
     } catch (error: any) {
-      toast({
-        title: "Lỗi",
-        description: error.message || "Không thể tải danh sách người dùng",
-        variant: "destructive",
-      })
+      toast.error(error.message || "Không thể tải danh sách người dùng")
     } finally {
       setIsLoading(false)
     }
@@ -177,26 +173,48 @@ export default function UsersPage() {
   }, [searchQuery, roleFilter])
 
   const handleAddUser = async () => {
-    if (!newUser.name || !newUser.email || !newUser.username || !newUser.password) {
-      toast({
-        title: "Lỗi",
-        description: "Vui lòng điền đầy đủ các trường bắt buộc",
-        variant: "destructive",
-      })
+    if (!newUser.name || !newUser.email || !newUser.username || !newUser.password || !newUser.role) {
+      toast.error("Vui lòng điền đầy đủ các trường bắt buộc")
       return
     }
 
-    // In a real app, we would call an API here
-    toast({
-      title: "Thông báo",
-      description: "Chức năng thêm người dùng đang được triển khai",
-    })
-    resetForm()
+    try {
+      const formData = new FormData();
+      formData.append("fullName", newUser.name);
+      formData.append("email", newUser.email);
+      formData.append("username", newUser.username);
+      formData.append("password", newUser.password);
+      formData.append("phone", newUser.phone);
+      formData.append("birthDay", newUser.birthDay);
+      formData.append("gender", newUser.gender);
+      formData.append("address", newUser.address);
+      formData.append("role", newUser.role);
+
+      if (newUser.role === "staff") {
+        formData.append("maxDailyCapacity", newUser.maxDailyCapacity.toString());
+      }
+
+      formData.append("isActive", newUser.isActive.toString());
+
+      if (avatarFile) {
+        formData.append("avatar", avatarFile);
+      }
+
+      const response = await userApi.createUser(formData);
+      if (response.success) {
+        toast.success("Tạo tài khoản thành công");
+        fetchUsers(searchQuery, roleFilterToValue[roleFilter], currentPage);
+        resetForm();
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Không thể tạo tài khoản mới");
+    }
   }
 
   const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
+      setAvatarFile(file)
       const reader = new FileReader()
       reader.onloadend = () => {
         setAvatarPreview(reader.result as string)
@@ -212,6 +230,7 @@ export default function UsersPage() {
       username: "",
       password: "",
       phone: "",
+      birthDay: "",
       gender: "male",
       address: "",
       role: "staff",
@@ -219,15 +238,13 @@ export default function UsersPage() {
       isActive: true,
     })
     setAvatarPreview("")
+    setAvatarFile(null)
     setIsAddDialogOpen(false)
   }
 
   const toggleUserStatus = (userId: string) => {
     // API call would go here
-    toast({
-      title: "Thông báo",
-      description: "Chức năng thay đổi trạng thái đang được triển khai",
-    })
+    toast.info("Chức năng thay đổi trạng thái đang được triển khai")
   }
 
   const getUserRoleName = (role: User["role"]): string => {
@@ -261,212 +278,232 @@ export default function UsersPage() {
                     Thêm tài khoản
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-2xl">
-                  <DialogHeader>
-                    <DialogTitle>Thêm tài khoản mới</DialogTitle>
-                    <DialogDescription>
-                      Điền thông tin đầy đủ để tạo tài khoản người dùng mới
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-6 py-4 max-h-[70vh] overflow-y-auto">
-                    {/* Avatar Upload Section */}
-                    <div className="flex flex-col items-center gap-4">
-                      <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center overflow-hidden">
-                        {avatarPreview ? (
-                          <img
-                            src={avatarPreview}
-                            alt="Avatar preview"
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="flex flex-col items-center gap-1">
-                            <Upload className="h-6 w-6 text-muted-foreground" />
-                            <span className="text-xs text-muted-foreground">Avatar</span>
+                <DialogContent className="w-[95vw] sm:max-w-[90vw] lg:max-w-6xl p-0 overflow-hidden border-none shadow-2xl flex flex-col max-h-[90vh]">
+                  {/* Header */}
+                  <div className="bg-gradient-to-r from-pink-50 via-purple-50 to-indigo-50 px-6 py-6 shrink-0 border-b border-purple-100">
+                    <DialogHeader>
+                      <div className="flex items-center gap-4">
+                        <div className="p-2 bg-white rounded-xl shadow-sm border border-purple-200">
+                          <UserIcon className="h-6 w-6 text-purple-600" />
+                        </div>
+                        <div>
+                          <DialogTitle className="text-xl font-bold text-purple-900">Thêm tài khoản mới</DialogTitle>
+                          <DialogDescription className="text-purple-700/70 text-sm font-medium">
+                            Nhập đầy đủ thông tin để khởi tạo thành viên mới
+                          </DialogDescription>
+                        </div>
+                      </div>
+                    </DialogHeader>
+                  </div>
+
+                  {/* Body */}
+                  <div className="flex-1 overflow-y-auto custom-scrollbar p-8 bg-white">
+                    <div className="max-w-5xl mx-auto space-y-10">
+                      {/* Avatar Section - Compact */}
+                      <div className="flex flex-col md:flex-row items-start gap-10 pb-8 border-b border-gray-50">
+                        <div className="flex flex-col items-center gap-4 shrink-0">
+                          <div className="relative group">
+                            <div className="w-32 h-32 rounded-2xl bg-gray-50 flex items-center justify-center overflow-hidden border-2 border-dashed border-purple-200 group-hover:border-purple-400 transition-colors">
+                              {avatarPreview ? (
+                                <img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover" />
+                              ) : (
+                                <Upload className="h-8 w-8 text-purple-200" />
+                              )}
+                            </div>
+                            <label className="absolute -bottom-2 -right-2 cursor-pointer">
+                              <input type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" />
+                              <div className="p-2 bg-purple-600 text-white rounded-lg shadow-lg hover:bg-purple-700 transition-colors">
+                                <Plus className="h-4 w-4" />
+                              </div>
+                            </label>
                           </div>
-                        )}
-                      </div>
-                      <label>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleAvatarUpload}
-                          className="hidden"
-                        />
-                        <Button variant="outline" asChild className="cursor-pointer">
-                          <span>Tải lên ảnh</span>
-                        </Button>
-                      </label>
-                    </div>
-
-                    {/* Two Column Layout */}
-                    <div className="grid grid-cols-2 gap-4">
-                      {/* Left Column */}
-                      <div className="space-y-4">
-                        {/* Họ và tên */}
-                        <div className="space-y-2">
-                          <Label htmlFor="name">Họ và tên *</Label>
-                          <Input
-                            id="name"
-                            placeholder="Nguyễn Văn An"
-                            value={newUser.name}
-                            onChange={(e) =>
-                              setNewUser({ ...newUser, name: e.target.value })
-                            }
-                          />
+                          <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider">Ảnh đại diện</span>
                         </div>
 
-                        {/* Tên đăng nhập */}
-                        <div className="space-y-2">
-                          <Label htmlFor="username">Tên đăng nhập *</Label>
-                          <Input
-                            id="username"
-                            placeholder="nguyen.van.an"
-                            value={newUser.username}
-                            onChange={(e) =>
-                              setNewUser({ ...newUser, username: e.target.value })
-                            }
-                          />
-                        </div>
-
-                        {/* Email */}
-                        <div className="space-y-2">
-                          <Label htmlFor="email">Email *</Label>
-                          <Input
-                            id="email"
-                            type="email"
-                            placeholder="email@craftflow.vn"
-                            value={newUser.email}
-                            onChange={(e) =>
-                              setNewUser({ ...newUser, email: e.target.value })
-                            }
-                          />
-                        </div>
-
-                        {/* Mật khẩu */}
-                        <div className="space-y-2">
-                          <Label htmlFor="password">Mật khẩu *</Label>
-                          <Input
-                            id="password"
-                            type="password"
-                            placeholder="••••••••"
-                            value={newUser.password}
-                            onChange={(e) =>
-                              setNewUser({ ...newUser, password: e.target.value })
-                            }
-                          />
-                        </div>
-
-                        {/* Số điện thoại */}
-                        <div className="space-y-2">
-                          <Label htmlFor="phone">Số điện thoại</Label>
-                          <Input
-                            id="phone"
-                            type="tel"
-                            placeholder="+84 9xx xxx xxx"
-                            value={newUser.phone}
-                            onChange={(e) =>
-                              setNewUser({ ...newUser, phone: e.target.value })
-                            }
-                          />
+                        <div className="flex-1 space-y-4">
+                          <h4 className="text-xs font-bold text-gray-900 uppercase tracking-widest flex items-center gap-2">
+                            <Info className="h-3 w-3 text-purple-500" /> Lưu ý khi tạo tài khoản
+                          </h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+                            <div className="flex items-center gap-2 text-xs text-gray-500">
+                              <div className="h-1 w-1 rounded-full bg-purple-400" />
+                              <span>Trường <strong className="text-purple-600">*</strong> là bắt buộc nhập.</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-gray-500">
+                              <div className="h-1 w-1 rounded-full bg-purple-400" />
+                              <span>Mật khẩu tối thiểu 8 ký tự gồm chữ số chữ in hoa, ký tự đặc biệt.</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-gray-500">
+                              <div className="h-1 w-1 rounded-full bg-purple-400" />
+                              <span>Tên đăng nhập không được trùng lặp.</span>
+                            </div>
+                          </div>
                         </div>
                       </div>
 
-                      {/* Right Column */}
-                      <div className="space-y-4">
-                        {/* Vai trò */}
-                        <div className="space-y-2">
-                          <Label htmlFor="role">Vai trò *</Label>
-                          <Select
-                            value={newUser.role}
-                            onValueChange={(value: string) =>
-                              setNewUser({ ...newUser, role: value })
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="admin">Quản trị viên</SelectItem>
-                              <SelectItem value="production_manager">Quản lý sản xuất</SelectItem>
-                              <SelectItem value="kho_manager">Quản lý kho</SelectItem>
-                              <SelectItem value="staff">Nhân viên</SelectItem>
-                            </SelectContent>
-                          </Select>
+                      {/* Main Form Fields */}
+                      <div className="space-y-10">
+                        {/* Section 1: Thông tin cá nhân */}
+                        <div className="space-y-6">
+                          <h3 className="text-sm font-bold text-purple-900 flex items-center gap-2 uppercase tracking-widest">
+                            <div className="h-1.5 w-6 bg-purple-600 rounded-full" />
+                            Thông tin cá nhân
+                          </h3>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                            <div className="space-y-2">
+                              <Label className="text-[11px] font-bold text-gray-500 uppercase">Họ và tên *</Label>
+                              <Input
+                                placeholder="Nguyễn Văn An"
+                                className="h-10 rounded-lg border-gray-200 focus:ring-purple-100"
+                                value={newUser.name}
+                                onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="text-[11px] font-bold text-gray-500 uppercase">Email *</Label>
+                              <Input
+                                type="email"
+                                placeholder="email@craftflow.vn"
+                                className="h-10 rounded-lg border-gray-200 focus:ring-purple-100"
+                                value={newUser.email}
+                                onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="text-[11px] font-bold text-gray-500 uppercase">Số điện thoại</Label>
+                              <Input
+                                placeholder="+84 9xx xxx xxx"
+                                className="h-10 rounded-lg border-gray-200 focus:ring-purple-100"
+                                value={newUser.phone}
+                                onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="text-[11px] font-bold text-gray-500 uppercase">Ngày sinh</Label>
+                              <Input
+                                type="date"
+                                className="h-10 rounded-lg border-gray-200 focus:ring-purple-100"
+                                value={newUser.birthDay}
+                                onChange={(e) => setNewUser({ ...newUser, birthDay: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="text-[11px] font-bold text-gray-500 uppercase">Giới tính</Label>
+                              <Select
+                                value={newUser.gender}
+                                onValueChange={(value: any) => setNewUser({ ...newUser, gender: value })}
+                              >
+                                <SelectTrigger className="h-10 rounded-lg border-gray-200 focus:ring-purple-100">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="male">Nam</SelectItem>
+                                  <SelectItem value="female">Nữ</SelectItem>
+                                  <SelectItem value="other">Khác</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="text-[11px] font-bold text-gray-500 uppercase">Địa chỉ</Label>
+                              <Input
+                                placeholder="123 Đường ABC, Quận 1..."
+                                className="h-10 rounded-lg border-gray-200 focus:ring-purple-100"
+                                value={newUser.address}
+                                onChange={(e) => setNewUser({ ...newUser, address: e.target.value })}
+                              />
+                            </div>
+                          </div>
                         </div>
 
-                        {/* Giới tính */}
-                        <div className="space-y-2">
-                          <Label htmlFor="gender">Giới tính</Label>
-                          <Select
-                            value={newUser.gender}
-                            onValueChange={(value: any) =>
-                              setNewUser({ ...newUser, gender: value })
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="male">Nam</SelectItem>
-                              <SelectItem value="female">Nữ</SelectItem>
-                              <SelectItem value="other">Khác</SelectItem>
-                            </SelectContent>
-                          </Select>
+                        {/* Section 2: Tài khoản & Phân quyền */}
+                        <div className="space-y-6">
+                          <h3 className="text-sm font-bold text-purple-900 flex items-center gap-2 uppercase tracking-widest">
+                            <div className="h-1.5 w-6 bg-purple-600 rounded-full" />
+                            Tài khoản & Phân quyền
+                          </h3>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                            <div className="space-y-2">
+                              <Label className="text-[11px] font-bold text-gray-500 uppercase">Tên đăng nhập *</Label>
+                              <Input
+                                placeholder="nguyen.van.an"
+                                className="h-10 rounded-lg border-gray-200 focus:ring-purple-100"
+                                value={newUser.username}
+                                onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="text-[11px] font-bold text-gray-500 uppercase">Mật khẩu *</Label>
+                              <Input
+                                type="password"
+                                placeholder="••••••••"
+                                className="h-10 rounded-lg border-gray-200 focus:ring-purple-100"
+                                value={newUser.password}
+                                onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="text-[11px] font-bold text-gray-500 uppercase">Vai trò *</Label>
+                              <Select
+                                value={newUser.role}
+                                onValueChange={(value: string) => setNewUser({ ...newUser, role: value })}
+                              >
+                                <SelectTrigger className="h-10 rounded-lg border-gray-200 focus:ring-purple-100">
+                                  <SelectValue placeholder="Chọn vai trò" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="admin">Quản trị viên</SelectItem>
+                                  <SelectItem value="production_manager">Quản lý sản xuất</SelectItem>
+                                  <SelectItem value="kho_manager">Quản lý kho</SelectItem>
+                                  <SelectItem value="staff">Nhân viên</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="text-[11px] font-bold text-gray-500 uppercase">Định mức công việc</Label>
+                              <Input
+                                type="number"
+                                disabled={newUser.role !== "staff"}
+                                className="h-10 rounded-lg border-gray-200 focus:ring-purple-100 bg-gray-50 disabled:opacity-50"
+                                value={newUser.maxDailyCapacity}
+                                onChange={(e) => setNewUser({ ...newUser, maxDailyCapacity: Number(e.target.value) })}
+                              />
+                            </div>
+                          </div>
                         </div>
 
-                        {/* Địa chỉ */}
-                        <div className="space-y-2">
-                          <Label htmlFor="address">Địa chỉ</Label>
-                          <Input
-                            id="address"
-                            placeholder="123 Đường ABC, Quận 1, TP.HCM"
-                            value={newUser.address}
-                            onChange={(e) =>
-                              setNewUser({ ...newUser, address: e.target.value })
-                            }
-                          />
-                        </div>
-
-                        {/* Định mức công việc tối đa */}
-                        <div className="space-y-2">
-                          <Label htmlFor="maxDailyCapacity">Định mức công việc tối đa</Label>
-                          <Input
-                            id="maxDailyCapacity"
-                            type="number"
-                            min="0"
-                            value={newUser.maxDailyCapacity}
-                            onChange={(e) =>
-                              setNewUser({
-                                ...newUser,
-                                maxDailyCapacity: Number(e.target.value),
-                              })
-                            }
-                          />
-                        </div>
-
-                        {/* Trạng thái hoạt động */}
-                        <div className="flex items-center justify-between pt-2">
-                          <Label htmlFor="isActive">Kích hoạt tài khoản</Label>
+                        {/* Activation Switch */}
+                        <div className="flex items-center justify-between p-4 bg-purple-50/50 rounded-xl border border-purple-100 shadow-sm">
+                          <div className="space-y-0.5">
+                            <Label className="text-sm font-bold text-purple-900">Kích hoạt tài khoản</Label>
+                            <p className="text-xs text-purple-600/60">Cho phép người dùng truy cập hệ thống ngay lập tức</p>
+                          </div>
                           <Switch
-                            id="isActive"
                             checked={newUser.isActive}
-                            onCheckedChange={(checked: boolean) =>
-                              setNewUser({ ...newUser, isActive: checked })
-                            }
+                            onCheckedChange={(checked) => setNewUser({ ...newUser, isActive: checked })}
+                            className="data-[state=checked]:bg-purple-600"
                           />
                         </div>
                       </div>
                     </div>
                   </div>
-                  <DialogFooter>
+
+                  {/* Footer */}
+                  <div className="px-8 py-5 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3 shrink-0">
                     <Button
-                      variant="outline"
+                      variant="ghost"
                       onClick={resetForm}
+                      className="h-10 px-6 font-bold text-gray-500 hover:bg-gray-200 transition-colors"
                     >
-                      Hủy
+                      Hủy bỏ
                     </Button>
-                    <Button onClick={handleAddUser}>Tạo tài khoản</Button>
-                  </DialogFooter>
+                    <Button
+                      onClick={handleAddUser}
+                      className="h-10 px-8 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg shadow-md transition-all active:scale-95 flex items-center gap-2"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Tạo tài khoản
+                    </Button>
+                  </div>
                 </DialogContent>
               </Dialog>
             </div>

@@ -22,27 +22,43 @@ export const getProductsByQuery = async (query) => {
       sortOrder = 'desc'
     } = query;
 
-    const pageNum = Math.max(1, parseInt(page, 10));
-    const limitNum = Math.min(MAX_LIMIT, Math.max(1, parseInt(limit, 10)));
+    // Normalize parameters to handle empty strings from query params
+    const normalizedSortBy = (sortBy && typeof sortBy === 'string' && sortBy.trim() !== '') ? sortBy : 'createdAt';
+    const normalizedSortOrder = (sortOrder && typeof sortOrder === 'string' && sortOrder.trim() !== '') ? sortOrder : 'desc';
+    const normalizedSearch = (search && typeof search === 'string' && search.trim() !== '') ? search : '';
+    const normalizedCategory = (category && typeof category === 'string' && category.trim() !== '') ? category : '';
+
+    // For isActive, if it's an empty string or not provided, default to true
+    let normalizedIsActive = isActive;
+    if (isActive === '' || isActive === undefined || isActive === null) {
+      normalizedIsActive = 'true';
+    }
+
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(MAX_LIMIT, Math.max(1, parseInt(limit, 10) || 10));
     const skip = (pageNum - 1) * limitNum;
 
     // --- Build Query Conditions ---
-    const conditions = { isActive: isActive === 'all' ? { $in: [true, false] } : (isActive === 'true' || isActive === true) };
+    const conditions = {
+      isActive: normalizedIsActive === 'all'
+        ? { $in: [true, false] }
+        : (normalizedIsActive === 'true' || normalizedIsActive === true)
+    };
 
-    if (search) {
-      const searchRegex = { $regex: search, $options: 'i' };
+    if (normalizedSearch) {
+      const searchRegex = { $regex: normalizedSearch, $options: 'i' };
       conditions.$or = [
         { name: searchRegex },
         { code: searchRegex }
       ];
     }
 
-    if (category) {
-      conditions.category = category;
+    if (normalizedCategory) {
+      conditions.category = normalizedCategory;
     }
 
     // --- Sorting --- 
-    const sortOptions = { [sortBy]: sortOrder === 'asc' ? 1 : -1 };
+    const sortOptions = { [normalizedSortBy]: normalizedSortOrder === 'asc' ? 1 : -1 };
 
     // --- Execute Query ---
     const [products, total] = await Promise.all([
@@ -51,6 +67,7 @@ export const getProductsByQuery = async (query) => {
         .skip(skip)
         .limit(limitNum)
         .populate('estimateMaterialCost.material', 'name code unit currency')
+        .populate('shelf', 'shelfCode warehouseSection')
         .lean(),
       Product.countDocuments(conditions)
     ]);
@@ -79,7 +96,10 @@ export const getProductsByQuery = async (query) => {
  */
 export const getProductById = async (id) => {
   try {
-    const product = await Product.findById(id).populate('estimateMaterialCost.material', 'name code unit currency').lean();
+    const product = await Product.findById(id)
+      .populate('estimateMaterialCost.material', 'name code unit currency')
+      .populate('shelf', 'shelfCode warehouseSection')
+      .lean();
     if (!product) {
       return { status: 'error', message: 'Product not found.', data: null };
     }
@@ -194,18 +214,22 @@ export const recordOutgoingProduct = async (productId, quantity, type, note, use
 /**
  * Get product history with pagination and filtering.
  */
-export const getProductHistoryService = async ({ productId, page = 1, limit = 10 }) => {
+export const getProductHistoryService = async ({ productId, type, direction, page = 1, limit = 10 }) => {
   try {
-    const pageNum = Math.max(1, parseInt(page, 10));
-    const limitNum = Math.min(MAX_LIMIT, Math.max(1, parseInt(limit, 10)));
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(MAX_LIMIT, Math.max(1, parseInt(limit, 10) || 10));
     const skip = (pageNum - 1) * limitNum;
 
     const filter = productId ? { product: productId } : {};
 
+    if (type) filter.type = type;
+    if (direction === 'in') filter.quantity = { $gt: 0 };
+    if (direction === 'out') filter.quantity = { $lt: 0 };
+
     const [history, total] = await Promise.all([
       InventoryTransaction.find(filter)
         .populate('performedBy', 'fullName username')
-        .populate('product', 'name code unit category')
+        .populate('product', 'name code unit category baseCost')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limitNum)
@@ -237,8 +261,8 @@ export const getProductHistoryService = async ({ productId, page = 1, limit = 10
  */
 export const getLowStockProductsService = async ({ search = '', page = 1, limit = 10 }) => {
   try {
-    const pageNum = Math.max(1, parseInt(page, 10));
-    const limitNum = Math.min(MAX_LIMIT, Math.max(1, parseInt(limit, 10)));
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(MAX_LIMIT, Math.max(1, parseInt(limit, 10) || 10));
     const skip = (pageNum - 1) * limitNum;
 
     // Low stock: currentStock <= threshold

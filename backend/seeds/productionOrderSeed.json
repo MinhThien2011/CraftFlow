@@ -1,0 +1,26 @@
+[
+    {
+        "orderCode": "CF-20260418-001",
+        "productCode": "PROD-BEAR-01",
+        "quantity": 10,
+        "status": "pending",
+        "priority": "high",
+        "createdByUsername": "thien.pham"
+    },
+    {
+        "orderCode": "CF-20260418-002",
+        "productCode": "PROD-BAG-01",
+        "quantity": 20,
+        "status": "in_production",
+        "priority": "medium",
+        "createdByUsername": "thien.pham"
+    },
+    {
+        "orderCode": "CF-20260418-003",
+        "productCode": "PROD-HOME-01",
+        "quantity": 5,
+        "status": "completed",
+        "priority": "low",
+        "createdByUsername": "linh.tran"
+    }
+]
