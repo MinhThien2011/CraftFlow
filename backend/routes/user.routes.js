@@ -15,6 +15,12 @@ import { imageUploader } from '../middleware/cloudinary_uploader.js';
 const userRouter = Router();
 
 // --- Private Routes (Logged in users) ---
+userRouter.get('/health', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Welcome to the User API of Crafb Flow",
+  })
+})
 userRouter.use(jwtAuth);
 
 // Profile management

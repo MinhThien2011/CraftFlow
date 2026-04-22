@@ -36,15 +36,14 @@ export const createOrder = async (req, res) => {
       message: result.message,
       data: result.data
     });
-    setImmediate(async () => {
-      await logActivity({
-        author: req.userId,
-        action: 'CREATE_PRODUCTION_ORDER',
-        module: 'PRODUCTION',
-        details: `Created order: ${result.data.order.orderCode}`,
-        targetId: result.data.order._id
-      }, req);
-    })
+
+    await logActivity({
+      author: req.userId,
+      action: 'CREATE_PRODUCTION_ORDER',
+      module: 'PRODUCTION',
+      details: `Created order: ${result.data.order.orderCode}`,
+      targetId: result.data.order._id
+    }, req);
 
   } catch (error) {
     console.log('[ProductionOrderController] createOrder error:', error);
@@ -96,20 +95,20 @@ export const assignOrder = async (req, res) => {
       });
     }
 
-    res.status(StatusCodes.OK).json({
+    await logActivity({
+      author: req.userId,
+      action: 'ASSIGN_PRODUCTION_ORDER',
+      module: 'PRODUCTION',
+      details: `Admin assigned order ${orderId} to ${assignments.map(assignment => assignment.staffId).join(', ')}`,
+      targetId: orderId
+    }, req);
+
+    return res.status(StatusCodes.OK).json({
       status: 'success',
       message: result.message,
       data: result.data
     });
-    setImmediate(async () => {
-      await logActivity({
-        author: req.userId,
-        action: 'ASSIGN_PRODUCTION_ORDER',
-        module: 'PRODUCTION',
-        details: `Admin assigned order ${orderId} to ${assignments.map(assignment => assignment.staffId).join(', ')}`,
-        targetId: orderId
-      }, req);
-    })
+
   } catch (error) {
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
@@ -169,20 +168,20 @@ export const reassignTask = async (req, res) => {
       });
     }
 
-    res.status(StatusCodes.OK).json({
+    await logActivity({
+      author: req.userId,
+      action: 'REASSIGN_TASK',
+      module: 'PRODUCTION',
+      details: `Admin reassigned assignment ${assignmentId} to new staff`,
+      targetId: assignmentId
+    }, req);
+
+    return res.status(StatusCodes.OK).json({
       status: 'success',
       message: result.message,
       data: result.data
     });
-    setImmediate(async () => {
-      await logActivity({
-        author: req.userId,
-        action: 'REASSIGN_TASK',
-        module: 'PRODUCTION',
-        details: `Admin reassigned assignment ${assignmentId} to new staff`,
-        targetId: assignmentId
-      }, req);
-    })
+
   } catch (error) {
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
@@ -226,21 +225,21 @@ export const updateAssignmentStatus = async (req, res) => {
       });
     }
 
-    res.status(StatusCodes.OK).json({
+    await logActivity({
+      author: req.userId,
+      action: 'UPDATE_ASSIGNMENT_STATUS',
+      module: 'PRODUCTION',
+      details: `Assignment ${id} updated to status ${status} with quantity ${completedQuantity}`,
+      targetId: id
+    }, req);
+
+    return res.status(StatusCodes.OK).json({
       status: 'success',
       message: result.message,
       data: result.data
     });
 
-    setImmediate(async () => {
-      await logActivity({
-        author: req.userId,
-        action: 'UPDATE_ASSIGNMENT_STATUS',
-        module: 'PRODUCTION',
-        details: `Assignment ${id} updated to status ${status} with quantity ${completedQuantity}`,
-        targetId: id
-      }, req);
-    })
+
   } catch (error) {
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
@@ -265,21 +264,19 @@ export const createStockInSlip = async (req, res) => {
       });
     }
 
-    res.status(StatusCodes.CREATED).json({
+    await logActivity({
+      author: req.userId,
+      action: 'CREATE_STOCK_IN_SLIP',
+      module: 'PRODUCTION',
+      details: `Production Manager created stock-in slip for order ${id}`,
+      targetId: id
+    }, req);
+
+    return res.status(StatusCodes.CREATED).json({
       status: 'success',
       message: result.message,
       data: result.data
     });
-
-    setImmediate(async () => {
-      await logActivity({
-        author: req.userId,
-        action: 'CREATE_STOCK_IN_SLIP',
-        module: 'PRODUCTION',
-        details: `Production Manager created stock-in slip for order ${id}`,
-        targetId: id
-      }, req);
-    })
   } catch (error) {
     console.log('[ProductionOrderController] createStockInSlip error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({

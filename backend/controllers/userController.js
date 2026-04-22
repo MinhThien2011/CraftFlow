@@ -134,21 +134,22 @@ export const createUser = async (req, res) => {
       value.avatar = req.imageUrl;
     }
     const newUser = await User.create(value)
-    res.status(StatusCodes.CREATED).json({
+
+    await logActivity({
+      author: req.userId,
+      action: 'CREATE_USER',
+      module: 'USER',
+      details: `Admin created user: ${newUser.username}`,
+      targetId: newUser._id,
+      metadata: { role: newUser.role?.roleName }
+    }, req);
+
+    return res.status(StatusCodes.CREATED).json({
       success: true,
       message: 'User created successfully.',
       data: { user: newUser }
     });
-    setImmediate(async () => {
-      await logActivity({
-        author: req.userId,
-        action: 'CREATE_USER',
-        module: 'USER',
-        details: `Admin created user: ${newUser.username}`,
-        targetId: newUser._id,
-        metadata: { role: newUser.role?.roleName }
-      }, req);
-    })
+
   } catch (error) {
     console.log('[UserController] createUser Error:', error);
     if (error.code === 11000) {
@@ -191,24 +192,22 @@ export const updateUser = async (req, res) => {
         data: null
       });
     }
-
-    res.status(StatusCodes.OK).json({
+    if (result.data) {
+      await logActivity({
+        author: req.userId,
+        action: 'UPDATE_USER',
+        module: 'USER',
+        details: `Updated user info for: ${result.data.username}`,
+        targetId: result.data._id,
+        metadata: value
+      }, req);
+    }
+    return res.status(StatusCodes.OK).json({
       success: true,
       message: 'User updated successfully.',
       data: { user: result.data }
     });
-    if (result.data) {
-      setImmediate(async () => {
-        await logActivity({
-          author: req.userId,
-          action: 'UPDATE_USER',
-          module: 'USER',
-          details: `Updated user info for: ${result.data.username}`,
-          targetId: result.data._id,
-          metadata: value
-        }, req);
-      })
-    }
+
   } catch (error) {
     console.log('[UserController] updateUser Error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
@@ -235,20 +234,21 @@ export const deleteUser = async (req, res) => {
         data: null
       });
     }
-    res.status(StatusCodes.OK).json({
+
+    await logActivity({
+      author: req.userId,
+      action: 'DELETE_USER',
+      module: 'USER',
+      details: `Admin deleted user ID: ${id}`,
+      targetId: id
+    }, req);
+
+    return res.status(StatusCodes.OK).json({
       success: true,
       message: 'User deleted successfully.',
       data: null
     });
-    setImmediate(async () => {
-      await logActivity({
-        author: req.userId,
-        action: 'DELETE_USER',
-        module: 'USER',
-        details: `Admin deleted user ID: ${id}`,
-        targetId: id
-      }, req);
-    })
+
   } catch (error) {
     console.log('[UserController] deleteUser Error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
@@ -289,21 +289,21 @@ export const updateUserStatus = async (req, res) => {
     }
     await user.save();
 
-    res.status(StatusCodes.OK).json({
+    await logActivity({
+      author: req.userId,
+      action: 'TOGGLE_USER_STATUS',
+      module: 'USER',
+      details: `Admin ${user.isActive ? 'enabled' : 'disabled'} user: ${user.username}`,
+      targetId: user._id,
+      metadata: { isActive: user.isActive, role: user.role?.roleName }
+    }, req);
+
+    return res.status(StatusCodes.OK).json({
       success: true,
       message: `User ${user.isActive ? 'enabled' : 'disabled'} successfully.`,
       data: { user }
     });
-    setImmediate(async () => {
-      await logActivity({
-        author: req.userId,
-        action: 'TOGGLE_USER_STATUS',
-        module: 'USER',
-        details: `Admin ${user.isActive ? 'enabled' : 'disabled'} user: ${user.username}`,
-        targetId: user._id,
-        metadata: { isActive: user.isActive, role: user.role?.roleName }
-      }, req);
-    })
+
   } catch (error) {
     console.log('[UserController] updateUserStatus Error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({

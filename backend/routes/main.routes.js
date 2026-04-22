@@ -14,10 +14,10 @@ import purchaseOrderRouter from "./purchaseOrder.routes.js";
 
 const mainRouter = Router();
 
-mainRouter.get('/', (req, res) => {
+mainRouter.get('/health', (req, res) => {
     res.status(200).json({
         success: true,
-        message: "Welcome to the Craft Flow API",
+        message: "Welcome to the Crab Flow API",
     })
 })
 mainRouter.use('/auth', authRouter);

@@ -6,6 +6,13 @@ import { ROLES } from '../utils/constants.js';
 
 const productionRouter = Router();
 
+productionRouter.get('/health', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Welcome to the Production API of Crafb Flow",
+  })
+})
+
 productionRouter.use(jwtAuth);
 
 // Both Admin and Production Manager can view suggestions

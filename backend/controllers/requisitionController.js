@@ -1,5 +1,6 @@
 import { StatusCodes } from 'http-status-codes';
 import * as requisitionService from '../services/materialRequisitionService.js';
+import { logActivity } from '../utils/logger.js';
 
 export const requestMaterials = async (req, res) => {
   try {
@@ -13,6 +14,14 @@ export const requestMaterials = async (req, res) => {
         data: null
       });
     }
+
+    await logActivity({
+      author: req.userId,
+      action: 'REQUEST_MATERIALS',
+      module: 'MATERIAL_REQUISITION',
+      details: `Requested materials for production order: ${productionOrderId}`,
+      targetId: result.data._id
+    }, req);
 
     return res.status(StatusCodes.CREATED).json({
       status: 'success',
@@ -42,6 +51,14 @@ export const updateStatus = async (req, res) => {
         data: null
       });
     }
+
+    await logActivity({
+      author: req.userId,
+      action: 'UPDATE_REQUISITION_STATUS',
+      module: 'MATERIAL_REQUISITION',
+      details: `Updated status to ${status} for requisition: ${id}`,
+      targetId: id
+    }, req);
 
     return res.status(StatusCodes.OK).json({
       status: 'success',

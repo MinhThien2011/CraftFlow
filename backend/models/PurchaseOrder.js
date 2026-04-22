@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { PURCHASE_ORDER_STATUS } from "../utils/constants";
+import { PURCHASE_ORDER_STATUS } from "../utils/constants.js";
 
 const PurchaseOrderSchema = new mongoose.Schema({
     creator: {
@@ -23,7 +23,7 @@ const PurchaseOrderSchema = new mongoose.Schema({
     purchaseOrderItems: {
         type: [
             {
-                materialId: {
+                material: {
                     type: mongoose.Schema.Types.ObjectId,
                     ref: 'Material',
                     required: true,

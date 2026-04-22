@@ -7,6 +7,13 @@ import { imageUploader } from '../middleware/cloudinary_uploader.js';
 
 const productRouter = Router();
 
+productRouter.get('/health', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Welcome to the Product API of Crafb Flow",
+  })
+})
+
 // --- Public Routes (Optional, adjust as needed) ---
 // @route   GET /api/products
 // @desc    Get all products with search, filter, sort, and pagination

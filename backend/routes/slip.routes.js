@@ -6,6 +6,13 @@ import { ROLES } from '../utils/constants.js';
 
 const slipRouter = Router();
 
+slipRouter.get('/health', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Welcome to the Import Export Slip API of Crafb Flow",
+  })
+})
+
 // --- Private Routes ---
 slipRouter.use(jwtAuth);
 

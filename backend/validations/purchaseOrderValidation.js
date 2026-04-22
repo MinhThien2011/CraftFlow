@@ -5,7 +5,7 @@ const purchaseOrderSchema = joi.object({
     status: joi.string().valid(...Object.values(PURCHASE_ORDER_STATUS.PENDING)).optional(),
     orderReason: joi.string().optional(),
     purchaseOrderItems: joi.array().items(joi.object({
-        materialId: joi.string().required(),
+        material: joi.string().required(),
         quantity: joi.number().min(0).required(),
     })).required(),
 });

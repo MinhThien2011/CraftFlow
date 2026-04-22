@@ -18,7 +18,7 @@ export const login = async (req, res) => {
         },
       });
     }
-
+    console.log(value);
     const { identifier, password } = value;
 
     const user = await User.findOne({
@@ -51,26 +51,24 @@ export const login = async (req, res) => {
         details: `Banned user attempted to login: ${user.username}`
       }, req);
 
-      res.status(StatusCodes.FORBIDDEN).json({
+      return res.status(StatusCodes.FORBIDDEN).json({
         data: {
           message: 'User account has been banned. Please contact admin to activate it.',
         },
       });
     }
 
-    const isPasswordValid = User.comparePassword(password, user.password);
+    const isPasswordValid = await User.comparePassword(password, user.password);
 
     if (!isPasswordValid) {
-      setImmediate(async () => {
-        await logActivity({
-          author: user._id,
-          action: 'LOGIN_FAILED',
-          module: 'AUTH',
-          details: `Incorrect password for user: ${user.username}`
-        }, req);
-      })
+      await logActivity({
+        author: user._id,
+        action: 'LOGIN_FAILED',
+        module: 'AUTH',
+        details: `Incorrect password for user: ${user.username}`
+      }, req);
 
-      res.status(StatusCodes.UNAUTHORIZED).json({
+      return res.status(StatusCodes.UNAUTHORIZED).json({
         data: {
           message: 'Incorrect username or password.',
         },
@@ -90,7 +88,14 @@ export const login = async (req, res) => {
       isActive: user.isActive,
     };
 
-    res.status(StatusCodes.OK).json({
+    await logActivity({
+      author: user._id,
+      action: 'LOGIN_SUCCESS',
+      module: 'AUTH',
+      details: `User logged in: ${user.username}`
+    }, req);
+
+    return res.status(StatusCodes.OK).json({
       success: true,
       message: 'Login successful.',
       data: {
@@ -98,14 +103,7 @@ export const login = async (req, res) => {
         accessToken,
       },
     });
-    setImmediate(async () => {
-      await logActivity({
-        author: user._id,
-        action: 'LOGIN_SUCCESS',
-        module: 'AUTH',
-        details: `User logged in: ${user.username}`
-      }, req);
-    })
+
   } catch (error) {
     console.log('[AuthController] login error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
@@ -130,7 +128,7 @@ export const refreshPassword = async (req, res) => {
     const newPassword = value.newPassword;
     const user = await User.findOne({ $or: [{ username: value.identifier.trim() }, { email: value.identifier.trim() }] }).select('-password');
     if (!user || !user.isActive) {
-      res.status(StatusCodes.NOT_FOUND).json({
+      return res.status(StatusCodes.NOT_FOUND).json({
         success: false,
         message: 'User not found.',
         data: null
@@ -138,19 +136,18 @@ export const refreshPassword = async (req, res) => {
     }
     user.password = newPassword;
     await user.save();
-    res.status(StatusCodes.OK).json({
+    await logActivity({
+      author: user._id,
+      action: 'PASSWORD_REFRESHED',
+      module: 'AUTH',
+      details: `Password refreshed for user: ${user.username}`
+    }, req, true);
+    return res.status(StatusCodes.OK).json({
       success: true,
       message: 'Password refreshed successfully.',
       data: { user },
     });
-    setImmediate(async () => {
-      await logActivity({
-        author: user._id,
-        action: 'PASSWORD_REFRESHED',
-        module: 'AUTH',
-        details: `Password refreshed for user: ${user.username}`
-      }, req);
-    })
+
   } catch (error) {
     console.log('[AuthController] refreshPassword error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
@@ -183,14 +180,12 @@ export const changePassword = async (req, res) => {
     }
     user.password = newPassword;
     await user.save();
-    setImmediate(async () => {
-      await logActivity({
-        author: user._id,
-        action: 'PASSWORD_CHANGED',
-        module: 'AUTH',
-        details: `User changed their own password: ${user.username}`
-      }, req);
-    })
+    await logActivity({
+      author: user._id,
+      action: 'PASSWORD_CHANGED',
+      module: 'AUTH',
+      details: `User changed their own password: ${user.username}`
+    }, req, true);
 
     return res.status(StatusCodes.OK).json({
       success: true,
@@ -225,16 +220,14 @@ export const logout = async (req, res) => {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
     });
-    setImmediate(async () => {
-      await logActivity({
-        author: req.userId,
-        action: 'LOGOUT',
-        module: 'AUTH',
-        details: `User logged out: ${req.userId} at ${new Date().toLocaleString()}`,
-      }, req);
-    })
+    await logActivity({
+      author: req.userId,
+      action: 'LOGOUT',
+      module: 'AUTH',
+      details: `User logged out: ${req.userId} at ${new Date().toLocaleString()}`,
+    }, req, true);
 
-    res.status(StatusCodes.OK).json({
+    return res.status(StatusCodes.OK).json({
       success: true,
       message: 'Logout successful.',
       data: null

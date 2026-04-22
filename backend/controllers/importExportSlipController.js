@@ -13,16 +13,15 @@ export const createImportExportSlip = async (req, res) => {
 
         const slip = await importExportSlipService.createSlipService(value, userId);
         res.status(201).json(slip);
-        setImmediate(async () => {
-            await logActivity({
-                author: userId,
-                action: 'CREATE_IMPORT_EXPORT_SLIP',
-                module: 'IMPORT_EXPORT_SLIP',
-                details: `User ${userId} created import/export slip: ${slip._id}`,
-                targetId: slip._id,
-                metadata: { status: slip.status }
-            }, req);
-        })
+
+        await logActivity({
+            author: userId,
+            action: 'CREATE_IMPORT_EXPORT_SLIP',
+            module: 'IMPORT_EXPORT_SLIP',
+            details: `User ${userId} created import/export slip: ${slip._id}`,
+            targetId: slip._id,
+            metadata: { status: slip.status }
+        }, req, true);
     } catch (error) {
         res.status(400).json({ error: 'Failed to create import/export slip: ' + error.message });
     }
@@ -50,21 +49,20 @@ export const updateSlipStatus = async (req, res) => {
 
         const { slip, warnings } = await importExportSlipService.updateSlipStatusService(id, status, validatedData, userId);
 
+        await logActivity({
+            author: userId,
+            action: 'UPDATE_IMPORT_EXPORT_SLIP_STATUS',
+            module: 'IMPORT_EXPORT_SLIP',
+            details: `User ${userId} updated slip ${id} status to ${status}`,
+            targetId: id,
+            metadata: { status, warnings: warnings.length > 0 ? warnings : undefined }
+        }, req, true);
+
         res.status(200).json({
             success: true,
             data: slip,
             warnings: warnings.length > 0 ? warnings : undefined
         });
-        setImmediate(async () => {
-            await logActivity({
-                author: userId,
-                action: 'UPDATE_SLIP_STATUS',
-                module: 'IMPORT_EXPORT_SLIP',
-                details: `User ${userId} updated slip status to ${status}`,
-                targetId: slip._id,
-                metadata: { status }
-            }, req);
-        })
     } catch (error) {
         res.status(400).json({ error: 'Failed to update slip status: ' + error.message });
     }

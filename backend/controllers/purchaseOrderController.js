@@ -13,17 +13,18 @@ export const createPurchaseOrder = async (req, res) => {
         if (!purchaseOrder.success) {
             return res.status(400).json(purchaseOrder);
         }
-        res.status(201).json(purchaseOrder);
-        setImmediate(async () => {
-            await logActivity({
-                author: req.userId,
-                action: 'CREATE_PURCHASE_ORDER',
-                module: 'PURCHASE_ORDER',
-                details: `Production manager created purchase order: ${purchaseOrder._id}`,
-                targetId: purchaseOrder._id,
-                metadata: { status: purchaseOrder.status }
-            }, req);
-        })
+
+        await logActivity({
+            author: req.userId,
+            action: 'CREATE_PURCHASE_ORDER',
+            module: 'PURCHASE_ORDER',
+            details: `Production manager created purchase order: ${purchaseOrder._id}`,
+            targetId: purchaseOrder._id,
+            metadata: { status: purchaseOrder.status }
+        }, req, true);
+
+        return res.status(201).json(purchaseOrder);
+
     }
     catch (error) {
         console.log('[createPurchaseOrder] error:', error);
@@ -42,17 +43,18 @@ export const updatePurchaseOrderStatus = async (req, res) => {
         if (!purchaseOrder.success) {
             return res.status(404).json(purchaseOrder);
         }
-        res.status(200).json(purchaseOrder);
-        setImmediate(async () => {
-            await logActivity({
-                author: req.userId,
-                action: 'UPDATE_PURCHASE_ORDER_STATUS',
-                module: 'PURCHASE_ORDER',
-                details: `Admin updated purchase order status: ${purchaseOrder._id}`,
-                targetId: purchaseOrder._id,
-                metadata: { status: purchaseOrder.status, adminNotes: purchaseOrder.adminNotes }
-            }, req);
-        })
+
+        await logActivity({
+            author: req.userId,
+            action: 'UPDATE_PURCHASE_ORDER_STATUS',
+            module: 'PURCHASE_ORDER',
+            details: `Admin updated purchase order status: ${purchaseOrder._id}`,
+            targetId: purchaseOrder._id,
+            metadata: { status: purchaseOrder.status, adminNotes: purchaseOrder.adminNotes }
+        }, req);
+
+        return res.status(200).json(purchaseOrder);
+
     }
     catch (error) {
         console.log('[updatePurchaseOrderStatus] error:', error);
@@ -71,17 +73,17 @@ export const updatePurchaseOrder = async (req, res) => {
         if (!purchaseOrder.success) {
             return res.status(404).json(purchaseOrder);
         }
+
+        await logActivity({
+            author: req.userId,
+            action: 'UPDATE_PURCHASE_ORDER',
+            module: 'PURCHASE_ORDER',
+            details: `Production manager updated purchase order: ${purchaseOrder._id}`,
+            targetId: purchaseOrder._id,
+            metadata: { status: purchaseOrder.status }
+        }, req);
+
         res.status(200).json(purchaseOrder);
-        setImmediate(async () => {
-            await logActivity({
-                author: req.userId,
-                action: 'UPDATE_PURCHASE_ORDER',
-                module: 'PURCHASE_ORDER',
-                details: `Production manager updated purchase order: ${purchaseOrder._id}`,
-                targetId: purchaseOrder._id,
-                metadata: { status: purchaseOrder.status }
-            }, req);
-        })
     }
     catch (error) {
         console.log('[updatePurchaseOrder] error:', error);
@@ -96,17 +98,18 @@ export const deletePurchaseOrder = async (req, res) => {
         if (!purchaseOrder.success) {
             return res.status(404).json(purchaseOrder);
         }
-        res.status(200).json(purchaseOrder);
-        setImmediate(async () => {
-            await logActivity({
-                author: req.userId,
-                action: 'DELETE_PURCHASE_ORDER',
-                module: 'PURCHASE_ORDER',
-                details: `Purchase order deleted: ${purchaseOrder._id}`,
-                targetId: purchaseOrder._id,
-                metadata: { status: purchaseOrder.status }
-            }, req);
-        })
+
+        await logActivity({
+            author: req.userId,
+            action: 'DELETE_PURCHASE_ORDER',
+            module: 'PURCHASE_ORDER',
+            details: `Purchase order deleted: ${purchaseOrder._id}`,
+            targetId: purchaseOrder._id,
+            metadata: { status: purchaseOrder.status }
+        }, req);
+
+        return res.status(200).json(purchaseOrder);
+
     }
     catch (error) {
         console.log('[deletePurchaseOrder] error:', error);

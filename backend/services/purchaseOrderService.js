@@ -1,4 +1,4 @@
-import PurchaseOrder from "../models/PurchaseOrder";
+import PurchaseOrder from "../models/PurchaseOrder.js";
 
 export const createPurchaseOrderService = async (data, userId) => {
     try {
@@ -61,7 +61,6 @@ export const getAllPurchaseOrdersByIdService = async (id) => {
     try {
         const purchaseOrder = await PurchaseOrder.findById(id)
             .populate('creator', 'username email')
-            .populate('purchaseOrderItems.productId', 'name price barcode code')
             .populate('purchaseOrderItems.materialId', 'name price barcode code');
         if (!purchaseOrder) {
             return { success: false, message: 'Purchase order not found', data: null };
@@ -91,8 +90,8 @@ export const getAllPurchaseOrdersService = async (query = {}) => {
             .skip(skip)
             .limit(limit)
             .populate('creator', 'username email')
-            .populate('purchaseOrderItems.productId', 'name price barcode code')
-            .populate('purchaseOrderItems.materialId', 'name price barcode code');
+            // .populate('purchaseOrderItems.productId', 'name price barcode code')
+            .populate('purchaseOrderItems.material', 'name price barcode code');
         if (!purchaseOrders || purchaseOrders.length === 0) {
             return { success: false, message: 'Purchase orders not found', data: null };
         }

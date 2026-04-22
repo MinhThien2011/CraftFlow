@@ -6,6 +6,12 @@ import { jwtAuth } from "../middleware/jwtAuth.js";
 
 const purchaseOrderRouter = Router();
 
+purchaseOrderRouter.get('/health', (req, res) => {
+    res.status(200).json({
+        success: true,
+        message: "Welcome to the Purchase Order API of Crafb Flow",
+    })
+})
 purchaseOrderRouter.use(jwtAuth);
 
 purchaseOrderRouter.post('/', rolePermission([ROLES.PRODUCTION_MANAGER]), createPurchaseOrder);
