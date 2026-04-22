@@ -91,7 +91,7 @@ export const getOverviewStats = async () => {
             }
         };
     } catch (error) {
-        console.error('[DashboardService] getOverviewStats error:', error);
+        console.log('[DashboardService] getOverviewStats error:', error);
         return { success: false, message: error.message };
     }
 };
@@ -203,7 +203,7 @@ export const getChartData = async (days = 7) => {
             }
         };
     } catch (error) {
-        console.error('[DashboardService] getChartData error:', error);
+        console.log('[DashboardService] getChartData error:', error);
         return { success: false, message: error.message };
     }
 };
@@ -248,7 +248,7 @@ export const getTopPerformanceStats = async () => {
             }
         };
     } catch (error) {
-        console.error('[DashboardService] getTopPerformanceStats error:', error);
+        console.log('[DashboardService] getTopPerformanceStats error:', error);
         return { success: false, message: error.message };
     }
 };

@@ -1,4 +1,6 @@
 import BOM from './BOM.js';
+import InventoryImportExportSlip from './InventoryImportExportSlip.js';
+import InventoryShrinkageReport from './InventoryShrinkageReport.js';
 import InventoryTransaction from './InventoryTransaction.js';
 import Material from './Material.js';
 import MaterialRequisition from './MaterialRequisition.js';
@@ -10,6 +12,8 @@ import User from './User.js';
 
 export const models_list = {
     BOM,
+    InventoryImportExportSlip,
+    InventoryShrinkageReport,
     InventoryTransaction,
     Material,
     MaterialRequisition,

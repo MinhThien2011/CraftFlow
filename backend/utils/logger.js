@@ -27,6 +27,6 @@ export const logActivity = async ({ author, action, module, details, targetId, m
 
     await SystemLog.create(logData);
   } catch (error) {
-    console.error('[Logger] Failed to save system log:', error.message);
+    console.log('[Logger] Failed to save system log:', error.message);
   }
 };

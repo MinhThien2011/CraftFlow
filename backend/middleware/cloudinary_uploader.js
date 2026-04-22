@@ -107,7 +107,7 @@ export const imageUploader = (folder = 'avatars') => {
                 }
                 next();
             } catch (error) {
-                console.error('[Cloudinary] Upload Error:', error);
+                console.log('[Cloudinary] Upload Error:', error);
                 return res.status(500).json({
                     success: false,
                     message: 'Failed to upload image.',

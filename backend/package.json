@@ -5,7 +5,7 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "test": "node --exec node --env-file=.env --watch --trace-deprecation index.js",
+    "test": "node --env-file=.env --watch --trace-deprecation index.js",
     "start": "node --env-file=.env --watch index.js",
     "dev": "node --watch index.js"
   },

@@ -12,7 +12,7 @@ export const getAllShelves = async (req, res) => {
     const result = await shelfService.getAllShelves(req.query);
     return handleServiceResponse(res, result);
   } catch (error) {
-    console.error('[ShelfController] getAllShelves error:', error);
+    console.log('[ShelfController] getAllShelves error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
       message: 'Internal server error while retrieving shelves.',
@@ -29,7 +29,7 @@ export const getShelfById = async (req, res) => {
     const result = await shelfService.getShelfById(req.params.id);
     return handleServiceResponse(res, result);
   } catch (error) {
-    console.error('[ShelfController] getShelfById error:', error);
+    console.log('[ShelfController] getShelfById error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
       message: 'Internal server error while retrieving shelf details.',
@@ -66,7 +66,7 @@ export const createShelf = async (req, res) => {
 
     return handleServiceResponse(res, result, StatusCodes.CREATED);
   } catch (error) {
-    console.error('[ShelfController] createShelf error:', error);
+    console.log('[ShelfController] createShelf error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
       message: 'Internal server error while creating shelf.',
@@ -103,7 +103,7 @@ export const updateShelf = async (req, res) => {
 
     return handleServiceResponse(res, result);
   } catch (error) {
-    console.error('[ShelfController] updateShelf error:', error);
+    console.log('[ShelfController] updateShelf error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
       message: 'Internal server error while updating shelf.',
@@ -131,7 +131,7 @@ export const deleteShelf = async (req, res) => {
 
     return handleServiceResponse(res, result);
   } catch (error) {
-    console.error('[ShelfController] deleteShelf error:', error);
+    console.log('[ShelfController] deleteShelf error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
       message: 'Internal server error while deleting shelf.',

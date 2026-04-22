@@ -76,7 +76,7 @@ export const getAllShelves = async (query = {}) => {
       data: detailedShelves
     };
   } catch (error) {
-    console.error('[ShelfService] getAllShelves error:', error);
+    console.log('[ShelfService] getAllShelves error:', error);
     return { status: 'error', message: 'Internal server error while retrieving shelves.', data: null };
   }
 };
@@ -117,7 +117,7 @@ export const getShelfById = async (id) => {
       }
     };
   } catch (error) {
-    console.error('[ShelfService] getShelfById error:', error);
+    console.log('[ShelfService] getShelfById error:', error);
     return { status: 'error', message: error.message, data: null };
   }
 };
@@ -140,7 +140,7 @@ export const createShelf = async (shelfData) => {
       data: newShelf
     };
   } catch (error) {
-    console.error('[ShelfService] createShelf error:', error);
+    console.log('[ShelfService] createShelf error:', error);
     return { status: 'error', message: 'Failed to create shelf.', data: null };
   }
 };
@@ -163,7 +163,7 @@ export const updateShelf = async (id, updateData) => {
       data: shelf
     };
   } catch (error) {
-    console.error('[ShelfService] updateShelf error:', error);
+    console.log('[ShelfService] updateShelf error:', error);
     return { status: 'error', message: 'Failed to update shelf.', data: null };
   }
 };
@@ -200,7 +200,7 @@ export const deleteShelf = async (id) => {
       data: null
     };
   } catch (error) {
-    console.error('[ShelfService] deleteShelf error:', error);
+    console.log('[ShelfService] deleteShelf error:', error);
     return { status: 'error', message: error.message, data: null };
   }
 };

@@ -15,6 +15,6 @@ authRouter.post('/login', login);
 authRouter.get('/user', jwtAuth, getUserInfo);
 authRouter.post('/refresh-password', refreshPassword);
 authRouter.post('/change-password', jwtAuth, changePassword);
-authRouter.post('/logout', logout);
+authRouter.post('/logout', jwtAuth, logout);
 
 export default authRouter;

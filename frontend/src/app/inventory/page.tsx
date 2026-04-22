@@ -104,7 +104,7 @@ export default function InventoryPage() {
         setOverview(response.data)
       }
     } catch (error) {
-      console.error("Failed to fetch inventory overview", error)
+      console.log("Failed to fetch inventory overview", error)
     }
   }, [])
 

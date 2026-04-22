@@ -17,10 +17,10 @@ export const getAllProducts = async (req, res) => {
     const result = await productService.getProductsByQuery(req.query);
     return handleServiceResponse(res, result);
   } catch (error) {
-    console.error('[ProductController] getAllProducts error:', error);
+    console.log('[ProductController] getAllProducts error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
-      message: 'Internal server error while fetching products.',
+      message: 'Internal server error while fetching products: ' + error.message,
       data: null
     });
   }
@@ -34,7 +34,7 @@ export const getProductById = async (req, res) => {
     const result = await productService.getProductById(req.params.id);
     return handleServiceResponse(res, result);
   } catch (error) {
-    console.error('[ProductController] getProductById error:', error);
+    console.log('[ProductController] getProductById error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
       message: 'Internal server error while fetching product.',
@@ -80,7 +80,7 @@ export const createProduct = async (req, res) => {
 
     return handleServiceResponse(res, result, StatusCodes.CREATED);
   } catch (error) {
-    console.error('[ProductController] createProduct error:', error);
+    console.log('[ProductController] createProduct error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
       message: 'Internal server error while creating product.',
@@ -122,7 +122,7 @@ export const updateProduct = async (req, res) => {
 
     return handleServiceResponse(res, result);
   } catch (error) {
-    console.error('[ProductController] updateProduct error:', error);
+    console.log('[ProductController] updateProduct error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
       message: 'Internal server error while updating product.',
@@ -150,7 +150,7 @@ export const deleteProduct = async (req, res) => {
 
     return handleServiceResponse(res, result);
   } catch (error) {
-    console.error('[ProductController] deleteProduct error:', error);
+    console.log('[ProductController] deleteProduct error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
       message: 'Internal server error while deleting product.',
@@ -196,7 +196,7 @@ export const incomingProduct = async (req, res) => {
 
     return handleServiceResponse(res, result);
   } catch (error) {
-    console.error('[ProductController] incomingProduct error:', error);
+    console.log('[ProductController] incomingProduct error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
       message: 'Internal server error while recording incoming product.',
@@ -242,7 +242,7 @@ export const outgoingProduct = async (req, res) => {
 
     return handleServiceResponse(res, result);
   } catch (error) {
-    console.error('[ProductController] outgoingProduct error:', error);
+    console.log('[ProductController] outgoingProduct error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
       message: 'Internal server error while recording outgoing product.',
@@ -271,7 +271,7 @@ export const getProductHistory = async (req, res) => {
 
     return handleServiceResponse(res, result);
   } catch (error) {
-    console.error('[ProductController] getProductHistory error:', error);
+    console.log('[ProductController] getProductHistory error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
       message: 'Internal server error while fetching product history.',
@@ -294,7 +294,7 @@ export const getLowStockProducts = async (req, res) => {
 
     return handleServiceResponse(res, result);
   } catch (error) {
-    console.error('[ProductController] getLowStockProducts error:', error);
+    console.log('[ProductController] getLowStockProducts error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
       message: 'Internal server error while fetching low stock products.',

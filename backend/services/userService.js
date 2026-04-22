@@ -9,7 +9,7 @@ export const deleteUser = async (userId) => {
         if (!user) return { success: false, message: 'User not found.', data: null };
         return { success: true, message: 'User deleted successfully.', data: null };
     } catch (error) {
-        console.error('[userService] deleteUser error:', error);
+        console.log('[userService] deleteUser error:', error);
         return { success: false, message: error.message, data: null };
     }
 }
@@ -32,7 +32,7 @@ export const updateUser = async (userId, updateData) => {
         if (!user) return { success: false, message: 'User not found.', data: null };
         return { success: true, message: 'User updated successfully.', data: user };
     } catch (error) {
-        console.error('[userService] updateUser error:', error);
+        console.log('[userService] updateUser error:', error);
         return { success: false, message: error.message, data: null };
     }
 }
@@ -84,7 +84,7 @@ export const getUserByQuery = async (query, page = 1, limit = 10, search = '') =
             }
         };
     } catch (error) {
-        console.error('[userService] getUserByQuery error:', error);
+        console.log('[userService] getUserByQuery error:', error);
         return { success: false, message: error.message, data: null };
     }
 }
@@ -101,7 +101,7 @@ export const getUserById = async (userId) => {
         user.updatedAt = user.updatedAt?.toLocaleString();
         return { success: true, message: 'User retrieved successfully.', data: user };
     } catch (error) {
-        console.error('[userService] getUserById error:', error);
+        console.log('[userService] getUserById error:', error);
         return { success: false, message: error.message, data: null };
     }
 }

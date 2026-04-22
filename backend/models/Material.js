@@ -4,6 +4,7 @@ import { determineStockLevel } from '../utils/inventoryHelpers.js';
 const materialSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   code: { type: String, required: true, unique: true, uppercase: true },
+  barcode: { type: String, unique: true, sparse: true, trim: true }, // For QR/Barcode scanning
   unit: { type: String, required: true },
   color: { type: String, required: true },
   price: { type: Number, required: true, min: 0, default: 0.0 },
@@ -75,6 +76,7 @@ materialSchema.post('findOneAndUpdate', async function (doc) {
     const updatedDoc = await this.model.findById(doc._id);
     if (updatedDoc) {
       await mongoose.model('Product').syncMaterialChanges(updatedDoc._id, {
+        barcode: updatedDoc.barcode,
         name: updatedDoc.name,
         code: updatedDoc.code,
         price: updatedDoc.price,

@@ -81,8 +81,8 @@ export const getMaterialByIdOrCode = async ({ id, code }) => {
       data: standardlizeResponseDataHelper([material])[0]
     };
   } catch (error) {
-    console.error('[materialService] getMaterialByIdOrCode error:', error);
-    return { success: false, message: error.message, data: null };
+    console.log('[materialService] getMaterialByIdOrCode error:', error);
+    return { success: false, message: 'Failed to retrieve material: ' + error.message, data: null };
   }
 };
 
@@ -134,8 +134,8 @@ export const adjustMaterialStock = async (materialId, { type, quantity, note, se
     };
   } catch (error) {
     await session.abortTransaction();
-    console.error('[materialService] adjustMaterialStock error:', error);
-    return { success: false, message: error.message, data: null };
+    console.log('[materialService] adjustMaterialStock error:', error);
+    return { success: false, message: 'Failed to adjust stock: ' + error.message, data: null };
   } finally {
     session.endSession();
   }
@@ -181,8 +181,8 @@ export const getMaterialHistoryService = async ({ materialId, type, direction, p
       }
     };
   } catch (error) {
-    console.error('[materialService] getMaterialHistoryService error:', error);
-    return { success: false, message: error.message, data: null };
+    console.log('[materialService] getMaterialHistoryService error:', error);
+    return { success: false, message: 'Failed to retrieve material history: ' + error.message, data: null };
   }
 };
 
@@ -234,7 +234,7 @@ export const getLowStockMaterialsService = async ({ search = '', page = 1, limit
       }
     };
   } catch (error) {
-    console.error('[materialService] getLowStockMaterialsService error:', error);
+    console.log('[materialService] getLowStockMaterialsService error:', error);
     return { success: false, message: error.message, data: null };
   }
 };

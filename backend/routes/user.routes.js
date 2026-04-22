@@ -5,7 +5,7 @@ import {
   createUser,
   updateUser,
   deleteUser,
-  toggleUserStatus
+  updateUserStatus
 } from '../controllers/userController.js';
 import { jwtAuth } from '../middleware/jwtAuth.js';
 import { rolePermission } from '../middleware/rolePermission.js';
@@ -26,7 +26,7 @@ userRouter.use(rolePermission([ROLES.ADMIN]));
 userRouter.get('/', getAllUsers);
 userRouter.get('/:id', getUserById);
 userRouter.post('/', imageUploader('avatars'), createUser);
-userRouter.patch('/:id/status', toggleUserStatus);
+userRouter.patch('/:id/status', updateUserStatus);
 userRouter.delete('/:id', deleteUser);
 
 export default userRouter;

@@ -27,6 +27,11 @@ const assignmentSchema = new mongoose.Schema({
   reassignedAt: Date,
   startedAt: Date,
   finishedAt: Date,
+  reportedMilestones: {
+    type: [Number],
+    default: []
+  },
+  lastReportedAt: Date,
 }, {
   timestamps: true,
   toJSON: {

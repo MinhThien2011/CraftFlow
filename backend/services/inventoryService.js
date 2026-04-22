@@ -55,7 +55,7 @@ export const getInventoryOverview = async () => {
       }
     };
   } catch (error) {
-    console.error('[InventoryService] getInventoryOverview error:', error);
+    console.log('[InventoryService] getInventoryOverview error:', error);
     return { success: false, message: error.message, data: null };
   }
 };

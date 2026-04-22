@@ -3,9 +3,9 @@ import * as requisitionService from '../services/materialRequisitionService.js';
 
 export const requestMaterials = async (req, res) => {
   try {
-    const { assignmentId, items } = req.body;
-    const result = await requisitionService.requestMaterials(assignmentId, req.userId, items);
-    
+    const { productionOrderId, items } = req.body;
+    const result = await requisitionService.requestMaterials(productionOrderId, req.userId, items);
+
     if (result.status === 'error') {
       return res.status(StatusCodes.BAD_REQUEST).json({
         status: 'error',
@@ -20,7 +20,7 @@ export const requestMaterials = async (req, res) => {
       data: result.data
     });
   } catch (error) {
-    console.error("Error submitting material requisition:", error);
+    console.log("Error submitting material requisition:", error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
       message: 'Failed to submit material requisition.',
@@ -32,9 +32,9 @@ export const requestMaterials = async (req, res) => {
 export const updateStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, notes } = req.body;
-    const result = await requisitionService.updateRequisitionStatus(id, req.userId, status, notes);
-    
+    const { status, notes, evidenceImage } = req.body;
+    const result = await requisitionService.updateRequisitionStatus(id, req.userId, status, { notes, evidenceImage });
+
     if (result.status === 'error') {
       return res.status(StatusCodes.BAD_REQUEST).json({
         status: 'error',
@@ -49,7 +49,7 @@ export const updateStatus = async (req, res) => {
       data: result.data
     });
   } catch (error) {
-    console.error("Error updating requisition status:", error);
+    console.log("Error updating requisition status:", error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
       message: 'Failed to update requisition status.',

@@ -1,20 +1,17 @@
 import MaterialRequisition from '../models/MaterialRequisition.js';
 import Material from '../models/Material.js';
-import ProductionOrderAssignment from '../models/ProductionOrderAssignment.js';
+import ProductionOrder from '../models/ProductionOrder.js';
 import InventoryTransaction from '../models/InventoryTransaction.js';
-import { REQUISITION_STATUS, TRANSACTION_TYPE, REQUISITION_TIMEOUT_MINUTES } from '../utils/constants.js';
+import { REQUISITION_STATUS, TRANSACTION_TYPE } from '../utils/constants.js';
 import mongoose from 'mongoose';
 
 /**
- * Staff requests materials for an assignment.
+ * Production Manager requests materials for a production order.
  */
-export const requestMaterials = async (assignmentId, staffId, items) => {
+export const requestMaterials = async (productionOrderId, managerId, items) => {
   try {
-    const assignment = await ProductionOrderAssignment.findById(assignmentId);
-    if (!assignment) throw new Error('Assignment not found.');
-    if (assignment.staff.toString() !== staffId.toString()) {
-      throw new Error('You are not authorized to request materials for this assignment.');
-    }
+    const order = await ProductionOrder.findById(productionOrderId);
+    if (!order) throw new Error('Production order not found.');
 
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const count = await MaterialRequisition.countDocuments({
@@ -24,8 +21,8 @@ export const requestMaterials = async (assignmentId, staffId, items) => {
 
     const newRequisition = new MaterialRequisition({
       requisitionCode,
-      assignment: assignmentId,
-      staff: staffId,
+      productionOrder: productionOrderId,
+      createdBy: managerId,
       items: items.map(item => ({
         material: item.materialId,
         requestedQuantity: item.quantity
@@ -40,7 +37,7 @@ export const requestMaterials = async (assignmentId, staffId, items) => {
       data: { requisition: newRequisition }
     };
   } catch (error) {
-    console.error('[MaterialRequisitionService] requestMaterials error:', error);
+    console.log('[MaterialRequisitionService] requestMaterials error:', error);
     return { status: 'error', message: error.message, data: null };
   }
 };
@@ -48,7 +45,7 @@ export const requestMaterials = async (assignmentId, staffId, items) => {
 /**
  * Warehouse Manager updates requisition status.
  */
-export const updateRequisitionStatus = async (requisitionId, managerId, status, notes = '') => {
+export const updateRequisitionStatus = async (requisitionId, managerId, status, updateData = {}) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
@@ -57,19 +54,16 @@ export const updateRequisitionStatus = async (requisitionId, managerId, status, 
 
     requisition.status = status;
     requisition.khoManager = managerId;
-    if (notes) requisition.notes = notes;
+    if (updateData.notes) requisition.notes = updateData.notes;
+    if (updateData.evidenceImage) requisition.evidenceImage = updateData.evidenceImage;
 
     if (status === REQUISITION_STATUS.PREPARED) {
       requisition.preparedAt = new Date();
-      // Set timeout
-      const timeoutDate = new Date();
-      timeoutDate.setMinutes(timeoutDate.getMinutes() + REQUISITION_TIMEOUT_MINUTES);
-      requisition.timeoutAt = timeoutDate;
     }
 
     if (status === REQUISITION_STATUS.COMPLETED) {
       requisition.completedAt = new Date();
-      
+
       // Deduct stock and record transactions
       for (const item of requisition.items) {
         const material = await Material.findById(item.material._id);
@@ -91,7 +85,7 @@ export const updateRequisitionStatus = async (requisitionId, managerId, status, 
           beforeStock,
           afterStock,
           requisition: requisition._id,
-          performedBy: requisition.staff, // Staff who received
+          performedBy: requisition.createdBy, // PM who requested
           khoManager: managerId,
           note: `Issued for requisition ${requisition.requisitionCode}`
         }], { session });
@@ -100,7 +94,6 @@ export const updateRequisitionStatus = async (requisitionId, managerId, status, 
 
     await requisition.save({ session });
     await session.commitTransaction();
-
     return {
       status: 'success',
       message: `Requisition status updated to ${status}.`,
@@ -108,7 +101,7 @@ export const updateRequisitionStatus = async (requisitionId, managerId, status, 
     };
   } catch (error) {
     await session.abortTransaction();
-    console.error('[MaterialRequisitionService] updateRequisitionStatus error:', error);
+    console.log('[MaterialRequisitionService] updateRequisitionStatus error:', error);
     return { status: 'error', message: error.message, data: null };
   } finally {
     session.endSession();
@@ -117,33 +110,21 @@ export const updateRequisitionStatus = async (requisitionId, managerId, status, 
 
 /**
  * Handle timeout for prepared requisitions.
+ * (Currently disabled as timeoutAt was removed)
  */
 export const handleRequisitionTimeouts = async () => {
+  // Logic removed as per user request to simplify material flow
+  return { status: 'success', message: 'Timeout handling disabled.' };
+};
+
+/**
+ * Get all requisitions for a production order.
+ */
+export const getRequisitionsByOrder = async (orderId) => {
   try {
-    const now = new Date();
-    const overdueRequisitions = await MaterialRequisition.find({
-      status: REQUISITION_STATUS.PREPARED,
-      timeoutAt: { $lte: now },
-      alertSent: false
-    });
-
-    for (const req of overdueRequisitions) {
-      req.status = REQUISITION_STATUS.CANCELLED;
-      req.cancelledAt = now;
-      req.alertSent = true;
-      req.notes = (req.notes || '') + ' [AUTO-CANCELLED] Pickup timeout exceeded.';
-      await req.save();
-      
-      // Here you could trigger a notification/alert system
-      console.log(`Alert: Requisition ${req.requisitionCode} cancelled due to timeout.`);
-    }
-
-    return {
-      status: 'success',
-      message: `Processed ${overdueRequisitions.length} timeout requisitions.`
-    };
+    const requisitions = await MaterialRequisition.find({ productionOrder: orderId }).populate('items.material');
+    return { status: 'success', data: { requisitions } };
   } catch (error) {
-    console.error('[MaterialRequisitionService] handleRequisitionTimeouts error:', error);
     return { status: 'error', message: error.message };
   }
 };

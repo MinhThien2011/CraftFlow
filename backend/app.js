@@ -39,7 +39,7 @@ app.use(/^\/api\/.*/, (req, res) => {
 });
 
 app.use((err, req, res, next) => {
-  console.error(err.stack);
+  console.log(err.stack);
   res.status(500).json({
     status: "error",
     error: "Internal Server Error",

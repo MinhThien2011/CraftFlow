@@ -9,6 +9,8 @@ import productRouter from "./product.routes.js";
 import inventoryRouter from "./inventory.routes.js";
 import dashboardRouter from "./dashboard.routes.js";
 import shelfRouter from "./shelf.routes.js";
+import slipRouter from "./slip.routes.js";
+import purchaseOrderRouter from "./purchaseOrder.routes.js";
 
 const mainRouter = Router();
 
@@ -28,5 +30,7 @@ mainRouter.use('/products', productRouter);
 mainRouter.use('/inventory', inventoryRouter);
 mainRouter.use('/dashboard', dashboardRouter);
 mainRouter.use('/shelves', shelfRouter);
+mainRouter.use('/slips', slipRouter);
+mainRouter.use('/purchaseOrders', purchaseOrderRouter);
 
 export default mainRouter;

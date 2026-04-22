@@ -51,7 +51,7 @@ export const initializeCollections = async (models) => {
                 console.warn(`⚠️ Skipped: ${modelName} is not a valid Mongoose Model`);
             }
         } catch (err) {
-            console.error(`❌ Failed to initialize ${modelName}:`, err);
+            console.log(`❌ Failed to initialize ${modelName}:`, err);
         }
     }
 
@@ -59,24 +59,6 @@ export const initializeCollections = async (models) => {
         `🎉 Initialized ${initializedCount} collections of ${mongoose.connection.db.databaseName}.`
     );
 };
-
-// Hàm seed categories chỉ khi chưa có data
-// const seedCategoriesIfEmpty = async () => {
-//     try {
-//         const count = await category.countDocuments();
-
-//         if (count === 0) {
-//             console.log("📦 Bảng categories trống, đang seed data mẫu...");
-//             await category.insertMany(initialCats);
-//             console.log(`✅ Đã seed ${initialCats.length} categories thành công!`);
-//         } else {
-//             console.log(`ℹ️ Bảng categories đã có ${count} bản ghi, bỏ qua seed data.`);
-//         }
-//     } catch (error) {
-//         console.error("❌ Lỗi khi seed categories:", error);
-//         throw error;
-//     }
-// };
 
 // Hàm seed roles nếu bảng Role trống
 const seedRolesIfEmpty = async () => {
@@ -91,7 +73,7 @@ const seedRolesIfEmpty = async () => {
             console.log(`ℹ️ Bảng Role đã có ${count} bản ghi, bỏ qua seed roles.`);
         }
     } catch (error) {
-        console.error("❌ Lỗi khi seed roles:", error);
+        console.log("❌ Lỗi khi seed roles:", error);
         throw error;
     }
 };
@@ -112,8 +94,6 @@ const seedUsersIfEmpty = async () => {
 
             const rawData = fs.readFileSync(seedPath, 'utf8');
             const usersData = JSON.parse(rawData);
-
-            // Lấy tất cả roles để mapping role name sang ObjectId
             const roles = await Role.find({});
             const roleMap = roles.reduce((acc, role) => {
                 acc[role.roleName] = role._id;
@@ -126,7 +106,7 @@ const seedUsersIfEmpty = async () => {
 
                 return {
                     ...userData,
-                    role: roleMap[roleName] || roleMap[ROLES.STAFF] // Default sang STAFF nếu không tìm thấy
+                    role: roleMap[roleName] || roleMap[ROLES.STAFF]
                 };
             });
 
@@ -136,7 +116,7 @@ const seedUsersIfEmpty = async () => {
             console.log(`ℹ️ Bảng User đã có ${count} bản ghi, bỏ qua seed users.`);
         }
     } catch (error) {
-        console.error("❌ Lỗi khi seed users:", error);
+        console.log("❌ Lỗi khi seed users:", error);
         throw error;
     }
 };
@@ -160,7 +140,7 @@ const seedShelvesIfEmpty = async () => {
             console.log(`ℹ️ Bảng Shelf đã có ${count} bản ghi, bỏ qua seed shelves.`);
         }
     } catch (error) {
-        console.error("❌ Lỗi khi seed shelves:", error);
+        console.log("❌ Lỗi khi seed shelves:", error);
         throw error;
     }
 };
@@ -180,8 +160,6 @@ const seedMaterialsIfEmpty = async () => {
 
             const rawData = fs.readFileSync(seedPath, 'utf8');
             const materialsData = JSON.parse(rawData);
-
-            // Lấy tất cả shelves để mapping location name sang ObjectId
             const shelves = await Shelf.find({});
             const shelfMap = shelves.reduce((acc, shelf) => {
                 acc[shelf.shelfCode] = shelf._id;
@@ -199,7 +177,7 @@ const seedMaterialsIfEmpty = async () => {
             console.log(`ℹ️ Bảng Material đã có ${count} bản ghi, bỏ qua seed materials.`);
         }
     } catch (error) {
-        console.error("❌ Lỗi khi seed materials:", error);
+        console.log("❌ Lỗi khi seed materials:", error);
         throw error;
     }
 };
@@ -219,8 +197,6 @@ const seedProductsIfEmpty = async () => {
 
             const rawData = fs.readFileSync(seedPath, 'utf8');
             const productsData = JSON.parse(rawData);
-
-            // Mapping materialCode to actual Material IDs and caching metadata
             const materials = await Material.find({ isActive: true }).lean();
             const materialMap = materials.reduce((acc, m) => {
                 acc[m.code] = m;
@@ -268,7 +244,7 @@ const seedProductsIfEmpty = async () => {
             console.log(`ℹ️ Bảng Product đã có ${count} bản ghi, bỏ qua seed products.`);
         }
     } catch (error) {
-        console.error("❌ Lỗi khi seed products:", error);
+        console.log("❌ Lỗi khi seed products:", error);
         throw error;
     }
 };
@@ -311,7 +287,7 @@ const seedBomsIfEmpty = async () => {
             console.log(`ℹ️ Bảng BOM đã có ${count} bản ghi, bỏ qua seed BOMs.`);
         }
     } catch (error) {
-        console.error("❌ Lỗi khi seed BOMs:", error);
+        console.log("❌ Lỗi khi seed BOMs:", error);
         throw error;
     }
 };
@@ -348,7 +324,7 @@ const seedProductionOrdersIfEmpty = async () => {
             console.log(`ℹ️ Bảng ProductionOrder đã có ${count} bản ghi, bỏ qua seed production orders.`);
         }
     } catch (error) {
-        console.error("❌ Lỗi khi seed production orders:", error);
+        console.log("❌ Lỗi khi seed production orders:", error);
         throw error;
     }
 };
@@ -362,7 +338,7 @@ const closeExistingConnection = async () => {
             await mongoose.connection.close(false); // false = không force close
             console.log("✅ Đã đóng connection cũ");
         } catch (error) {
-            console.error("❌ Lỗi khi đóng connection:", error);
+            console.log("❌ Lỗi khi đóng connection:", error);
             // Force close nếu close bình thường thất bại
             await mongoose.connection.close(true);
         }
@@ -400,7 +376,7 @@ const tryConnectToMongo = async (uri, label) => {
         console.log(`Database Name: ${mongoose.connection.db.databaseName}`);
         return true;
     } catch (error) {
-        console.error(`❌ Kết nối ${label} thất bại:`, error.message);
+        console.log(`❌ Kết nối ${label} thất bại:`, error.message);
 
         await closeExistingConnection();
 
@@ -454,7 +430,7 @@ const reconnectWithRetry = async (retryCount = 0) => {
 
         throw new Error("Tất cả các MongoDB URIs đều thất bại");
     } catch (error) {
-        console.error(
+        console.log(
             `❌ Lỗi kết nối MongoDB (Lần thử ${retryCount + 1}/${MAX_RETRIES}):`,
             error.message
         );
@@ -466,7 +442,7 @@ const reconnectWithRetry = async (retryCount = 0) => {
             await new Promise((resolve) => setTimeout(resolve, RETRY_INTERVAL));
             return reconnectWithRetry(retryCount + 1);
         } else {
-            console.error("❌ Đã vượt quá số lần thử kết nối tối đa!");
+            console.log("❌ Đã vượt quá số lần thử kết nối tối đa!");
             isConnecting = false;
             return false;
         }
@@ -518,7 +494,7 @@ export const connectToDatabase = async () => {
 
         connectionPromise = null;
     } catch (err) {
-        console.error("❌ Lỗi trong quá trình kết nối database:", err);
+        console.log("❌ Lỗi trong quá trình kết nối database:", err);
         connectionPromise = null;
         isConnecting = false;
         throw err;
@@ -539,7 +515,7 @@ const setupConnectionHandlers = () => {
     });
 
     mongoose.connection.on("error", (error) => {
-        console.error("❌ Lỗi kết nối MongoDB:", error);
+        console.log("❌ Lỗi kết nối MongoDB:", error);
     });
 
     handlersSetup = true;
@@ -553,7 +529,7 @@ process.on("SIGINT", async () => {
         console.log("📴 Đã đóng kết nối MongoDB an toàn");
         process.exit(0);
     } catch (err) {
-        console.error("❌ Lỗi khi đóng kết nối MongoDB:", err);
+        console.log("❌ Lỗi khi đóng kết nối MongoDB:", err);
         process.exit(1);
     }
 });
