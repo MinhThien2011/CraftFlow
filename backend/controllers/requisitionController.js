@@ -2,6 +2,48 @@ import { StatusCodes } from 'http-status-codes';
 import * as requisitionService from '../services/materialRequisitionService.js';
 import { logActivity } from '../utils/logger.js';
 
+export const getRequisitions = async (req, res) => {
+  try {
+    const { status, productionOrderId, search, page, limit } = req.query;
+    const result = await requisitionService.getRequisitions({
+      status,
+      productionOrderId,
+      search,
+      page,
+      limit
+    });
+
+    return res.status(StatusCodes.OK).json(result);
+  } catch (error) {
+    console.log("[RequisitionController] getRequisitions error:", error);
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: 'error',
+      message: 'Failed to retrieve material requisitions.',
+      data: null
+    });
+  }
+};
+
+export const getRequisitionById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await requisitionService.getRequisitionById(id);
+
+    if (result.status === 'error') {
+      return res.status(StatusCodes.NOT_FOUND).json(result);
+    }
+
+    return res.status(StatusCodes.OK).json(result);
+  } catch (error) {
+    console.log("[RequisitionController] getRequisitionById error:", error);
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: 'error',
+      message: 'Failed to retrieve material requisition.',
+      data: null
+    });
+  }
+};
+
 export const requestMaterials = async (req, res) => {
   try {
     const { productionOrderId, items } = req.body;

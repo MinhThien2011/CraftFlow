@@ -28,19 +28,31 @@ const PurchaseOrderSchema = new mongoose.Schema({
                     ref: 'Material',
                     required: true,
                 },
+                materialCode: {
+                    type: String,
+                    required: true,
+                },
+                unit: {
+                    type: String,
+                    default: 'unit',
+                },
+                currency: {
+                    type: String,
+                    default: 'VND',
+                },
                 quantity: {
                     type: Number,
                     required: true,
                     min: 0,
                     default: 0,
                 },
-                unitPrice: {
+                priceAtTimePurchase: {
                     type: Number,
                     required: true,
                     min: 0,
                     default: 0,
                 },
-                totalPrice: {
+                totalPriceAtTimePurchase: {
                     type: Number,
                     required: true,
                     min: 0,
@@ -48,8 +60,13 @@ const PurchaseOrderSchema = new mongoose.Schema({
                 }
             }
         ]
-    }
-    ,
+    },
+    totalBaseCost: {
+        type: Number,
+        required: true,
+        min: 0,
+        default: 0,
+    },
 }, { timestamps: true })
 
 export default mongoose.model('PurchaseOrder', PurchaseOrderSchema);

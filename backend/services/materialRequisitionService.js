@@ -43,6 +43,83 @@ export const requestMaterials = async (productionOrderId, managerId, items) => {
 };
 
 /**
+ * Get all material requisitions with filtering, searching and pagination.
+ */
+export const getRequisitions = async ({ status, productionOrderId, search, page = 1, limit = 10 }) => {
+  try {
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.max(1, parseInt(limit));
+    const skip = (pageNum - 1) * limitNum;
+
+    const query = {};
+    if (status) query.status = status;
+    if (productionOrderId) query.productionOrder = productionOrderId;
+
+    if (search) {
+      const searchRegex = { $regex: search, $options: 'i' };
+      query.$or = [
+        { requisitionCode: searchRegex },
+        { notes: searchRegex }
+      ];
+    }
+
+    const [requisitions, total] = await Promise.all([
+      MaterialRequisition.find(query)
+        .populate('productionOrder', 'orderCode status productId quantity deadline')
+        .populate('createdBy', 'fullName username')
+        .populate('khoManager', 'fullName username')
+        .populate('items.material', 'name code unit currentStock')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      MaterialRequisition.countDocuments(query)
+    ]);
+
+    return {
+      status: 'success',
+      message: 'Requisitions retrieved successfully.',
+      data: {
+        requisitions,
+        pagination: {
+          total,
+          page: pageNum,
+          limit: limitNum,
+          pages: Math.ceil(total / limitNum)
+        }
+      }
+    };
+  } catch (error) {
+    console.log('[MaterialRequisitionService] getRequisitions error:', error);
+    return { status: 'error', message: error.message, data: null };
+  }
+};
+
+/**
+ * Get a single requisition by ID.
+ */
+export const getRequisitionById = async (id) => {
+  try {
+    const requisition = await MaterialRequisition.findById(id)
+      .populate('productionOrder')
+      .populate('createdBy', 'fullName username')
+      .populate('khoManager', 'fullName username')
+      .populate('items.material')
+      .lean();
+
+    if (!requisition) throw new Error('Requisition not found.');
+
+    return {
+      status: 'success',
+      message: 'Requisition retrieved successfully.',
+      data: requisition
+    };
+  } catch (error) {
+    return { status: 'error', message: error.message, data: null };
+  }
+};
+
+/**
  * Warehouse Manager updates requisition status.
  */
 export const updateRequisitionStatus = async (requisitionId, managerId, status, updateData = {}) => {
@@ -57,39 +134,61 @@ export const updateRequisitionStatus = async (requisitionId, managerId, status, 
     if (updateData.notes) requisition.notes = updateData.notes;
     if (updateData.evidenceImage) requisition.evidenceImage = updateData.evidenceImage;
 
-    if (status === REQUISITION_STATUS.PREPARED) {
-      requisition.preparedAt = new Date();
-    }
+    // Handle timestamps and specific status logic
+    switch (status) {
+      case REQUISITION_STATUS.ACCEPTED:
+        requisition.acceptedAt = new Date();
+        break;
+      case REQUISITION_STATUS.PREPARING:
+        requisition.preparingAt = new Date();
+        break;
+      case REQUISITION_STATUS.PREPARED:
+        requisition.preparedAt = new Date();
+        break;
+      case REQUISITION_STATUS.CANCELLED:
+        requisition.cancelledAt = new Date();
+        break;
+      case REQUISITION_STATUS.COMPLETED:
+        requisition.completedAt = new Date();
 
-    if (status === REQUISITION_STATUS.COMPLETED) {
-      requisition.completedAt = new Date();
+        // Deduct stock and record transactions
+        for (const item of requisition.items) {
+          const material = await Material.findById(item.material._id).session(session);
+          if (!material) throw new Error(`Material ${item.material._id} not found.`);
 
-      // Deduct stock and record transactions
-      for (const item of requisition.items) {
-        const material = await Material.findById(item.material._id);
-        const beforeStock = material.currentStock;
-        const afterStock = beforeStock - item.requestedQuantity;
+          const beforeStock = material.currentStock;
+          const afterStock = beforeStock - item.requestedQuantity;
 
-        if (afterStock < 0) {
-          throw new Error(`Insufficient stock for ${material.name} during issuance.`);
+          // In a real-world scenario, we might allow negative stock if configured, 
+          // but here we enforce it based on the current implementation.
+          if (afterStock < 0) {
+            throw new Error(`Insufficient stock for ${material.name} during issuance. Current: ${beforeStock}, Requested: ${item.requestedQuantity}`);
+          }
+
+          material.currentStock = afterStock;
+          await material.save({ session });
+
+          // Record transaction
+          await InventoryTransaction.create([{
+            material: material._id,
+            type: TRANSACTION_TYPE.ISSUE,
+            quantity: -item.requestedQuantity,
+            beforeStock,
+            afterStock,
+            requisition: requisition._id,
+            performedBy: managerId,
+            khoManager: managerId,
+            note: `Issued for requisition ${requisition.requisitionCode}. Production Order: ${requisition.productionOrder}`
+          }], { session });
         }
 
-        material.currentStock = afterStock;
-        await material.save({ session });
-
-        // Record transaction
-        await InventoryTransaction.create([{
-          material: material._id,
-          type: TRANSACTION_TYPE.ISSUE,
-          quantity: -item.requestedQuantity,
-          beforeStock,
-          afterStock,
-          requisition: requisition._id,
-          performedBy: requisition.createdBy, // PM who requested
-          khoManager: managerId,
-          note: `Issued for requisition ${requisition.requisitionCode}`
-        }], { session });
-      }
+        // Update Production Order status if it was waiting for materials
+        const productionOrder = await ProductionOrder.findById(requisition.productionOrder).session(session);
+        if (productionOrder && (productionOrder.status === 'insufficient_materials' || productionOrder.status === 'pending')) {
+          productionOrder.status = 'ready_to_assign';
+          await productionOrder.save({ session });
+        }
+        break;
     }
 
     await requisition.save({ session });

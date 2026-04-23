@@ -1,5 +1,6 @@
 import { buildUpdatePayload } from '../utils/payloadBuilder.js'
 import User from '../models/User.js'
+import { clearCacheByPattern, delUserAccessInfo } from '../utils/redisFetching.js'
 
 const MAX_LIMIT = 100;
 
@@ -7,6 +8,13 @@ export const deleteUser = async (userId) => {
     try {
         const user = await User.findByIdAndDelete(userId).lean();
         if (!user) return { success: false, message: 'User not found.', data: null };
+        
+        // Invalidate Redis cache
+        await Promise.all([
+            delUserAccessInfo(userId),
+            clearCacheByPattern('user:list:*')
+        ]);
+        
         return { success: true, message: 'User deleted successfully.', data: null };
     } catch (error) {
         console.log('[userService] deleteUser error:', error);
@@ -30,6 +38,13 @@ export const updateUser = async (userId, updateData) => {
         ).select('-password').populate('role', 'roleName').lean();
 
         if (!user) return { success: false, message: 'User not found.', data: null };
+        
+        // Invalidate Redis cache
+        await Promise.all([
+            delUserAccessInfo(userId),
+            clearCacheByPattern('user:list:*')
+        ]);
+        
         return { success: true, message: 'User updated successfully.', data: user };
     } catch (error) {
         console.log('[userService] updateUser error:', error);

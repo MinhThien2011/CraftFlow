@@ -1,10 +1,31 @@
 import PurchaseOrder from "../models/PurchaseOrder.js";
+import { PURCHASE_ORDER_STATUS } from "../utils/constants.js";
+import { processMaterialCosts } from "../utils/productHelpers.js";
 
 export const createPurchaseOrderService = async (data, userId) => {
     try {
+        const { purchaseOrderItems, orderReason } = data;
+
+        // Process materials and calculate costs
+        const { processedMaterials, totalBaseCost } = await processMaterialCosts(purchaseOrderItems);
+        const finalPurchaseOrderItems = processedMaterials.map(item => {
+            const price = item.priceAtTime || 0;
+            return {
+                material: item.material,
+                materialCode: item.materialCode,
+                unit: item.unit,
+                quantity: item.quantity,
+                priceAtTimePurchase: price,
+                totalPriceAtTimePurchase: price * item.quantity
+            };
+        });
+
         const purchaseOrderData = {
-            ...data,
             creator: userId,
+            status: PURCHASE_ORDER_STATUS.PENDING,
+            orderReason,
+            purchaseOrderItems: finalPurchaseOrderItems,
+            totalBaseCost
         };
 
         const purchaseOrder = await PurchaseOrder.create(purchaseOrderData);
@@ -17,7 +38,32 @@ export const createPurchaseOrderService = async (data, userId) => {
 
 export const updatePurchaseOrderService = async (orderId, data) => {
     try {
-        const purchaseOrderUpdate = await PurchaseOrder.findByIdAndUpdate(orderId, data, { returnDocument: 'after' }).lean()
+        const updatePayload = { ...data };
+
+        // If purchaseOrderItems are being updated, we need to process them
+        if (updatePayload.purchaseOrderItems) {
+            const { processedMaterials, totalBaseCost } = await processMaterialCosts(updatePayload.purchaseOrderItems);
+
+            updatePayload.purchaseOrderItems = processedMaterials.map(item => {
+                const price = item.priceAtTime || 0;
+                return {
+                    material: item.material,
+                    materialCode: item.materialCode,
+                    unit: item.unit,
+                    quantity: item.quantity,
+                    priceAtTimePurchase: price,
+                    totalPriceAtTimePurchase: price * item.quantity
+                };
+            });
+            updatePayload.totalBaseCost = totalBaseCost;
+        }
+
+        const purchaseOrderUpdate = await PurchaseOrder.findByIdAndUpdate(
+            orderId,
+            { $set: updatePayload },
+            { returnDocument: 'after' }
+        ).lean();
+
         if (!purchaseOrderUpdate) {
             return { success: false, message: 'Purchase order not found', data: null };
         }
@@ -45,6 +91,10 @@ export const deletePurchaseOrderService = async (orderId) => {
 
 export const updatePurchaseOrderStatusService = async (orderId, data) => {
     try {
+        // const purchaseOrder = await PurchaseOrder.findById(orderId).lean()
+        // if (data.status && data.status === purchaseOrder.status) {
+        //     return { success: false, message: 'Purchase order status cannot be updated', data: purchaseOrder };
+        // }
         const purchaseOrderUpdate = await PurchaseOrder.findByIdAndUpdate(orderId, { $set: data }, { returnDocument: 'after' }).lean()
         if (!purchaseOrderUpdate) {
             return { success: false, message: 'Purchase order not found', data: null };
@@ -61,7 +111,7 @@ export const getAllPurchaseOrdersByIdService = async (id) => {
     try {
         const purchaseOrder = await PurchaseOrder.findById(id)
             .populate('creator', 'username email')
-            .populate('purchaseOrderItems.materialId', 'name price barcode code');
+            .populate('purchaseOrderItems.material', 'name price barcode code');
         if (!purchaseOrder) {
             return { success: false, message: 'Purchase order not found', data: null };
         }
@@ -90,7 +140,6 @@ export const getAllPurchaseOrdersService = async (query = {}) => {
             .skip(skip)
             .limit(limit)
             .populate('creator', 'username email')
-            // .populate('purchaseOrderItems.productId', 'name price barcode code')
             .populate('purchaseOrderItems.material', 'name price barcode code');
         if (!purchaseOrders || purchaseOrders.length === 0) {
             return { success: false, message: 'Purchase orders not found', data: null };

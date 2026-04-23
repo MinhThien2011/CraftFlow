@@ -521,15 +521,15 @@ const setupConnectionHandlers = () => {
     handlersSetup = true;
 };
 
-process.on("SIGINT", async () => {
-    try {
-        isConnecting = false;
-        connectionPromise = null;
-        await mongoose.connection.close();
-        console.log("📴 Đã đóng kết nối MongoDB an toàn");
-        process.exit(0);
-    } catch (err) {
-        console.log("❌ Lỗi khi đóng kết nối MongoDB:", err);
-        process.exit(1);
-    }
-});
+// process.on("SIGINT", async () => {
+//     try {
+//         isConnecting = false;
+//         connectionPromise = null;
+//         await mongoose.connection.close();
+//         console.log("📴 Đã đóng kết nối MongoDB an toàn");
+//         process.exit(0);
+//     } catch (err) {
+//         console.log("❌ Lỗi khi đóng kết nối MongoDB:", err);
+//         process.exit(1);
+//     }
+// });

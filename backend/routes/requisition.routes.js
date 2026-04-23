@@ -12,7 +12,12 @@ requisitionRouter.get('/health', (req, res) => {
     message: "Welcome to the Requisition API of Crafb Flow",
   })
 })
+// --- Private Routes (Logged in users) ---
 requisitionRouter.use(jwtAuth);
+
+// Common routes
+requisitionRouter.get('/', requisitionController.getRequisitions);
+requisitionRouter.get('/:id', requisitionController.getRequisitionById);
 
 // Production Manager requests materials for production orders
 requisitionRouter.post('/', rolePermission([ROLES.PRODUCTION_MANAGER]), requisitionController.requestMaterials);

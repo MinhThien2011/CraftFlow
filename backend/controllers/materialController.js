@@ -2,6 +2,7 @@ import Material from '../models/Material.js';
 import InventoryTransaction from '../models/InventoryTransaction.js';
 import { StatusCodes } from 'http-status-codes';
 import * as materialService from '../services/materialService.js';
+import { clearCacheByPattern, getCachedData, setCachedData } from '../utils/redisFetching.js';
 import {
   createMaterialValidator,
   updateMaterialValidator,
@@ -29,6 +30,18 @@ export const getAllMaterials = async (req, res) => {
     const pageNum = parseInt(page || 1);
     const limitNum = parseInt(limit || 10);
 
+    const cacheKey = `material:list:${JSON.stringify({ search, pageNum, limitNum, stockGt, stockLt, priceGt, priceLt, color, unit })}`;
+
+    // 1. Try Redis cache
+    const cachedResult = await getCachedData(cacheKey);
+    if (cachedResult) {
+      return res.status(StatusCodes.OK).json({
+        success: true,
+        message: 'Materials retrieved successfully (from cache).',
+        data: cachedResult
+      });
+    }
+
     const filters = {
       color,
       unit,
@@ -52,6 +65,9 @@ export const getAllMaterials = async (req, res) => {
         data: null
       });
     }
+
+    // 2. Cache successful result
+    await setCachedData(cacheKey, result.data);
 
     return res.status(StatusCodes.OK).json({
       success: true,
@@ -174,6 +190,9 @@ export const createMaterial = async (req, res) => {
 
     const newMaterial = await Material.create(value);
 
+    // Invalidate cache
+    await clearCacheByPattern('material:list:*');
+
     await logActivity({
       author: req.userId,
       action: 'CREATE_MATERIAL',
@@ -228,6 +247,9 @@ export const updateMaterial = async (req, res) => {
       });
     }
 
+    // Invalidate cache
+    await clearCacheByPattern('material:list:*');
+
     await logActivity({
       author: req.userId,
       action: 'UPDATE_MATERIAL',
@@ -276,6 +298,9 @@ export const adjustStock = async (req, res) => {
       const statusCode = result.message === 'Material not found.' ? StatusCodes.NOT_FOUND : StatusCodes.BAD_REQUEST;
       return res.status(statusCode).json(result);
     }
+
+    // Invalidate cache
+    await clearCacheByPattern('material:list:*');
 
     const { material } = result.data;
     await logActivity({

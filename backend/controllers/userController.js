@@ -6,6 +6,7 @@ import { logActivity } from '../utils/logger.js';
 import * as userService from '../services/userService.js';
 import { standardlizeResponseDataHelper } from '../utils/standardlizeResponseData.js';
 import { ROLES } from '../utils/constants.js';
+import { clearCacheByPattern, delUserAccessInfo, getCachedData, setCachedData } from '../utils/redisFetching.js';
 
 /**
  * Get all users with filtering, searching, and pagination.
@@ -15,6 +16,19 @@ export const getAllUsers = async (req, res) => {
     const { role: roleName, isActive, limit = 10, page = 1, search = '' } = req.query;
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
+
+    // Create a unique cache key based on query parameters
+    const cacheKey = `user:list:${JSON.stringify({ roleName, isActive, limitNum, pageNum, search })}`;
+
+    // Try to get data from Redis
+    const cachedResult = await getCachedData(cacheKey);
+    if (cachedResult) {
+      return res.status(StatusCodes.OK).json({
+        success: true,
+        message: 'Users retrieved successfully (from cache).',
+        data: cachedResult
+      });
+    }
 
     let filter = {};
     if (isActive !== undefined) {
@@ -49,6 +63,9 @@ export const getAllUsers = async (req, res) => {
       });
     }
 
+    // Cache the successful result in Redis (short TTL: 5 minutes)
+    await setCachedData(cacheKey, result.data);
+
     return res.status(StatusCodes.OK).json({
       success: true,
       message: result.message,
@@ -70,7 +87,7 @@ export const getAllUsers = async (req, res) => {
 export const getUserById = async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await userService.getUserById(id);
+    const   result = await userService.getUserById(id);
 
     if (!result.success) {
       const statusCode = result.message === 'User not found.' ? StatusCodes.NOT_FOUND : StatusCodes.INTERNAL_SERVER_ERROR;
@@ -134,6 +151,9 @@ export const createUser = async (req, res) => {
       value.avatar = req.imageUrl;
     }
     const newUser = await User.create(value)
+
+    // Invalidate list cache
+    await clearCacheByPattern('user:list:*');
 
     await logActivity({
       author: req.userId,
@@ -288,6 +308,12 @@ export const updateUserStatus = async (req, res) => {
       user.isActive = !user.isActive;
     }
     await user.save();
+
+    // Invalidate Redis cache
+    await Promise.all([
+        delUserAccessInfo(id),
+        clearCacheByPattern('user:list:*')
+    ]);
 
     await logActivity({
       author: req.userId,

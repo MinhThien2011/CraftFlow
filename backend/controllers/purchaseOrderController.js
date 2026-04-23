@@ -1,64 +1,95 @@
-import { createPurchaseOrderService, deletePurchaseOrderService, getAllPurchaseOrdersByIdService, getAllPurchaseOrdersService, updatePurchaseOrderService, updatePurchaseOrderStatusService } from "../services/purchaseOrderService.js";
+import { StatusCodes } from "http-status-codes";
+import {
+    createPurchaseOrderService,
+    deletePurchaseOrderService,
+    getAllPurchaseOrdersByIdService,
+    getAllPurchaseOrdersService,
+    updatePurchaseOrderService,
+    updatePurchaseOrderStatusService
+} from "../services/purchaseOrderService.js";
 import { logActivity } from "../utils/logger.js";
-import { purchaseOrderValidator, updateStatusPurchaseOrderValidator } from "../validations/PurchaseOrderValidation.js";
-
+import { clearCacheByPattern, getCachedData, setCachedData } from "../utils/redisFetching.js";
+import { handleServiceResponse } from "../utils/responseHelper.js";
+import {
+    purchaseOrderValidator,
+    updateStatusPurchaseOrderValidator
+} from "../validations/PurchaseOrderValidation.js";
 
 export const createPurchaseOrder = async (req, res) => {
     try {
         const { error, value } = purchaseOrderValidator(req.body);
         if (error) {
-            return res.status(400).json({ error: error.details.map(d => d.message) });
+            return res.status(StatusCodes.BAD_REQUEST).json({
+                status: 'error',
+                message: 'Validation failed',
+                errors: error.details.map(d => d.message)
+            });
         }
-        const purchaseOrder = await createPurchaseOrderService(value, req.userId);
-        if (!purchaseOrder.success) {
-            return res.status(400).json(purchaseOrder);
+
+        const result = await createPurchaseOrderService(value, req.userId);
+        if (result.success) {
+            // Invalidate list cache
+            clearCacheByPattern('purchaseOrder:list:*');
+
+            await logActivity({
+                author: req.userId,
+                action: 'CREATE_PURCHASE_ORDER',
+                module: 'PURCHASE_ORDER',
+                details: `Production manager created purchase order: ${result.data._id}`,
+                targetId: result.data._id,
+                metadata: { status: result.data.status }
+            }, req, true);
         }
 
-        await logActivity({
-            author: req.userId,
-            action: 'CREATE_PURCHASE_ORDER',
-            module: 'PURCHASE_ORDER',
-            details: `Production manager created purchase order: ${purchaseOrder._id}`,
-            targetId: purchaseOrder._id,
-            metadata: { status: purchaseOrder.status }
-        }, req, true);
-
-        return res.status(201).json(purchaseOrder);
-
-    }
-    catch (error) {
-        console.log('[createPurchaseOrder] error:', error);
-        return res.status(500).json({ success: false, message: "create purchase order error: " + error.message, data: null });
+        return handleServiceResponse(res, result, StatusCodes.CREATED);
+    } catch (error) {
+        console.error('[createPurchaseOrder] error:', error);
+        return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+            status: 'error',
+            message: "Internal server error: " + error.message,
+            data: null
+        });
     }
 }
 
 export const updatePurchaseOrderStatus = async (req, res) => {
     try {
-        const purchaseOrderId = req.params.id;
+        const purchaseOrderId = req.params?.id;
         const { error, value } = updateStatusPurchaseOrderValidator(req.body);
         if (error) {
-            return res.status(400).json({ error: error.details.map(d => d.message) });
+            return res.status(StatusCodes.BAD_REQUEST).json({
+                status: 'error',
+                message: 'Validation failed',
+                errors: error.details.map(d => d.message)
+            });
         }
-        const purchaseOrder = await updatePurchaseOrderStatusService(purchaseOrderId, { status: value.status, adminNotes: value.adminNotes });
-        if (!purchaseOrder.success) {
-            return res.status(404).json(purchaseOrder);
+
+        const result = await updatePurchaseOrderStatusService(purchaseOrderId, {
+            status: value.status,
+            adminNotes: value.adminNotes
+        });
+
+        if (result.success) {
+            await clearCacheByPattern('purchaseOrder:list:*');
+
+            await logActivity({
+                author: req.userId,
+                action: 'UPDATE_PURCHASE_ORDER_STATUS',
+                module: 'PURCHASE_ORDER',
+                details: `Admin updated purchase order status: ${result.data._id}`,
+                targetId: result.data._id,
+                metadata: { status: result.data.status, adminNotes: result.data.adminNotes }
+            }, req);
         }
 
-        await logActivity({
-            author: req.userId,
-            action: 'UPDATE_PURCHASE_ORDER_STATUS',
-            module: 'PURCHASE_ORDER',
-            details: `Admin updated purchase order status: ${purchaseOrder._id}`,
-            targetId: purchaseOrder._id,
-            metadata: { status: purchaseOrder.status, adminNotes: purchaseOrder.adminNotes }
-        }, req);
-
-        return res.status(200).json(purchaseOrder);
-
-    }
-    catch (error) {
-        console.log('[updatePurchaseOrderStatus] error:', error);
-        return res.status(500).json({ success: false, message: "update purchase order status error: " + error.message, data: null });
+        return handleServiceResponse(res, result);
+    } catch (error) {
+        console.error('[updatePurchaseOrderStatus] error:', error);
+        return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+            status: 'error',
+            message: "Internal server error: " + error.message,
+            data: null
+        });
     }
 }
 
@@ -67,78 +98,112 @@ export const updatePurchaseOrder = async (req, res) => {
         const purchaseOrderId = req.body.id;
         const { error, value } = purchaseOrderValidator(req.body);
         if (error) {
-            return res.status(400).json({ error: error.details.map(d => d.message) });
-        }
-        const purchaseOrder = await updatePurchaseOrderService(purchaseOrderId, value);
-        if (!purchaseOrder.success) {
-            return res.status(404).json(purchaseOrder);
+            return res.status(StatusCodes.BAD_REQUEST).json({
+                status: 'error',
+                message: 'Validation failed',
+                errors: error.details.map(d => d.message)
+            });
         }
 
-        await logActivity({
-            author: req.userId,
-            action: 'UPDATE_PURCHASE_ORDER',
-            module: 'PURCHASE_ORDER',
-            details: `Production manager updated purchase order: ${purchaseOrder._id}`,
-            targetId: purchaseOrder._id,
-            metadata: { status: purchaseOrder.status }
-        }, req);
+        const result = await updatePurchaseOrderService(purchaseOrderId, value);
+        if (result.success) {
+            // Invalidate list cache
+            await clearCacheByPattern('purchaseOrder:list:*');
 
-        res.status(200).json(purchaseOrder);
-    }
-    catch (error) {
-        console.log('[updatePurchaseOrder] error:', error);
-        return res.status(500).json({ success: false, message: "update purchase order error: " + error.message, data: null });
+            await logActivity({
+                author: req.userId,
+                action: 'UPDATE_PURCHASE_ORDER',
+                module: 'PURCHASE_ORDER',
+                details: `Production manager updated purchase order: ${result.data._id}`,
+                targetId: result.data._id,
+                metadata: { status: result.data.status }
+            }, req);
+        }
+
+        return handleServiceResponse(res, result);
+    } catch (error) {
+        console.error('[updatePurchaseOrder] error:', error);
+        return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+            status: 'error',
+            message: "Internal server error: " + error.message,
+            data: null
+        });
     }
 }
 
 export const deletePurchaseOrder = async (req, res) => {
     try {
         const purchaseOrderId = req.params.id;
-        const purchaseOrder = await deletePurchaseOrderService(purchaseOrderId);
-        if (!purchaseOrder.success) {
-            return res.status(404).json(purchaseOrder);
+        const result = await deletePurchaseOrderService(purchaseOrderId);
+        if (result.success) {
+            // Invalidate list cache
+            await clearCacheByPattern('purchaseOrder:list:*');
+
+            await logActivity({
+                author: req.userId,
+                action: 'DELETE_PURCHASE_ORDER',
+                module: 'PURCHASE_ORDER',
+                details: `Purchase order deleted: ${result.data._id}`,
+                targetId: result.data._id,
+                metadata: { status: result.data.status }
+            }, req);
         }
 
-        await logActivity({
-            author: req.userId,
-            action: 'DELETE_PURCHASE_ORDER',
-            module: 'PURCHASE_ORDER',
-            details: `Purchase order deleted: ${purchaseOrder._id}`,
-            targetId: purchaseOrder._id,
-            metadata: { status: purchaseOrder.status }
-        }, req);
-
-        return res.status(200).json(purchaseOrder);
-
-    }
-    catch (error) {
-        console.log('[deletePurchaseOrder] error:', error);
-        return res.status(500).json({ success: false, message: "delete purchase order error: " + error.message, data: null });
+        return handleServiceResponse(res, result);
+    } catch (error) {
+        console.error('[deletePurchaseOrder] error:', error);
+        return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+            status: 'error',
+            message: "Internal server error: " + error.message,
+            data: null
+        });
     }
 }
+
 export const getPurchaseOrderById = async (req, res) => {
     try {
-        const purchaseOrderId = req.params.id;
-        const purchaseOrder = await getAllPurchaseOrdersByIdService(purchaseOrderId);
-        if (!purchaseOrder) {
-            return res.status(404).json(purchaseOrder);
-        }
-        return res.status(200).json(purchaseOrder);
+        const result = await getAllPurchaseOrdersByIdService(req.params.id);
+        return handleServiceResponse(res, result);
     } catch (error) {
-        console.log('[getPurchaseOrderById] error:', error);
-        return res.status(500).json({ success: false, message: "get purchase order by id error: " + error.message, data: null });
+        console.error('[getPurchaseOrderById] error:', error);
+        return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+            status: 'error',
+            message: "Internal server error: " + error.message,
+            data: null
+        });
     }
 }
 
 export const getAllPurchaseOrders = async (req, res) => {
     try {
-        const purchaseOrders = await getAllPurchaseOrdersService(req.query);
-        if (!purchaseOrders.success) {
-            return res.status(404).json(purchaseOrders);
+        const { creator, status, page = 1, limit = 10 } = req.query;
+        const cacheKey = `purchaseOrder:list:${JSON.stringify({ creator, status, page, limit })}`;
+
+        // 1. Try to get from Redis
+        const cachedResult = await getCachedData(cacheKey);
+        if (cachedResult) {
+            return res.status(StatusCodes.OK).json({
+                status: 'success',
+                message: 'Purchase orders retrieved successfully (from cache)',
+                data: cachedResult
+            });
         }
-        return res.status(200).json(purchaseOrders);
+
+        // 2. If not in cache, get from Service
+        const result = await getAllPurchaseOrdersService(req.query);
+
+        // 3. Cache the result if successful
+        if (result.success) {
+            await setCachedData(cacheKey, result.data);
+        }
+
+        return handleServiceResponse(res, result);
     } catch (error) {
-        console.log('[getAllPurchaseOrders] error:', error);
-        return res.status(500).json({ success: false, message: "get all purchase orders error: " + error.message, data: null });
+        console.error('[getAllPurchaseOrders] error:', error);
+        return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+            status: 'error',
+            message: "Internal server error: " + error.message,
+            data: null
+        });
     }
 }
