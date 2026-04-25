@@ -67,7 +67,7 @@ export const updatePurchaseOrderStatus = async (req, res) => {
         const result = await updatePurchaseOrderStatusService(purchaseOrderId, {
             status: value.status,
             adminNotes: value.adminNotes
-        });
+        }, req.userId);
 
         if (result.success) {
             await clearCacheByPattern('purchaseOrder:list:*');

@@ -15,7 +15,20 @@ const materialItemSchema = new mongoose.Schema({
   actualQuantity: {
     type: Number,
     default: 0
-  }
+  },
+  batchAllocations: [{
+    batch: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'InventoryBatch'
+    },
+    batchNumber: String,
+    quantityAllocated: {
+      type: Number,
+      required: true,
+      min: 0
+    },
+    expirationDate: Date
+  }]
 }, {
   _id: true,
   toJSON: {

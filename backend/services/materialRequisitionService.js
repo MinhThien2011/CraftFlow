@@ -3,6 +3,8 @@ import Material from '../models/Material.js';
 import ProductionOrder from '../models/ProductionOrder.js';
 import InventoryTransaction from '../models/InventoryTransaction.js';
 import { REQUISITION_STATUS, TRANSACTION_TYPE } from '../utils/constants.js';
+import { updateShelfLoad } from './shelfService.js';
+import { allocateBatchesForMaterial, createBatch } from './fifoService.js';
 import mongoose from 'mongoose';
 
 /**
@@ -65,7 +67,7 @@ export const getRequisitions = async ({ status, productionOrderId, search, page 
 
     const [requisitions, total] = await Promise.all([
       MaterialRequisition.find(query)
-        .populate('productionOrder', 'orderCode status productId quantity deadline')
+        .populate('productionOrder', 'orderCode status products deadline priority')
         .populate('createdBy', 'fullName username')
         .populate('khoManager', 'fullName username')
         .populate('items.material', 'name code unit currentStock')
@@ -120,6 +122,33 @@ export const getRequisitionById = async (id) => {
 };
 
 /**
+ * Check stock availability for requisition items.
+ * Returns list of insufficient items if any.
+ */
+async function checkStockAvailability(items, session) {
+  const result = {
+    allAvailable: true,
+    insufficientItems: []
+  };
+
+  for (const item of items) {
+    const material = await Material.findById(item.material).session(session).lean();
+    if (!material) continue;
+
+    if (material.currentStock < item.requestedQuantity) {
+      result.allAvailable = false;
+      result.insufficientItems.push({
+        material: material.name || material.code,
+        needed: item.requestedQuantity,
+        available: material.currentStock
+      });
+    }
+  }
+
+  return result;
+}
+
+/**
  * Warehouse Manager updates requisition status.
  */
 export const updateRequisitionStatus = async (requisitionId, managerId, status, updateData = {}) => {
@@ -134,52 +163,78 @@ export const updateRequisitionStatus = async (requisitionId, managerId, status, 
     if (updateData.notes) requisition.notes = updateData.notes;
     if (updateData.evidenceImage) requisition.evidenceImage = updateData.evidenceImage;
 
-    // Handle timestamps and specific status logic
-    switch (status) {
-      case REQUISITION_STATUS.ACCEPTED:
-        requisition.acceptedAt = new Date();
-        break;
-      case REQUISITION_STATUS.PREPARING:
-        requisition.preparingAt = new Date();
-        break;
-      case REQUISITION_STATUS.PREPARED:
-        requisition.preparedAt = new Date();
-        break;
-      case REQUISITION_STATUS.CANCELLED:
-        requisition.cancelledAt = new Date();
-        break;
-      case REQUISITION_STATUS.COMPLETED:
-        requisition.completedAt = new Date();
+    if (status === REQUISITION_STATUS.ACCEPTED) {
+      requisition.acceptedAt = new Date();
 
-        // Deduct stock and record transactions
+      // Check stock availability before accepting
+      // Kho Manager can only accept if stock is sufficient OR if there's an approved Purchase Order
+      const stockCheck = await checkStockAvailability(requisition.items, session);
+      if (!stockCheck.allAvailable) {
+        await session.abortTransaction();
+        return {
+          success: false,
+          message: `Insufficient stock for: ${stockCheck.insufficientItems.map(i => i.material).join(', ')}. Stock is available but not enough. Wait for purchase orders to arrive or reject this requisition.`,
+          data: {
+            insufficientItems: stockCheck.insufficientItems.map(i => ({
+              material: i.material,
+              needed: i.needed,
+              available: i.available
+            }))
+          }
+        };
+      }
+      else if (status === REQUISITION_STATUS.PREPARING) {
+        requisition.preparingAt = new Date();
+      }
+
+      else if (status === REQUISITION_STATUS.PREPARED) {
+        requisition.preparedAt = new Date();
+      }
+      else if (status === REQUISITION_STATUS.CANCELLED) {
+        requisition.cancelledAt = new Date();
+      }
+      else if (status === REQUISITION_STATUS.COMPLETED) {
+        requisition.completedAt = new Date();
+        // Deduct stock and record transactions using FIFO
         for (const item of requisition.items) {
           const material = await Material.findById(item.material._id).session(session);
           if (!material) throw new Error(`Material ${item.material._id} not found.`);
 
           const beforeStock = material.currentStock;
-          const afterStock = beforeStock - item.requestedQuantity;
-
-          // In a real-world scenario, we might allow negative stock if configured, 
-          // but here we enforce it based on the current implementation.
-          if (afterStock < 0) {
-            throw new Error(`Insufficient stock for ${material.name} during issuance. Current: ${beforeStock}, Requested: ${item.requestedQuantity}`);
+          // Allocate from batches using FIFO
+          const fifoResult = await allocateBatchesForMaterial(item.material._id, item.requestedQuantity, session);
+          if (!fifoResult.success) {
+            throw new Error(`FIFO allocation failed for ${material.name}: ${fifoResult.message}`);
+          }
+          const batchAllocations = fifoResult.data;
+          // Update batch allocations in requisition item
+          item.batchAllocations = batchAllocations;
+          // Deduct from each batch and record transactions
+          for (const allocation of batchAllocations) {
+            await InventoryTransaction.create([{
+              material: material._id,
+              type: TRANSACTION_TYPE.ISSUE,
+              quantity: -allocation.quantityAllocated,
+              beforeStock: beforeStock,
+              afterStock: beforeStock - allocation.quantityAllocated,
+              requisition: requisition._id,
+              batch: allocation.batch,
+              performedBy: managerId,
+              khoManager: managerId,
+              note: `Issued for requisition ${requisition.requisitionCode}. Batch: ${allocation.batchNumber}. FIFO allocation.`
+            }], { session });
           }
 
-          material.currentStock = afterStock;
+          // Update material's total stock
+          material.currentStock = beforeStock - item.requestedQuantity;
           await material.save({ session });
 
-          // Record transaction
-          await InventoryTransaction.create([{
-            material: material._id,
-            type: TRANSACTION_TYPE.ISSUE,
-            quantity: -item.requestedQuantity,
-            beforeStock,
-            afterStock,
-            requisition: requisition._id,
-            performedBy: managerId,
-            khoManager: managerId,
-            note: `Issued for requisition ${requisition.requisitionCode}. Production Order: ${requisition.productionOrder}`
-          }], { session });
+          // Update shelf load if assigned
+          if (material.shelf) {
+            await updateShelfLoad(material.shelf);
+          }
+
+          item.actualQuantity = item.requestedQuantity;
         }
 
         // Update Production Order status if it was waiting for materials
@@ -188,16 +243,16 @@ export const updateRequisitionStatus = async (requisitionId, managerId, status, 
           productionOrder.status = 'ready_to_assign';
           await productionOrder.save({ session });
         }
-        break;
-    }
+      }
 
-    await requisition.save({ session });
-    await session.commitTransaction();
-    return {
-      status: 'success',
-      message: `Requisition status updated to ${status}.`,
-      data: { requisition }
-    };
+      await requisition.save({ session });
+      await session.commitTransaction();
+      return {
+        status: 'success',
+        message: `Requisition status updated to ${status}.`,
+        data: { requisition }
+      };
+    }
   } catch (error) {
     await session.abortTransaction();
     console.log('[MaterialRequisitionService] updateRequisitionStatus error:', error);
@@ -205,7 +260,7 @@ export const updateRequisitionStatus = async (requisitionId, managerId, status, 
   } finally {
     session.endSession();
   }
-};
+}
 
 /**
  * Handle timeout for prepared requisitions.

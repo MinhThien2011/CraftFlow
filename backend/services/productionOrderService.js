@@ -1,45 +1,101 @@
 import ProductionOrder from '../models/ProductionOrder.js';
 import Product from '../models/Product.js';
 import Material from '../models/Material.js';
+import MaterialAlert from '../models/MaterialAlert.js';
+import Bom from '../models/BOM.js';
 import User from '../models/User.js';
 import ProductionOrderAssignment from '../models/ProductionOrderAssignment.js';
 import InventoryTransaction from '../models/InventoryTransaction.js'; // Import InventoryTransaction
 import MaterialRequisition from '../models/MaterialRequisition.js';
 import InventoryImportExportSlip from '../models/InventoryImportExportSlip.js';
-import { ORDER_STATUS, ROLES, TRANSACTION_TYPE, REQUISITION_STATUS, INVENTORY_IMPORT_EXPORT_SLIP_TYPE, INVENTORY_IMPORT_EXPORT_SLIP_STATUS } from '../utils/constants.js'; // Import TRANSACTION_TYPE
+import { ORDER_STATUS, ROLES, TRANSACTION_TYPE, REQUISITION_STATUS, INVENTORY_IMPORT_EXPORT_SLIP_TYPE, INVENTORY_IMPORT_EXPORT_SLIP_STATUS, PRIORITY } from '../utils/constants.js'; // Import TRANSACTION_TYPE
 import { generateSlipNumber } from '../utils/slipHelper.js';
 import mongoose from 'mongoose';
 
 /**
  * Create a new production order with stock check and automatic material requisition.
+ * Supports multiple products and automatic material alert creation.
  */
 export const createProductionOrder = async (orderData, creatorId) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const product = await Product.findById(orderData.productId).lean();
-    if (!product) throw new Error('Product not found.');
+    const { products: orderProducts, priority = PRIORITY.MEDIUM, deadline, autoDeadline } = orderData;
 
-    // 1. Check stock availability for estimated materials - Optimized with batch fetch
-    const materialIds = product.estimateMaterialCost.map(item => item.material);
-    const materials = await Material.find({ _id: { $in: materialIds } }).session(session).lean();
+    if (!orderProducts || !Array.isArray(orderProducts) || orderProducts.length === 0) {
+      throw new Error('At least one product is required for production order.');
+    }
 
-    const materialMap = new Map(materials.map(m => [m._id.toString(), m]));
-    let hasInsufficientStock = false;
+    // 1. Fetch products and calculate total material needs
+    const productIdentifiers = orderProducts.map(p => p.productId || p.productCode);
+    const products = await Product.find({
+      $or: [
+        { _id: { $in: productIdentifiers.filter(id => mongoose.Types.ObjectId.isValid(id)) } },
+        { code: { $in: productIdentifiers } }
+      ]
+    }).lean();
 
-    for (const item of product.estimateMaterialCost) {
-      const material = materialMap.get(item.material.toString());
-      if (!material) {
-        throw new Error(`Material ${item.materialName || item.materialCode} not found in inventory.`);
+    const productMap = new Map();
+    products.forEach(p => {
+      productMap.set(p._id.toString(), p);
+      productMap.set(p.code, p);
+    });
+
+    const validatedProducts = [];
+    const materialRequirements = new Map(); // materialId -> totalNeeded
+    let totalEstimatedTime = 0;
+
+    for (const item of orderProducts) {
+      const product = productMap.get(item.productId || item.productCode);
+      if (!product) {
+        throw new Error(`Product ${item.productId || item.productCode} not found.`);
       }
 
-      const neededQuantity = item.quantity * orderData.quantity;
-      if (material.currentStock < neededQuantity) {
-        hasInsufficientStock = true;
+      validatedProducts.push({
+        product: product._id,
+        quantity: item.quantity,
+        productName: product.name,
+        productCode: product.code
+      });
+
+      totalEstimatedTime += (product.estimatedProductionTime || 0) * item.quantity;
+
+      // Aggregate materials
+      for (const matCost of product.estimateMaterialCost) {
+        const matId = matCost.material.toString();
+        const needed = matCost.quantity * item.quantity;
+        materialRequirements.set(matId, (materialRequirements.get(matId) || 0) + needed);
       }
     }
 
-    // 2. Generate order code
+    // 2. Check stock availability
+    const materialIds = Array.from(materialRequirements.keys());
+    const materials = await Material.find({ _id: { $in: materialIds } }).session(session);
+    const materialMap = new Map(materials.map(m => [m._id.toString(), m]));
+
+    const shortages = [];
+    let hasInsufficientStock = false;
+
+    for (const [matId, neededQuantity] of materialRequirements.entries()) {
+      const material = materialMap.get(matId);
+      if (!material) {
+        throw new Error(`Material ${matId} not found in inventory.`);
+      }
+
+      if (material.currentStock < neededQuantity) {
+        hasInsufficientStock = true;
+        shortages.push({
+          material: material._id,
+          materialCode: material.code,
+          materialName: material.name,
+          neededQuantity,
+          availableQuantity: material.currentStock,
+          shortageQuantity: neededQuantity - material.currentStock
+        });
+      }
+    }
+
+    // 3. Generate order code
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -50,21 +106,54 @@ export const createProductionOrder = async (orderData, creatorId) => {
 
     const orderCode = `CF-${dateStr}-${(count + 1).toString().padStart(3, '0')}`;
 
-    // Calculate total estimated time for the whole order
-    const estimatedCompletionTime = orderData.quantity * (product.estimatedProductionTime || 0);
-
-    // 3. Create order
+    // 4. Create Production Order
     const newOrder = new ProductionOrder({
-      ...orderData,
       orderCode,
-      estimatedCompletionTime,
+      products: validatedProducts,
+      priority,
+      deadline,
+      autoDeadline,
+      estimatedCompletionTime: totalEstimatedTime,
       createdBy: creatorId,
       status: hasInsufficientStock ? ORDER_STATUS.INSUFFICIENT_MATERIALS : ORDER_STATUS.READY_TO_ASSIGN
     });
 
     await newOrder.save({ session });
 
-    // 4. Automatically create Material Requisition (Phiếu xuất vật liệu)
+    // 5. Create BOM snapshot for this production order
+    const bomItems = Array.from(materialRequirements.entries()).map(([matId, needed]) => {
+      const material = materialMap.get(matId);
+      return {
+        material: matId,
+        qtyPerUnit: needed, // Total quantity needed for this order
+        unit: material.unit,
+        note: `Snapshot for order ${orderCode}`
+      };
+    });
+
+    const newBom = new Bom({
+      productionOrder: newOrder._id,
+      items: bomItems,
+      version: 'v1.0-order',
+      isActive: true
+    });
+
+    await newBom.save({ session });
+
+    // 6. Create Material Alerts if stock is insufficient
+    if (hasInsufficientStock) {
+      const alertPromises = shortages.map(shortage => {
+        const newAlert = new MaterialAlert({
+          ...shortage,
+          productionOrder: newOrder._id,
+          status: 'pending'
+        });
+        return newAlert.save({ session });
+      });
+      await Promise.all(alertPromises);
+    }
+
+    // 7. Automatically create Material Requisition
     const reqCount = await MaterialRequisition.countDocuments({
       createdAt: { $gte: today }
     }).session(session);
@@ -74,28 +163,35 @@ export const createProductionOrder = async (orderData, creatorId) => {
       requisitionCode,
       productionOrder: newOrder._id,
       createdBy: creatorId,
-      items: product.estimateMaterialCost.map(item => ({
-        material: item.material,
-        requestedQuantity: item.quantity * orderData.quantity
-      })),
+      items: Array.from(materialRequirements.entries()).map(([matId, needed]) => {
+        const material = materialMap.get(matId);
+        const available = material ? material.currentStock : 0;
+        return {
+          material: matId,
+          requestedQuantity: needed,
+          actualQuantity: Math.min(needed, available)
+        };
+      }),
       status: REQUISITION_STATUS.PENDING
     });
 
     await newRequisition.save({ session });
 
     await session.commitTransaction();
-    console.log(`[Production] Order ${orderCode} and Requisition ${requisitionCode} created successfully.`);
+    console.log(`[Production] Order ${orderCode} created successfully with ${validatedProducts.length} products.`);
 
     return {
       status: 'success',
       message: hasInsufficientStock
-        ? 'Production order created with insufficient materials status. Requisition pending.'
-        : 'Production order created and ready to assign. Requisition pending.',
-      data: { order: newOrder, requisition: newRequisition }
+        ? `Production order created with ${shortages.length} material shortages. Material alerts generated.`
+        : 'Production order created and ready to assign.',
+      data: { order: newOrder, requisition: newRequisition, shortages }
     };
   } catch (error) {
-    await session.abortTransaction();
-    console.log('[ProductionOrderService] createProductionOrder error:', error);
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
+    console.error('[ProductionOrderService] createProductionOrder error:', error);
     return { status: 'error', message: error.message, data: null };
   } finally {
     session.endSession();
@@ -104,36 +200,57 @@ export const createProductionOrder = async (orderData, creatorId) => {
 
 /**
  * Re-check stock and update order status to ready_to_assign if materials are enough.
+ * Handles multiple products.
  */
 export const checkOrderMaterials = async (orderId) => {
   try {
-    const order = await ProductionOrder.findById(orderId).populate('productId');
+    const order = await ProductionOrder.findById(orderId).populate('products.product');
     if (!order) throw new Error('Order not found.');
 
     if (order.status !== ORDER_STATUS.INSUFFICIENT_MATERIALS) {
       return { status: 'error', message: 'Order is not in insufficient materials status.', data: null };
     }
 
-    const product = order.productId;
-    const totalQuantity = order.quantity;
-
-    for (const item of product.estimateMaterialCost) {
-      const material = await Material.findById(item.material).lean();
-
-      if (!material) throw new Error(`Material ${item.materialName || item.materialCode} not found.`);
-
-      const neededQuantity = item.quantity * totalQuantity;
-      if (material.currentStock < neededQuantity) {
-        return {
-          status: 'error',
-          message: `Still insufficient stock for ${material.name}. Needed: ${neededQuantity}, Available: ${material.currentStock}`,
-          data: { material: material.name, needed: neededQuantity, available: material.currentStock }
-        };
+    const materialRequirements = new Map();
+    for (const item of order.products) {
+      const product = item.product;
+      for (const matCost of product.estimateMaterialCost) {
+        const matId = matCost.material.toString();
+        const needed = matCost.quantity * item.quantity;
+        materialRequirements.set(matId, (materialRequirements.get(matId) || 0) + needed);
       }
+    }
+
+    const shortages = [];
+    for (const [matId, neededQuantity] of materialRequirements.entries()) {
+      const material = await Material.findById(matId).lean();
+      if (!material) throw new Error(`Material ${matId} not found.`);
+
+      if (material.currentStock < neededQuantity) {
+        shortages.push({
+          material: material.name,
+          needed: neededQuantity,
+          available: material.currentStock
+        });
+      }
+    }
+
+    if (shortages.length > 0) {
+      return {
+        status: 'error',
+        message: `Still insufficient stock for ${shortages.length} materials.`,
+        data: { shortages }
+      };
     }
 
     order.status = ORDER_STATUS.READY_TO_ASSIGN;
     await order.save();
+
+    // Mark alerts as resolved if they exist
+    await MaterialAlert.updateMany(
+      { productionOrder: orderId, status: 'pending' },
+      { status: 'resolved' }
+    );
 
     return {
       status: 'success',
@@ -312,7 +429,7 @@ export const updateAssignmentStatus = async (assignmentId, status, completedQuan
   try {
     const assignment = await ProductionOrderAssignment.findById(assignmentId).populate({
       path: 'productionOrder',
-      populate: { path: 'productId' }
+      populate: { path: 'products.product' }
     });
     if (!assignment) throw new Error('Assignment not found.');
 
@@ -349,8 +466,10 @@ export const updateAssignmentStatus = async (assignmentId, status, completedQuan
         // Calculate time-based progress for logging/analytics
         let timeProgressMsg = '';
         if (assignment.startedAt) {
-          const product = assignment.productionOrder.productId;
-          const estimatedTimePerUnit = product.estimatedProductionTime || 0; // assuming minutes
+          // Access product using products.product field
+          const product = assignment.productionOrder.products.find(p => p.productId === assignment.productionOrder.productId);
+          if (!product) throw new Error('Product not found in order.');
+          const estimatedTimePerUnit = product.product.estimatedProductionTime || 0; // assuming minutes
           const totalEstimatedMinutes = assignment.assignedQuantity * estimatedTimePerUnit;
           const actualElapsedMinutes = (new Date() - assignment.startedAt) / (1000 * 60);
 
@@ -431,7 +550,7 @@ export const createStockInSlip = async (orderId, managerId, slipData) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const order = await ProductionOrder.findById(orderId).populate('productId').session(session);
+    const order = await ProductionOrder.findById(orderId).populate('products.product').session(session);
     if (!order) throw new Error('Production order not found.');
     if (order.status !== ORDER_STATUS.COMPLETED) {
       throw new Error('Production order must be completed before creating stock-in slip.');
@@ -445,22 +564,24 @@ export const createStockInSlip = async (orderId, managerId, slipData) => {
 
     const slipNumber = await generateSlipNumber(INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT);
 
+    const slipItems = order.products.map(pItem => ({
+      product: pItem.product._id,
+      itemName: pItem.product.name,
+      itemCode: pItem.product.code,
+      unit: pItem.product.unit || 'cái',
+      quantity: {
+        requested: pItem.quantity,
+        actual: 0
+      },
+      unitPrice: pItem.product.baseCost || 0
+    }));
+
     const newSlip = new InventoryImportExportSlip({
       type: INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT,
       slipNumber,
       relatedProductionOrder: orderId,
       reason: `Nhập kho thành phẩm từ lệnh sản xuất ${order.orderCode}`,
-      items: [{
-        product: order.productId._id,
-        itemName: order.productId.name,
-        itemCode: order.productId.code,
-        unit: order.productId.unit || 'cái',
-        quantity: {
-          requested: order.quantity,
-          actual: slipData.actualQuantity || order.quantity
-        },
-        unitPrice: order.productId.baseCost || 0
-      }],
+      items: slipItems,
       signatures: {
         creator: managerId,
         personInOut: slipData.personInOut || 'Bộ phận sản xuất'
@@ -484,5 +605,27 @@ export const createStockInSlip = async (orderId, managerId, slipData) => {
     return { status: 'error', message: error.message, data: null };
   } finally {
     session.endSession();
+  }
+};
+
+/**
+ * Get BOM for a specific production order.
+ */
+export const getBomByOrderId = async (orderId) => {
+  try {
+    const bom = await Bom.findOne({ productionOrder: orderId })
+      .populate('items.material', 'name code unit price')
+      .lean();
+
+    if (!bom) throw new Error('BOM not found for this production order.');
+
+    return {
+      status: 'success',
+      message: 'BOM retrieved successfully.',
+      data: bom
+    };
+  } catch (error) {
+    console.log('[ProductionOrderService] getBomByOrderId error:', error);
+    return { status: 'error', message: error.message, data: null };
   }
 };

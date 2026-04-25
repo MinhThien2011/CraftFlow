@@ -192,11 +192,8 @@ const superLogger = {
     init(name, title = 'A Supreme System', align = 'center') {
         this.projectName = (name || 'SERVICE').toUpperCase();
         this.alignment = align.toLowerCase();
-        
         const banner = figlet.textSync(this.projectName, { font: 'ANSI Shadow' });
         const titleBanner = figlet.textSync(title, { font: 'slant' });
-
-        console.clear();
 
         console.log(gradient(['#FF3CAC', '#784BA0', '#2B86C5']).multiline(this.alignText(banner)));
         console.log(gradient(['#00e5ff', '#784BA0']).multiline(this.alignText(titleBanner)));

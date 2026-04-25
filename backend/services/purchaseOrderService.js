@@ -1,40 +1,133 @@
 import PurchaseOrder from "../models/PurchaseOrder.js";
-import { PURCHASE_ORDER_STATUS } from "../utils/constants.js";
+import Material from "../models/Material.js";
+import MaterialAlert from "../models/MaterialAlert.js";
+import InventoryImportExportSlip from "../models/InventoryImportExportSlip.js";
+import { PURCHASE_ORDER_STATUS, PRIORITY, INVENTORY_IMPORT_EXPORT_SLIP_TYPE, INVENTORY_IMPORT_EXPORT_SLIP_STATUS } from "../utils/constants.js";
 import { processMaterialCosts } from "../utils/productHelpers.js";
+import { generateSlipNumber } from "../utils/slipHelper.js";
 
 export const createPurchaseOrderService = async (data, userId) => {
     try {
-        const { purchaseOrderItems, orderReason } = data;
+        const {
+            purchaseOrderItems: manualItems = [],
+            orderReason,
+            priority = PRIORITY.MEDIUM,
+            productionOrder,
+            materialAlert
+        } = data;
 
-        // Process materials and calculate costs
-        const { processedMaterials, totalBaseCost } = await processMaterialCosts(purchaseOrderItems);
-        const finalPurchaseOrderItems = processedMaterials.map(item => {
-            const price = item.priceAtTime || 0;
-            return {
-                material: item.material,
-                materialCode: item.materialCode,
-                unit: item.unit,
-                quantity: item.quantity,
-                priceAtTimePurchase: price,
-                totalPriceAtTimePurchase: price * item.quantity
-            };
+        const consolidatedRequirements = new Map(); // materialId -> quantity
+        const alertsToLink = new Set();
+
+        // 1. Process manual items
+        manualItems.forEach(item => {
+            const matId = item.material.toString();
+            consolidatedRequirements.set(matId, (consolidatedRequirements.get(matId) || 0) + item.quantity);
         });
 
-        const purchaseOrderData = {
+        // 2. Fetch all relevant alerts in one go to optimize performance
+        const alertQuery = { status: 'pending', purchaseOrder: { $exists: false } };
+        if (productionOrder) {
+            alertQuery.productionOrder = productionOrder;
+        } else if (materialAlert) {
+            alertQuery._id = materialAlert;
+        }
+
+        if (productionOrder || materialAlert) {
+            const relevantAlerts = await MaterialAlert.find(alertQuery).lean();
+
+            if (materialAlert && relevantAlerts.length === 0) {
+                // If a specific alert was requested but not found in 'pending' and 'unlinked' state
+                const checkAlert = await MaterialAlert.findById(materialAlert).select('purchaseOrder status').lean();
+                if (checkAlert?.purchaseOrder) {
+                    throw new Error('This material alert is already linked to another purchase order.');
+                }
+                if (checkAlert?.status !== 'pending') {
+                    throw new Error('This material alert is no longer pending.');
+                }
+            }
+
+            relevantAlerts.forEach(alert => {
+                const matId = alert.material.toString();
+                consolidatedRequirements.set(matId, (consolidatedRequirements.get(matId) || 0) + (alert.shortageQuantity || 0));
+                alertsToLink.add(alert._id.toString());
+            });
+        }
+
+        if (consolidatedRequirements.size === 0) {
+            throw new Error('No items to purchase. Please provide items, a valid Production Order, or a Material Alert.');
+        }
+
+        // 3. Process materials and calculate costs (optimized utility)
+        const finalItemsToProcess = Array.from(consolidatedRequirements.entries()).map(([material, quantity]) => ({
+            material,
+            quantity
+        }));
+
+        const { processedMaterials, totalBaseCost } = await processMaterialCosts(finalItemsToProcess);
+
+        // 4. Performance Check: Shelf Capacity (only for general stock fill)
+        const isGeneralStockFill = !productionOrder && !materialAlert;
+        if (isGeneralStockFill) {
+            const materialIds = processedMaterials.map(m => m.material);
+            const materials = await Material.find({ _id: { $in: materialIds } }).populate('shelf').lean();
+            const materialMap = new Map(materials.map(m => [m._id.toString(), m]));
+
+            for (const item of processedMaterials) {
+                const material = materialMap.get(item.material.toString());
+                if (material?.shelf) {
+                    const { shelf } = material;
+                    if (shelf.currentLoad + item.quantity > shelf.maxCapacity) {
+                        throw new Error(`Shelf ${shelf.shelfCode} would exceed max capacity. Current: ${shelf.currentLoad}, Adding: ${item.quantity}, Max: ${shelf.maxCapacity}`);
+                    }
+                }
+            }
+        }
+
+        // 5. Build Final Purchase Order Items
+        const finalPurchaseOrderItems = processedMaterials.map(item => ({
+            material: item.material,
+            materialCode: item.materialCode,
+            unit: item.unit,
+            quantity: item.quantity,
+            priceAtTimePurchase: item.priceAtTime || 0,
+            totalPriceAtTimePurchase: (item.priceAtTime || 0) * item.quantity
+        }));
+
+        // 6. Clean and Descriptive Reason
+        const defaultReason = productionOrder
+            ? `Purchase for Production Order ${productionOrder}`
+            : materialAlert
+                ? `Purchase for Material Alert ${materialAlert}`
+                : 'General Stock Replenishment';
+
+        const finalReason = orderReason || `${defaultReason}. Priority: ${priority}. Total items: ${finalPurchaseOrderItems.length}.`;
+
+        const purchaseOrder = await PurchaseOrder.create({
             creator: userId,
             status: PURCHASE_ORDER_STATUS.PENDING,
-            orderReason,
+            priority,
+            productionOrder,
+            materialAlert,
+            orderReason: finalReason,
             purchaseOrderItems: finalPurchaseOrderItems,
             totalBaseCost
-        };
+        });
 
-        const purchaseOrder = await PurchaseOrder.create(purchaseOrderData);
+        // 7. Update MaterialAlerts link (Optimized bulk update)
+        if (alertsToLink.size > 0) {
+            await MaterialAlert.updateMany(
+                { _id: { $in: Array.from(alertsToLink) } },
+                { purchaseOrder: purchaseOrder._id }
+            );
+        }
+
         return { success: true, data: purchaseOrder, message: 'Purchase order created successfully' };
     } catch (error) {
-        console.log('[createPurchaseOrderService] error:', error);
-        return { success: false, message: 'Failed to create purchase order: ' + error.message, data: null };
+        console.error('[createPurchaseOrderService] error:', error);
+        return { success: false, message: error.message || 'Failed to create purchase order', data: null };
     }
-}
+};
 
 export const updatePurchaseOrderService = async (orderId, data) => {
     try {
@@ -79,7 +172,7 @@ export const deletePurchaseOrderService = async (orderId) => {
     try {
         const purchaseOrderDelete = await PurchaseOrder.findByIdAndDelete(orderId).lean()
         if (!purchaseOrderDelete) {
-            return { success: false, message: 'Purchase order not found', data: null };
+            return { success: true, message: 'Purchase order not found', data: null };
         }
         return { success: true, data: purchaseOrderDelete, message: 'Purchase order deleted successfully' };
     }
@@ -89,17 +182,54 @@ export const deletePurchaseOrderService = async (orderId) => {
     }
 }
 
-export const updatePurchaseOrderStatusService = async (orderId, data) => {
+export const updatePurchaseOrderStatusService = async (orderId, data, adminId) => {
     try {
-        // const purchaseOrder = await PurchaseOrder.findById(orderId).lean()
-        // if (data.status && data.status === purchaseOrder.status) {
-        //     return { success: false, message: 'Purchase order status cannot be updated', data: purchaseOrder };
-        // }
-        const purchaseOrderUpdate = await PurchaseOrder.findByIdAndUpdate(orderId, { $set: data }, { returnDocument: 'after' }).lean()
-        if (!purchaseOrderUpdate) {
+        const purchaseOrder = await PurchaseOrder.findById(orderId);
+        if (!purchaseOrder) {
             return { success: false, message: 'Purchase order not found', data: null };
         }
-        return { success: true, data: purchaseOrderUpdate, message: 'Purchase order status updated successfully' };
+
+        // Update status and notes
+        purchaseOrder.status = data.status;
+        if (data.adminNotes) purchaseOrder.adminNotes = data.adminNotes;
+
+        await purchaseOrder.save();
+
+        // If status becomes ACCEPTED, automatically create an Import Slip
+        if (data.status === PURCHASE_ORDER_STATUS.ACCEPTED) {
+            const slipNumber = await generateSlipNumber(INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT);
+
+            const slipItems = purchaseOrder.purchaseOrderItems.map(item => ({
+                material: item.material,
+                itemName: `Material: ${item.materialCode}`, // Simplification, could be more detailed
+                itemCode: item.materialCode,
+                unit: item.unit,
+                quantity: {
+                    requested: item.quantity,
+                    actual: 0 // Will be filled by kho manager
+                },
+                unitPrice: item.priceAtTimePurchase,
+                amount: 0
+            }));
+
+            const newSlip = new InventoryImportExportSlip({
+                type: INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT,
+                slipNumber,
+                relatedPurchaseOrder: purchaseOrder._id,
+                relatedProductionOrder: purchaseOrder.productionOrder,
+                reason: `Nhập kho từ đơn mua hàng ${purchaseOrder._id}. Lý do: ${purchaseOrder.orderReason}`,
+                items: slipItems,
+                signatures: {
+                    creator: adminId, // Admin who approved the PO
+                },
+                status: INVENTORY_IMPORT_EXPORT_SLIP_STATUS.PENDING
+            });
+
+            await newSlip.save();
+            console.log(`[PurchaseOrder] Auto-created Import Slip ${slipNumber} for PO ${orderId}`);
+        }
+
+        return { success: true, data: purchaseOrder, message: 'Purchase order status updated successfully' };
     }
     catch (error) {
         console.log('[updatePurchaseOrderStatusService] error:', error);
@@ -142,7 +272,7 @@ export const getAllPurchaseOrdersService = async (query = {}) => {
             .populate('creator', 'username email')
             .populate('purchaseOrderItems.material', 'name price barcode code');
         if (!purchaseOrders || purchaseOrders.length === 0) {
-            return { success: false, message: 'Purchase orders not found', data: null };
+            return { success: true, message: 'Purchase orders not found', data: null };
         }
         return { success: true, data: purchaseOrders, message: 'Purchase orders retrieved successfully' };
 

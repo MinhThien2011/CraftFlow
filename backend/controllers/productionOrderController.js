@@ -1,12 +1,13 @@
 import { StatusCodes } from 'http-status-codes';
 import * as productionOrderService from '../services/productionOrderService.js';
 import { logActivity } from '../utils/logger.js';
-import { ROLES } from '../utils/constants.js';
+import { ROLES, ORDER_STATUS } from '../utils/constants.js';
 import {
   createOrderValidator,
   assignOrderValidator,
   reassignTaskValidator,
-  updateAssignmentStatusValidator
+  updateAssignmentStatusValidator,
+  createStockInSlipValidator
 } from '../validations/productionValidation.js';
 
 export const createOrder = async (req, res) => {
@@ -30,13 +31,6 @@ export const createOrder = async (req, res) => {
         data: null
       });
     }
-
-    res.status(StatusCodes.CREATED).json({
-      status: 'success',
-      message: result.message,
-      data: result.data
-    });
-
     await logActivity({
       author: req.userId,
       action: 'CREATE_PRODUCTION_ORDER',
@@ -44,6 +38,12 @@ export const createOrder = async (req, res) => {
       details: `Created order: ${result.data.order.orderCode}`,
       targetId: result.data.order._id
     }, req);
+
+    return res.status(StatusCodes.CREATED).json({
+      status: 'success',
+      message: result.message,
+      data: result.data
+    });
 
   } catch (error) {
     console.log('[ProductionOrderController] createOrder error:', error);
@@ -249,12 +249,47 @@ export const updateAssignmentStatus = async (req, res) => {
   }
 };
 
+export const getBom = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await productionOrderService.getBomByOrderId(id);
+
+    if (result.status === 'error') {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        status: 'error',
+        message: result.message,
+        data: null
+      });
+    }
+
+    return res.status(StatusCodes.OK).json({
+      status: 'success',
+      message: result.message,
+      data: result.data
+    });
+  } catch (error) {
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: 'error',
+      message: 'Failed to get BOM.',
+      data: null
+    });
+  }
+};
+
 export const createStockInSlip = async (req, res) => {
   try {
-    const { id } = req.params; // Order ID
-    const slipData = req.body;
+    const { error, value } = createStockInSlipValidator(req.body);
+    if (error) {
+      const errorMessages = error.details.map(detail => detail.message).join(', ');
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        status: 'error',
+        message: `Validation failed: ${errorMessages}`,
+        data: null
+      });
+    }
 
-    const result = await productionOrderService.createStockInSlip(id, req.userId, slipData);
+    const { id } = req.params; // Order ID
+    const result = await productionOrderService.createStockInSlip(id, req.userId, value);
 
     if (result.status === 'error') {
       return res.status(StatusCodes.BAD_REQUEST).json({

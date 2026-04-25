@@ -3,16 +3,20 @@ import { ORDER_STATUS, PRIORITY } from '../utils/constants.js';
 
 const productionOrderSchema = new mongoose.Schema({
   orderCode: { type: String, unique: true },   // Auto generate: CF-20260325-001
-  productId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Product',
-    required: true,
-  },
-  quantity: {
-    type: Number,
-    required: true,
-    min: 1,
-  },
+  products: [{
+    product: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Product',
+      required: true,
+    },
+    quantity: {
+      type: Number,
+      required: true,
+      min: 1,
+    },
+    productName: String,
+    productCode: String,
+  }],
   status: {
     type: String,
     enum: Object.values(ORDER_STATUS),
@@ -51,6 +55,6 @@ const productionOrderSchema = new mongoose.Schema({
 
 // Compound indexes
 productionOrderSchema.index({ status: 1, priority: 1, deadline: 1 });
-productionOrderSchema.index({ productId: 1, status: 1 });
+productionOrderSchema.index({ 'products.product': 1, status: 1 });
 
 export default mongoose.model('ProductionOrder', productionOrderSchema);

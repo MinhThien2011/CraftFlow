@@ -55,6 +55,10 @@ const InventoryImportExportSlipSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'ProductionOrder',
     },
+    relatedPurchaseOrder: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'PurchaseOrder',
+    },
     warehouse: {
         name: { type: String, trim: true }, // "Nhập/Xuất tại kho (ngăn lô)"
         location: { type: String, trim: true }, // "Địa điểm"
@@ -84,6 +88,10 @@ const InventoryImportExportSlipSchema = new mongoose.Schema({
         },
         unitPrice: { type: Number, required: true, default: 0 },    // "Đơn giá"
         amount: { type: Number, required: true, default: 0 },       // "Thành tiền"
+
+        // Batch tracking for FIFO
+        batchNumber: { type: String }, // Batch number for this specific item
+        expirationDate: { type: Date }, // Expiration date for this batch
     }],
 
     // --- Totals ---
@@ -129,6 +137,16 @@ const InventoryImportExportSlipSchema = new mongoose.Schema({
     images: [{ // Physical scans of the signed paper slips
         type: String,
     }],
+    inStockAt: { // Timestamp when status became IN_STOCK
+        type: Date,
+    },
+    isImageUploadLate: { // Flag if image uploaded after 3 days
+        type: Boolean,
+        default: false,
+    },
+    imageUploadedAt: {
+        type: Date,
+    },
     notes: { type: String, trim: true },
 }, {
     timestamps: true,
@@ -137,12 +155,12 @@ const InventoryImportExportSlipSchema = new mongoose.Schema({
 });
 
 // Middleware to calculate amount and totalAmount before saving
-InventoryImportExportSlipSchema.pre('save', function (next) {
+InventoryImportExportSlipSchema.pre('save', function () {
     this.items.forEach(item => {
         item.amount = item.quantity.actual * item.unitPrice;
     });
     this.totalAmount = this.items.reduce((sum, item) => sum + item.amount, 0);
-    next();
+    return this;
 });
 
 export default mongoose.model('InventoryImportExportSlip', InventoryImportExportSlipSchema);

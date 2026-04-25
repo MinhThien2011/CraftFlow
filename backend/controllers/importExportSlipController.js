@@ -120,3 +120,33 @@ export const getAllSlips = async (req, res) => {
         res.status(400).json({ error: 'Failed to retrieve slips: ' + error.message });
     }
 };
+
+export const uploadSlipImages = async (req, res) => {
+    try {
+        const userId = req.userId;
+        const { id } = req.params;
+        const imageUrls = req.imageUrls || req.body.images; // Support both middleware and direct URLs
+
+        if (!imageUrls || !Array.isArray(imageUrls) || imageUrls.length === 0) {
+            return res.status(400).json({ error: 'At least one image is required' });
+        }
+
+        const result = await importExportSlipService.uploadSlipImagesService(id, imageUrls, userId);
+
+        if (result.success) {
+            await logActivity({
+                author: req.userId,
+                action: 'UPLOAD_SLIP_IMAGES',
+                module: 'IMPORT_EXPORT_SLIP',
+                details: `User ${req.userId} uploaded images for slip ${id}. Late: ${result.data.isImageUploadLate}`,
+                targetId: id,
+                metadata: { isLate: result.data.isImageUploadLate }
+            }, req, true);
+        }
+
+        return res.status(200).json(result);
+    } catch (error) {
+        console.error('[uploadSlipImages] error:', error);
+        return res.status(500).json({ status: 'error', message: error.message });
+    }
+};

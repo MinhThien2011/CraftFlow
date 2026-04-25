@@ -201,6 +201,29 @@ export const deleteShelf = async (id) => {
     };
   } catch (error) {
     console.log('[ShelfService] deleteShelf error:', error);
-    return { status: 'error', message: error.message, data: null };
+    return { status: 'error', message: 'Failed to delete shelf.', data: null };
+  }
+};
+
+/**
+ * Recalculate and update the current load of a shelf.
+ */
+export const updateShelfLoad = async (shelfId) => {
+  try {
+    const [materials, products] = await Promise.all([
+      Material.find({ shelf: shelfId, isActive: true }).select('currentStock').lean(),
+      Product.find({ shelf: shelfId, isActive: true }).select('currentStock').lean()
+    ]);
+
+    const totalLoad = [...materials, ...products].reduce((sum, item) => sum + (item.currentStock || 0), 0);
+
+    const shelf = await Shelf.findById(shelfId);
+    if (shelf) {
+      shelf.currentLoad = totalLoad;
+      shelf.status = totalLoad >= shelf.maxCapacity ? 'Full' : 'Available';
+      await shelf.save();
+    }
+  } catch (error) {
+    console.error(`[ShelfService] updateShelfLoad error for shelf ${shelfId}:`, error);
   }
 };

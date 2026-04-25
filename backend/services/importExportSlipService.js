@@ -4,6 +4,8 @@ import Material from "../models/Material.js";
 import Product from "../models/Product.js";
 import InventoryTransaction from "../models/InventoryTransaction.js";
 import { INVENTORY_IMPORT_EXPORT_SLIP_STATUS, INVENTORY_IMPORT_EXPORT_SLIP_TYPE, TRANSACTION_TYPE } from "../utils/constants.js";
+import { updateShelfLoad } from "./shelfService.js";
+import { createBatchesFromImport } from "./fifoService.js";
 
 
 export const createSlipService = async (data, userId) => {
@@ -87,6 +89,7 @@ export const updateSlipStatusService = async (slipId, newStatus, updateData, use
         // --- Handle IN_STOCK Status (Finalize & Update Inventory) ---
         if (newStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.IN_STOCK) {
             await finalizeInventoryUpdate(slip, userId);
+            slip.inStockAt = new Date();
         }
 
         if (updateData.signatures) {
@@ -113,11 +116,63 @@ export const updateSlipStatusService = async (slipId, newStatus, updateData, use
     }
 };
 
+export const uploadSlipImagesService = async (slipId, imageUrls, userId) => {
+    try {
+        const slip = await InventoryImportExportSlip.findById(slipId);
+        if (!slip) throw new Error('Slip not found');
+
+        const uploadTime = new Date();
+
+        // If status is IN_STOCK, check the 3-day deadline
+        if (slip.status === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.IN_STOCK && slip.inStockAt) {
+            const threeDaysInMs = 3 * 24 * 60 * 60 * 1000;
+            const deadline = new Date(slip.inStockAt.getTime() + threeDaysInMs);
+
+            if (uploadTime > deadline) {
+                slip.isImageUploadLate = true;
+                console.log(`[ImportExportSlip] Image upload for slip ${slip.slipNumber} is LATE.`);
+            }
+        }
+
+        slip.images = [...new Set([...slip.images, ...imageUrls])];
+        slip.imageUploadedAt = uploadTime;
+
+        await slip.save();
+
+        return {
+            success: true,
+            message: slip.isImageUploadLate ? "Images uploaded successfully (LATE)" : "Images uploaded successfully",
+            data: slip
+        };
+    } catch (error) {
+        console.log('[uploadSlipImagesService] error:', error);
+        return { success: false, message: 'Failed to upload images: ' + error.message, data: null };
+    }
+};
+
 /**
  * Internal helper to update inventory levels and create transactions
  * Optimized with Promise.all for performance
  */
 async function finalizeInventoryUpdate(slip, userId) {
+    // For IMPORT slips, create inventory batches for FIFO tracking
+    if (slip.type === INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT) {
+        await createBatchesFromImport({
+            items: slip.items.map(item => ({
+                material: item.material,
+                itemCode: item.itemCode,
+                unit: item.unit,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                batchNumber: item.batchNumber,
+                expirationDate: item.expirationDate
+            })),
+            relatedPurchaseOrder: slip.relatedPurchaseOrder,
+            relatedImportSlip: slip._id,
+            relatedProductionOrder: slip.relatedProductionOrder
+        });
+    }
+
     const updatePromises = slip.items.map(async (item) => {
         const Model = item.material ? Material : (item.product ? Product : null);
         if (!Model) return;
@@ -136,6 +191,11 @@ async function finalizeInventoryUpdate(slip, userId) {
         }
 
         await doc.save();
+
+        // Update shelf load if assigned
+        if (doc.shelf) {
+            await updateShelfLoad(doc.shelf);
+        }
 
         // Determine transaction type
         let transType;

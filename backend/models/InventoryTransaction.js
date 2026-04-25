@@ -20,6 +20,8 @@ const transactionSchema = new mongoose.Schema({
   // References to internal system documents
   productionOrder: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductionOrder' },
   requisition: { type: mongoose.Schema.Types.ObjectId, ref: 'MaterialRequisition' },
+  batch: { type: mongoose.Schema.Types.ObjectId, ref: 'InventoryBatch' },
+  purchaseOrder: { type: mongoose.Schema.Types.ObjectId, ref: 'PurchaseOrder' },
 
   // Internal system tracking
   performedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },

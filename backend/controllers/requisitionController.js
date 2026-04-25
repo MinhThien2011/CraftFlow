@@ -1,6 +1,7 @@
 import { StatusCodes } from 'http-status-codes';
 import * as requisitionService from '../services/materialRequisitionService.js';
 import { logActivity } from '../utils/logger.js';
+import { updateRequisitionStatusValidator } from '../validations/requisitionValidation.js';
 
 export const getRequisitions = async (req, res) => {
   try {
@@ -80,10 +81,19 @@ export const requestMaterials = async (req, res) => {
   }
 };
 
-export const updateStatus = async (req, res) => {
+export const updateRequisitionStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, notes, evidenceImage } = req.body;
+    const { error, value } = updateRequisitionStatusValidator(req.body);
+    if (error) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        status: 'error',
+        message: `Validation failed: ${error.details.map(d => d.message).join(', ')}`,
+        data: null
+      });
+    }
+
+    const { status, notes, evidenceImage } = value;
     const result = await requisitionService.updateRequisitionStatus(id, req.userId, status, { notes, evidenceImage });
 
     if (result.status === 'error') {

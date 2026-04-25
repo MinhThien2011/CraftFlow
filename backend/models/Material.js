@@ -11,7 +11,7 @@ const materialSchema = new mongoose.Schema({
   currency: { type: String, default: 'VND' },
   currentStock: { type: Number, default: 0, min: 0 },
   threshold: { type: Number, default: 10, min: 0 },
-  shelf: { type: mongoose.Schema.Types.ObjectId, ref: 'Shelf' }, // Link to Shelf model
+  shelf: { type: mongoose.Schema.Types.ObjectId, ref: 'Shelf', required: true }, // Link to Shelf model
   locationDetails: { type: String, trim: true }, // Extra details like row/box number
   supplier: {
     name: { type: String, trim: true },

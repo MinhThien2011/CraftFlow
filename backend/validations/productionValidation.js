@@ -6,8 +6,14 @@ const objectId = Joi.string().hex().length(24).messages({
 });
 
 const createOrderSchema = Joi.object({
-  productId: objectId.required(),
-  quantity: Joi.number().integer().min(1).required(),
+  products: Joi.array().items(
+    Joi.object({
+      productId: Joi.string().allow('', null),
+      productCode: Joi.string().allow('', null),
+      quantity: Joi.number().integer().min(1).required(),
+    }).or('productId', 'productCode')
+  ).min(1).required(),
+  priority: Joi.string().valid('low', 'medium', 'high', 'urgent').default('medium'),
   notes: Joi.string().trim().allow(''),
   deadline: Joi.date().iso().greater('now').required(),
 });
@@ -28,7 +34,7 @@ const reassignTaskSchema = Joi.object({
   reason: Joi.string().trim().min(5).required(),
 });
 
- const updateAssignmentStatusSchema = Joi.object({
+const updateAssignmentStatusSchema = Joi.object({
   status: Joi.string().valid(...Object.values(ORDER_STATUS)).required(),
   completedQuantity: Joi.number().integer().min(0).optional(),
 });
@@ -40,8 +46,16 @@ const outgoingProductSchema = Joi.object({
   notes: Joi.string().trim().allow(''),
 });
 
-export const createOrderValidator =(body)=> createOrderSchema.validate(body, { abortEarly: false, stripUnknown: true });
-export const assignOrderValidator =(body)=> assignOrderSchema.validate(body, { abortEarly: false, stripUnknown: true });
-export const reassignTaskValidator =(body)=> reassignTaskSchema.validate(body, { abortEarly: false, stripUnknown: true });
-export const updateAssignmentStatusValidator =(body)=> updateAssignmentStatusSchema.validate(body, { abortEarly: false, stripUnknown: true });
-export const outgoingProductValidator =(body)=> outgoingProductSchema.validate(body, { abortEarly: false, stripUnknown: true });
+const createStockInSlipSchema = Joi.object({
+  actualQuantity: Joi.number().min(1).optional(),
+  personInOut: Joi.string().trim().allow(''),
+  notes: Joi.string().trim().allow(''),
+  // images: Joi.array().items(Joi.string()).optional(),
+});
+
+export const createOrderValidator = (body) => createOrderSchema.validate(body, { abortEarly: false, stripUnknown: true });
+export const assignOrderValidator = (body) => assignOrderSchema.validate(body, { abortEarly: false, stripUnknown: true });
+export const reassignTaskValidator = (body) => reassignTaskSchema.validate(body, { abortEarly: false, stripUnknown: true });
+export const updateAssignmentStatusValidator = (body) => updateAssignmentStatusSchema.validate(body, { abortEarly: false, stripUnknown: true });
+export const outgoingProductValidator = (body) => outgoingProductSchema.validate(body, { abortEarly: false, stripUnknown: true });
+export const createStockInSlipValidator = (body) => createStockInSlipSchema.validate(body, { abortEarly: false, stripUnknown: true });

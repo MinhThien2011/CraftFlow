@@ -88,5 +88,135 @@
         "status": "Available",
         "description": "Kệ chứa phụ kiện nhỏ",
         "isActive": true
+    },
+    {
+        "shelfCode": "Kệ C-01",
+        "warehouseSection": "Khu vực C",
+        "category": "Material",
+        "maxCapacity": 1000,
+        "currentLoad": 0,
+        "status": "Available",
+        "description": "Kệ chứa hạt cườm thủy tinh",
+        "isActive": true
+    },
+    {
+        "shelfCode": "Kệ C-02",
+        "warehouseSection": "Khu vực C",
+        "category": "Material",
+        "maxCapacity": 1000,
+        "currentLoad": 0,
+        "status": "Available",
+        "description": "Kệ chứa hạt gỗ tự nhiên",
+        "isActive": true
+    },
+    {
+        "shelfCode": "Kệ D-01",
+        "warehouseSection": "Khu vực D",
+        "category": "Material",
+        "maxCapacity": 500,
+        "currentLoad": 0,
+        "status": "Available",
+        "description": "Kệ chứa đất sét polymer",
+        "isActive": true
+    },
+    {
+        "shelfCode": "Kệ D-02",
+        "warehouseSection": "Khu vực D",
+        "category": "Material",
+        "maxCapacity": 500,
+        "currentLoad": 0,
+        "status": "Available",
+        "description": "Kệ chứa đất sét tự khô",
+        "isActive": true
+    },
+    {
+        "shelfCode": "Kệ E-01",
+        "warehouseSection": "Khu vực E",
+        "category": "Material",
+        "maxCapacity": 300,
+        "currentLoad": 0,
+        "status": "Available",
+        "description": "Kệ chứa dây thừng macrame",
+        "isActive": true
+    },
+    {
+        "shelfCode": "Kệ F-01",
+        "warehouseSection": "Khu vực F",
+        "category": "Material",
+        "maxCapacity": 1000,
+        "currentLoad": 0,
+        "status": "Available",
+        "description": "Kệ chứa keo nến",
+        "isActive": true
+    },
+    {
+        "shelfCode": "Kệ F-02",
+        "warehouseSection": "Khu vực F",
+        "category": "Material",
+        "maxCapacity": 500,
+        "currentLoad": 0,
+        "status": "Available",
+        "description": "Kệ chứa ruy băng lụa",
+        "isActive": true
+    },
+    {
+        "shelfCode": "Kệ G-01",
+        "warehouseSection": "Khu vực G",
+        "category": "Material",
+        "maxCapacity": 1000,
+        "currentLoad": 0,
+        "status": "Available",
+        "description": "Kệ chứa mắt thú bông",
+        "isActive": true
+    },
+    {
+        "shelfCode": "Kệ G-02",
+        "warehouseSection": "Khu vực G",
+        "category": "Material",
+        "maxCapacity": 500,
+        "currentLoad": 0,
+        "status": "Available",
+        "description": "Kệ chứa khóa kéo",
+        "isActive": true
+    },
+    {
+        "shelfCode": "Kệ H-01",
+        "warehouseSection": "Khu vực H",
+        "category": "Material",
+        "maxCapacity": 200,
+        "currentLoad": 0,
+        "status": "Available",
+        "description": "Kệ chứa bông gòn",
+        "isActive": true
+    },
+    {
+        "shelfCode": "Kệ P-05",
+        "warehouseSection": "Khu vực P",
+        "category": "Product",
+        "maxCapacity": 300,
+        "currentLoad": 0,
+        "status": "Available",
+        "description": "Kệ chứa đồ decor macrame",
+        "isActive": true
+    },
+    {
+        "shelfCode": "Kệ P-06",
+        "warehouseSection": "Khu vực P",
+        "category": "Product",
+        "maxCapacity": 200,
+        "currentLoad": 0,
+        "status": "Available",
+        "description": "Kệ chứa gối tựa nhung",
+        "isActive": true
+    },
+    {
+        "shelfCode": "Kệ P-07",
+        "warehouseSection": "Khu vực P",
+        "category": "Product",
+        "maxCapacity": 500,
+        "currentLoad": 0,
+        "status": "Available",
+        "description": "Kệ chứa kẹp tóc handmade",
+        "isActive": true
     }
 ]

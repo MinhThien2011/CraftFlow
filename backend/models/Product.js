@@ -31,7 +31,7 @@ const productSchema = new mongoose.Schema({
   productImage: { type: String, default: 'https://res.cloudinary.com/dvjop6kew/image/upload/v1775898313/products/akyfj6xpovcyhaupebmb.jpg' },
   currentStock: { type: Number, default: 0, min: 0 }, // Current stock quantity
   threshold: { type: Number, default: 5, min: 0 }, // Warning threshold for low stock
-  shelf: { type: mongoose.Schema.Types.ObjectId, ref: 'Shelf' }, // Link to Shelf model
+  shelf: { type: mongoose.Schema.Types.ObjectId, ref: 'Shelf', required: true }, // Link to Shelf model
   locationDetails: { type: String, trim: true }, // Extra details like row/box number
   totalProduced: { type: Number, default: 0, min: 0 } // total produced quantity
 }, {

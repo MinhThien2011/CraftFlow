@@ -16,13 +16,13 @@ requisitionRouter.get('/health', (req, res) => {
 requisitionRouter.use(jwtAuth);
 
 // Common routes
-requisitionRouter.get('/', requisitionController.getRequisitions);
-requisitionRouter.get('/:id', requisitionController.getRequisitionById);
+requisitionRouter.get('/', rolePermission([ROLES.PRODUCTION_MANAGER, ROLES.KHO_MANAGER , ROLES.ADMIN]), requisitionController.getRequisitions);
+requisitionRouter.get('/:id', rolePermission([ROLES.PRODUCTION_MANAGER, ROLES.KHO_MANAGER , ROLES.ADMIN]), requisitionController.getRequisitionById);
 
 // Production Manager requests materials for production orders
 requisitionRouter.post('/', rolePermission([ROLES.PRODUCTION_MANAGER]), requisitionController.requestMaterials);
 
 // Warehouse Manager updates requisition status (accept, prepare, complete, cancel)
-requisitionRouter.patch('/:id/status', rolePermission([ROLES.KHO_MANAGER]), requisitionController.updateStatus);
+requisitionRouter.patch('/:id/status', rolePermission([ROLES.KHO_MANAGER]), requisitionController.updateRequisitionStatus);
 
 export default requisitionRouter;

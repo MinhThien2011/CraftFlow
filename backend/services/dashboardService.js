@@ -145,7 +145,7 @@ export const getChartData = async (days = 7) => {
                     $group: {
                         _id: { $dateToString: { format: '%Y-%m-%d', date: '$completedAt' } },
                         completedCount: { $sum: 1 },
-                        totalProduced: { $sum: '$quantity' }
+                        totalProduced: { $sum: { $sum: '$products.quantity' } }
                     }
                 },
                 { $sort: { _id: 1 } }

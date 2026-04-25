@@ -24,6 +24,7 @@ productionRouter.post('/assign', rolePermission([ROLES.PRODUCTION_MANAGER]), pro
 productionRouter.post('/reassign', rolePermission([ROLES.PRODUCTION_MANAGER]), productionOrderController.reassignTask);
 productionRouter.patch('/assignments/:id/status', rolePermission([ROLES.PRODUCTION_MANAGER, ROLES.STAFF]), productionOrderController.updateAssignmentStatus);
 productionRouter.patch('/:id/check-materials', rolePermission([ROLES.PRODUCTION_MANAGER]), productionOrderController.checkMaterials);
+productionRouter.get('/:id/bom', rolePermission([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.STAFF, ROLES.KHO_MANAGER]), productionOrderController.getBom);
 productionRouter.post('/:id/stock-in', rolePermission([ROLES.PRODUCTION_MANAGER]), productionOrderController.createStockInSlip);
 
 export default productionRouter;

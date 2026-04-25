@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { PURCHASE_ORDER_STATUS } from "../utils/constants.js";
+import { PURCHASE_ORDER_STATUS, PRIORITY } from "../utils/constants.js";
 
 const PurchaseOrderSchema = new mongoose.Schema({
     creator: {
@@ -11,6 +11,19 @@ const PurchaseOrderSchema = new mongoose.Schema({
         type: String,
         enum: Object.values(PURCHASE_ORDER_STATUS),
         default: PURCHASE_ORDER_STATUS.PENDING,
+    },
+    priority: {
+        type: String,
+        enum: Object.values(PRIORITY),
+        default: PRIORITY.MEDIUM,
+    },
+    productionOrder: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'ProductionOrder',
+    },
+    materialAlert: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'MaterialAlert',
     },
     orderReason: {
         type: String,

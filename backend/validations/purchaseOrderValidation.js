@@ -3,10 +3,13 @@ import { PURCHASE_ORDER_STATUS } from '../utils/constants.js';
 
 const purchaseOrderSchema = joi.object({
     orderReason: joi.string().required(),
+    priority: joi.string().valid('low', 'medium', 'high', 'urgent').default('medium'),
+    productionOrder: joi.string().allow('', null),
+    materialAlert: joi.string().allow('', null),
     purchaseOrderItems: joi.array().items(joi.object({
         material: joi.string().required(),
-        quantity: joi.number().min(0).required(),
-    })).required(),
+        quantity: joi.number().min(0.001).required(),
+    })).optional().default([]),
 });
 
 const updateStatusPurchaseOrderSchema = joi.object({

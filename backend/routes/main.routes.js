@@ -11,6 +11,7 @@ import dashboardRouter from "./dashboard.routes.js";
 import shelfRouter from "./shelf.routes.js";
 import slipRouter from "./slip.routes.js";
 import purchaseOrderRouter from "./purchaseOrder.routes.js";
+import batchRouter from "./batch.routes.js";
 
 const mainRouter = Router();
 
@@ -32,5 +33,6 @@ mainRouter.use('/dashboard', dashboardRouter);
 mainRouter.use('/shelves', shelfRouter);
 mainRouter.use('/slips', slipRouter);
 mainRouter.use('/purchaseOrders', purchaseOrderRouter);
+mainRouter.use('/batches', batchRouter);
 
 export default mainRouter;
