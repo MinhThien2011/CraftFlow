@@ -1,5 +1,6 @@
 import * as productService from '../services/productService.js';
 import { StatusCodes } from 'http-status-codes';
+import { clearCacheByPattern, getCachedData, setCachedData } from '../utils/redisFetching.js';
 import {
   createProductValidator,
   updateProductValidator,
@@ -14,13 +15,32 @@ import { handleServiceResponse } from '../utils/responseHelper.js';
  */
 export const getAllProducts = async (req, res) => {
   try {
+    const cacheKey = `product:list:${JSON.stringify(req.query)}`;
+
+    // 1. Try Redis cache
+    const cachedResult = await getCachedData(cacheKey);
+    if (cachedResult) {
+      return res.status(StatusCodes.OK).json({
+        status: 'success',
+        message: 'Products retrieved successfully (from cache).',
+        data: cachedResult
+      });
+    }
+
+    // 2. If not in cache, get from service
     const result = await productService.getProductsByQuery(req.query);
+
+    // 3. Cache successful result
+    if (result.status === 'success') {
+      await setCachedData(cacheKey, result.data);
+    }
+
     return handleServiceResponse(res, result);
   } catch (error) {
-    console.error('[ProductController] getAllProducts error:', error);
+    console.log('[ProductController] getAllProducts error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
-      message: 'Internal server error while fetching products.',
+      message: 'Internal server error while fetching products: ' + error.message,
       data: null
     });
   }
@@ -31,10 +51,25 @@ export const getAllProducts = async (req, res) => {
  */
 export const getProductById = async (req, res) => {
   try {
+    const cacheKey = `product:detail:${req.params.id}`;
+    // 1. Try Redis cache
+    const cachedResult = await getCachedData(cacheKey);
+    if (cachedResult) {
+      return res.status(StatusCodes.OK).json({
+        status: 'success',
+        message: 'Product retrieved successfully (from cache).',
+        data: cachedResult
+      });
+    }
+    // 2. If not in cache, get from service
     const result = await productService.getProductById(req.params.id);
+    // 3. Cache successful result
+    if (result.status === 'success') {
+      await setCachedData(cacheKey, result.data);
+    }
     return handleServiceResponse(res, result);
   } catch (error) {
-    console.error('[ProductController] getProductById error:', error);
+    console.log('[ProductController] getProductById error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
       message: 'Internal server error while fetching product.',
@@ -49,8 +84,12 @@ export const getProductById = async (req, res) => {
 export const createProduct = async (req, res) => {
   try {
     console.log('[ProductController] createProduct request body:', req.body);
-    if (req.body.estimateMaterialCost) {
-      req.body.estimateMaterialCost = JSON.parse(req.body.estimateMaterialCost);
+    if (req.body.estimateMaterialCost && typeof req.body.estimateMaterialCost === 'string') {
+      try {
+        req.body.estimateMaterialCost = JSON.parse(req.body.estimateMaterialCost);
+      } catch (parseError) {
+        console.log('[ProductController] createProduct JSON parse error:', parseError);
+      }
     }
     const { error, value } = createProductValidator(req.body);
     if (error) {
@@ -68,6 +107,9 @@ export const createProduct = async (req, res) => {
     const result = await productService.createProduct(value);
 
     if (result.status === 'success') {
+      // Invalidate list cache
+      await clearCacheByPattern('product:list:*');
+
       await logActivity({
         author: req.userId,
         action: 'CREATE_PRODUCT',
@@ -80,7 +122,7 @@ export const createProduct = async (req, res) => {
 
     return handleServiceResponse(res, result, StatusCodes.CREATED);
   } catch (error) {
-    console.error('[ProductController] createProduct error:', error);
+    console.log('[ProductController] createProduct error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
       message: 'Internal server error while creating product.',
@@ -94,6 +136,13 @@ export const createProduct = async (req, res) => {
  */
 export const updateProduct = async (req, res) => {
   try {
+    if (req.body.estimateMaterialCost && typeof req.body.estimateMaterialCost === 'string') {
+      try {
+        req.body.estimateMaterialCost = JSON.parse(req.body.estimateMaterialCost);
+      } catch (parseError) {
+        console.log('[ProductController] updateProduct JSON parse error:', parseError);
+      }
+    }
     const { error, value } = updateProductValidator(req.body);
     if (error) {
       return res.status(StatusCodes.BAD_REQUEST).json({
@@ -110,6 +159,9 @@ export const updateProduct = async (req, res) => {
     const result = await productService.updateProduct(req.params.id, value);
 
     if (result.status === 'success') {
+      // Invalidate list cache
+      await clearCacheByPattern('product:list:*');
+
       await logActivity({
         author: req.userId,
         action: 'UPDATE_PRODUCT',
@@ -122,7 +174,7 @@ export const updateProduct = async (req, res) => {
 
     return handleServiceResponse(res, result);
   } catch (error) {
-    console.error('[ProductController] updateProduct error:', error);
+    console.log('[ProductController] updateProduct error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
       message: 'Internal server error while updating product.',
@@ -139,6 +191,9 @@ export const deleteProduct = async (req, res) => {
     const result = await productService.deleteProduct(req.params.id);
 
     if (result.status === 'success') {
+      // Invalidate list cache
+      await clearCacheByPattern('product:list:*');
+
       await logActivity({
         author: req.userId,
         action: 'DELETE_PRODUCT',
@@ -150,7 +205,7 @@ export const deleteProduct = async (req, res) => {
 
     return handleServiceResponse(res, result);
   } catch (error) {
-    console.error('[ProductController] deleteProduct error:', error);
+    console.log('[ProductController] deleteProduct error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
       message: 'Internal server error while deleting product.',
@@ -184,6 +239,9 @@ export const incomingProduct = async (req, res) => {
     );
 
     if (result.status === 'success') {
+      // Invalidate list cache
+      await clearCacheByPattern('product:list:*');
+
       await logActivity({
         author: req.userId,
         action: transactionType.toUpperCase(),
@@ -196,7 +254,7 @@ export const incomingProduct = async (req, res) => {
 
     return handleServiceResponse(res, result);
   } catch (error) {
-    console.error('[ProductController] incomingProduct error:', error);
+    console.log('[ProductController] incomingProduct error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
       message: 'Internal server error while recording incoming product.',
@@ -230,6 +288,9 @@ export const outgoingProduct = async (req, res) => {
     );
 
     if (result.status === 'success') {
+      // Invalidate list cache
+      await clearCacheByPattern('product:list:*');
+
       await logActivity({
         author: req.userId,
         action: transactionType.toUpperCase(),
@@ -242,7 +303,7 @@ export const outgoingProduct = async (req, res) => {
 
     return handleServiceResponse(res, result);
   } catch (error) {
-    console.error('[ProductController] outgoingProduct error:', error);
+    console.log('[ProductController] outgoingProduct error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
       message: 'Internal server error while recording outgoing product.',
@@ -271,7 +332,7 @@ export const getProductHistory = async (req, res) => {
 
     return handleServiceResponse(res, result);
   } catch (error) {
-    console.error('[ProductController] getProductHistory error:', error);
+    console.log('[ProductController] getProductHistory error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
       message: 'Internal server error while fetching product history.',
@@ -294,7 +355,7 @@ export const getLowStockProducts = async (req, res) => {
 
     return handleServiceResponse(res, result);
   } catch (error) {
-    console.error('[ProductController] getLowStockProducts error:', error);
+    console.log('[ProductController] getLowStockProducts error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
       message: 'Internal server error while fetching low stock products.',

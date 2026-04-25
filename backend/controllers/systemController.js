@@ -6,30 +6,30 @@ import * as sysLoggingService from '../services/sysLoggingService.js';
  * Get system logs with filtering and pagination.
  */
 export const getSystemLogs = async (req, res) => {
-  try {
-    const { 
-      page = 1, 
-      limit = 50, 
-      module, 
-      action, 
-      authorId, 
-      startDate, 
-      endDate 
-    } = req.query;
+    try {
+        const {
+            page = 1,
+            limit = 50,
+            module,
+            action,
+            authorId,
+            startDate,
+            endDate
+        } = req.query;
 
-    const query = {};
+        const query = {};
 
-    if (module) query.module = module.toUpperCase();
-    if (action) query.action = action.toUpperCase();
-    if (authorId) query.author = authorId;
-    
-    if (startDate || endDate) {
-      query.createdAt = {};
-      if (startDate) query.createdAt.$gte = new Date(startDate);
-      if (endDate) query.createdAt.$lte = new Date(endDate);
-    }
+        if (module) query.module = module.toUpperCase();
+        if (action) query.action = action.toUpperCase();
+        if (authorId) query.author = authorId;
 
-    const result = await sysLoggingService.getSystemLogsService(query, parseInt(page), parseInt(limit));
+        if (startDate || endDate) {
+            query.createdAt = {};
+            if (startDate) query.createdAt.$gte = new Date(startDate);
+            if (endDate) query.createdAt.$lte = new Date(endDate);
+        }
+
+        const result = await sysLoggingService.getSystemLogsService(query, parseInt(page), parseInt(limit));
 
         if (!result.success) {
             return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
@@ -45,7 +45,7 @@ export const getSystemLogs = async (req, res) => {
             data: result.data
         });
     } catch (error) {
-        console.error('[SystemController] getSystemLogs error:', error);
+        console.log('[SystemController] getSystemLogs error:', error);
         return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
             success: false,
             message: 'Failed to retrieve system logs.',

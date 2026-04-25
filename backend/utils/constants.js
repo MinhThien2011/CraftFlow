@@ -88,3 +88,21 @@ export const STOCK_LEVEL_METADATA = {
   [STOCK_LEVEL.NORMAL]: { label: 'Bình thường', color: '#52c41a', priority: 4 },
   [STOCK_LEVEL.OVERSTOCK]: { label: 'Vượt mức', color: '#1890ff', priority: 5 },
 };
+
+export const INVENTORY_IMPORT_EXPORT_SLIP_TYPE = {
+  IMPORT: 'import',
+  EXPORT: 'export',
+}
+
+export const INVENTORY_IMPORT_EXPORT_SLIP_STATUS = {
+  PENDING: 'pending',
+  RECEIVED: 'received',
+  INSPECTED: 'inspected',
+  IN_STOCK: 'in_stock',
+}
+
+export const PURCHASE_ORDER_STATUS = {
+  PENDING: 'pending',
+  ACCEPTED: 'accepted',
+  REJECTED: 'rejected',
+}

@@ -9,13 +9,16 @@ import productRouter from "./product.routes.js";
 import inventoryRouter from "./inventory.routes.js";
 import dashboardRouter from "./dashboard.routes.js";
 import shelfRouter from "./shelf.routes.js";
+import slipRouter from "./slip.routes.js";
+import purchaseOrderRouter from "./purchaseOrder.routes.js";
+import batchRouter from "./batch.routes.js";
 
 const mainRouter = Router();
 
-mainRouter.get('/', (req, res) => {
+mainRouter.get('/health', (req, res) => {
     res.status(200).json({
         success: true,
-        message: "Welcome to the Craft Flow API",
+        message: "Welcome to the Crab Flow API",
     })
 })
 mainRouter.use('/auth', authRouter);
@@ -28,5 +31,8 @@ mainRouter.use('/products', productRouter);
 mainRouter.use('/inventory', inventoryRouter);
 mainRouter.use('/dashboard', dashboardRouter);
 mainRouter.use('/shelves', shelfRouter);
+mainRouter.use('/slips', slipRouter);
+mainRouter.use('/purchaseOrders', purchaseOrderRouter);
+mainRouter.use('/batches', batchRouter);
 
 export default mainRouter;

@@ -30,6 +30,7 @@ export const createProductSchema = Joi.object({
     'any.required': 'Product code is required',
     'string.empty': 'Product code cannot be empty'
   }),
+  barcode: Joi.string().trim().allow('', null).max(100),
   description: Joi.string().allow('', null),
   category: Joi.string().trim().required().messages({
     'any.required': 'Category is required',
@@ -56,6 +57,7 @@ export const createProductSchema = Joi.object({
 export const updateProductSchema = Joi.object({
   name: Joi.string().trim(),
   code: Joi.string().trim().uppercase(),
+  barcode: Joi.string().trim().allow('', null).max(100),
   description: Joi.string().allow('', null),
   category: Joi.string().trim(),
   unit: Joi.string().trim(),

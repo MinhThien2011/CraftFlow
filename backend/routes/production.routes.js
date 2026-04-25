@@ -6,6 +6,13 @@ import { ROLES } from '../utils/constants.js';
 
 const productionRouter = Router();
 
+productionRouter.get('/health', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Welcome to the Production API of Crafb Flow",
+  })
+})
+
 productionRouter.use(jwtAuth);
 
 // Both Admin and Production Manager can view suggestions
@@ -15,7 +22,9 @@ productionRouter.get('/suggestions', rolePermission([ROLES.ADMIN, ROLES.PRODUCTI
 productionRouter.post('/', rolePermission([ROLES.PRODUCTION_MANAGER]), productionOrderController.createOrder);
 productionRouter.post('/assign', rolePermission([ROLES.PRODUCTION_MANAGER]), productionOrderController.assignOrder);
 productionRouter.post('/reassign', rolePermission([ROLES.PRODUCTION_MANAGER]), productionOrderController.reassignTask);
-productionRouter.patch('/assignments/:id/status', rolePermission([ROLES.PRODUCTION_MANAGER]), productionOrderController.updateAssignmentStatus);
+productionRouter.patch('/assignments/:id/status', rolePermission([ROLES.PRODUCTION_MANAGER, ROLES.STAFF]), productionOrderController.updateAssignmentStatus);
 productionRouter.patch('/:id/check-materials', rolePermission([ROLES.PRODUCTION_MANAGER]), productionOrderController.checkMaterials);
+productionRouter.get('/:id/bom', rolePermission([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.STAFF, ROLES.KHO_MANAGER]), productionOrderController.getBom);
+productionRouter.post('/:id/stock-in', rolePermission([ROLES.PRODUCTION_MANAGER]), productionOrderController.createStockInSlip);
 
 export default productionRouter;

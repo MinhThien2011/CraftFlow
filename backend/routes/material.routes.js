@@ -16,6 +16,13 @@ import { ROLES } from '../utils/constants.js';
 
 const materialRouter = Router();
 
+materialRouter.get('/health', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Welcome to the Material API of Crafb Flow",
+  })
+})
+
 // --- Private Routes (Logged in users) ---
 materialRouter.use(jwtAuth);
 

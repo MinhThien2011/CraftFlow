@@ -8,7 +8,7 @@ export const createOrder = async (orderData) => {
         await order.save();
         return { success: true, message: 'Order created successfully.', data: order };
     } catch (error) {
-        console.error('[productOrderService] createOrder error:', error);
+        console.log('[productOrderService] createOrder error:', error);
         return { success: false, message: error.message, data: null };
     }
 }
@@ -19,7 +19,7 @@ export const deleteOrder = async (orderId) => {
         if (!order) return { success: false, message: 'Order not found.', data: null };
         return { success: true, message: 'Order deleted successfully.', data: null };
     } catch (error) {
-        console.error('[productOrderService] deleteOrder error:', error);
+        console.log('[productOrderService] deleteOrder error:', error);
         return { success: false, message: error.message, data: null };
     }
 }
@@ -30,10 +30,10 @@ export const updateOrder = async (orderId, updateData) => {
         if (!order) return { success: false, message: 'Order not found.', data: null };
         return { success: true, message: 'Order updated successfully.', data: order };
     } catch (error) {
-        console.error('[productOrderService] updateOrder error:', error);
+        console.log('[productOrderService] updateOrder error:', error);
         return { success: false, message: error.message, data: null };
     }
-}   
+}
 
 export const getOrder = async (orderId) => {
     try {
@@ -44,7 +44,7 @@ export const getOrder = async (orderId) => {
         if (!order) return { success: false, message: 'Order not found.', data: null };
         return { success: true, message: 'Order retrieved successfully.', data: order };
     } catch (error) {
-        console.error('[productOrderService] getOrder error:', error);
+        console.log('[productOrderService] getOrder error:', error);
         return { success: false, message: error.message, data: null };
     }
 }
@@ -65,7 +65,7 @@ export const getOrders = async (page = 1, pageSize = 10, query = {}) => {
                 .lean(),
             ProductionOrder.countDocuments(query)
         ]);
-        
+
         return {
             success: true,
             message: 'Orders retrieved successfully.',
@@ -80,7 +80,7 @@ export const getOrders = async (page = 1, pageSize = 10, query = {}) => {
             }
         };
     } catch (error) {
-        console.error('[productOrderService] getOrders error:', error);
+        console.log('[productOrderService] getOrders error:', error);
         return { success: false, message: error.message, data: null };
     }
 }

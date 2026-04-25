@@ -13,6 +13,7 @@ const materialSchema = Joi.object({
     'string.empty': 'Material code is required.',
     'string.min': 'Material code must be at least 2 characters long.'
   }),
+  barcode: Joi.string().trim().allow('', null).max(100),
   unit: Joi.string().trim().required().messages({
     'string.empty': 'Unit of measure is required.'
   }),
@@ -46,6 +47,7 @@ const materialSchema = Joi.object({
  */
 const updateMaterialSchema = Joi.object({
   name: Joi.string().trim().min(2).max(100),
+  barcode: Joi.string().trim().allow('', null).max(100),
   unit: Joi.string().trim(),
   color: Joi.string().trim(),
   price: Joi.number().min(0),

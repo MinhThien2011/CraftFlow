@@ -51,7 +51,7 @@ userSchema.index({ fullName: 1 });
 userSchema.index({ currentAssignedQuantity: 1 });
 userSchema.index({ isActive: 1 });
 userSchema.index({ role: 1 });
-
+userSchema.index({ isActive: 1, role: 1, createdAt: -1 });
 // extensions 
 userSchema.statics.comparePassword = function (candidatePassword, userPassword) {
   return bcrypt.compareSync(candidatePassword, userPassword);

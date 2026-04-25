@@ -15,7 +15,20 @@ const materialItemSchema = new mongoose.Schema({
   actualQuantity: {
     type: Number,
     default: 0
-  }
+  },
+  batchAllocations: [{
+    batch: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'InventoryBatch'
+    },
+    batchNumber: String,
+    quantityAllocated: {
+      type: Number,
+      required: true,
+      min: 0
+    },
+    expirationDate: Date
+  }]
 }, {
   _id: true,
   toJSON: {
@@ -41,12 +54,12 @@ const requisitionSchema = new mongoose.Schema({
     type: String,
     unique: true
   },
-  assignment: {
+  productionOrder: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'ProductionOrderAssignment',
+    ref: 'ProductionOrder',
     required: true
   },
-  staff: {
+  createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
@@ -62,15 +75,11 @@ const requisitionSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
+  evidenceImage: String,
   preparedAt: Date,
   completedAt: Date,
   cancelledAt: Date,
-  timeoutAt: Date,
   notes: String,
-  alertSent: {
-    type: Boolean,
-    default: false
-  }
 }, {
   timestamps: true,
   toJSON: {

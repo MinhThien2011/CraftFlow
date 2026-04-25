@@ -5,7 +5,7 @@ import {
   createUser,
   updateUser,
   deleteUser,
-  toggleUserStatus
+  updateUserStatus
 } from '../controllers/userController.js';
 import { jwtAuth } from '../middleware/jwtAuth.js';
 import { rolePermission } from '../middleware/rolePermission.js';
@@ -15,6 +15,12 @@ import { imageUploader } from '../middleware/cloudinary_uploader.js';
 const userRouter = Router();
 
 // --- Private Routes (Logged in users) ---
+userRouter.get('/health', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Welcome to the User API of Crafb Flow",
+  })
+})
 userRouter.use(jwtAuth);
 
 // Profile management
@@ -26,7 +32,7 @@ userRouter.use(rolePermission([ROLES.ADMIN]));
 userRouter.get('/', getAllUsers);
 userRouter.get('/:id', getUserById);
 userRouter.post('/', imageUploader('avatars'), createUser);
-userRouter.patch('/:id/status', toggleUserStatus);
+userRouter.patch('/:id/status', updateUserStatus);
 userRouter.delete('/:id', deleteUser);
 
 export default userRouter;

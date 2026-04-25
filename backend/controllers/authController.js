@@ -18,7 +18,7 @@ export const login = async (req, res) => {
         },
       });
     }
-
+    console.log(value);
     const { identifier, password } = value;
 
     const user = await User.findOne({
@@ -58,7 +58,7 @@ export const login = async (req, res) => {
       });
     }
 
-    const isPasswordValid = User.comparePassword(password, user.password);
+    const isPasswordValid = await User.comparePassword(password, user.password);
 
     if (!isPasswordValid) {
       await logActivity({
@@ -76,13 +76,6 @@ export const login = async (req, res) => {
     }
 
     const accessToken = generateAccessToken(user._id, res);
-    
-    await logActivity({
-      author: user._id,
-      action: 'LOGIN_SUCCESS',
-      module: 'AUTH',
-      details: `User logged in: ${user.username}`
-    }, req);
 
     const userPayload = {
       _id: user._id,
@@ -95,6 +88,13 @@ export const login = async (req, res) => {
       isActive: user.isActive,
     };
 
+    await logActivity({
+      author: user._id,
+      action: 'LOGIN_SUCCESS',
+      module: 'AUTH',
+      details: `User logged in: ${user.username}`
+    }, req);
+
     return res.status(StatusCodes.OK).json({
       success: true,
       message: 'Login successful.',
@@ -103,8 +103,9 @@ export const login = async (req, res) => {
         accessToken,
       },
     });
+
   } catch (error) {
-    console.error('[AuthController] login error:', error);
+    console.log('[AuthController] login error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: 'Error in server. Please try again later.',
@@ -135,21 +136,20 @@ export const refreshPassword = async (req, res) => {
     }
     user.password = newPassword;
     await user.save();
-
     await logActivity({
       author: user._id,
       action: 'PASSWORD_REFRESHED',
       module: 'AUTH',
       details: `Password refreshed for user: ${user.username}`
-    }, req);
-
+    }, req, true);
     return res.status(StatusCodes.OK).json({
       success: true,
       message: 'Password refreshed successfully.',
       data: { user },
     });
+
   } catch (error) {
-    console.error('[AuthController] refreshPassword error:', error);
+    console.log('[AuthController] refreshPassword error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: 'Error in server. Please try again later.',
@@ -158,8 +158,8 @@ export const refreshPassword = async (req, res) => {
   }
 }
 
-export const changePassword = async (req, res) =>{
-try {
+export const changePassword = async (req, res) => {
+  try {
     const { error, value } = handlerPasswordValidator(req.body, 'change');
 
     if (error) {
@@ -180,13 +180,12 @@ try {
     }
     user.password = newPassword;
     await user.save();
-
     await logActivity({
       author: user._id,
       action: 'PASSWORD_CHANGED',
       module: 'AUTH',
       details: `User changed their own password: ${user.username}`
-    }, req);
+    }, req, true);
 
     return res.status(StatusCodes.OK).json({
       success: true,
@@ -194,7 +193,7 @@ try {
       data: { user },
     });
   } catch (error) {
-    console.error('[AuthController] changePassword error:', error);
+    console.log('[AuthController] changePassword error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: 'Error in server. Please try again later.',
@@ -221,13 +220,12 @@ export const logout = async (req, res) => {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
     });
-
     await logActivity({
       author: req.userId,
       action: 'LOGOUT',
       module: 'AUTH',
-      details: 'User logged out'
-    }, req);
+      details: `User logged out: ${req.userId} at ${new Date().toLocaleString()}`,
+    }, req, true);
 
     return res.status(StatusCodes.OK).json({
       success: true,
@@ -235,7 +233,7 @@ export const logout = async (req, res) => {
       data: null
     });
   } catch (error) {
-    console.error('[AuthController] logout error:', error);
+    console.log('[AuthController] logout error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: 'Error in server. Please try again later.',
@@ -285,7 +283,7 @@ export const getUserInfo = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('[AuthController] getMe error:', error);
+    console.log('[AuthController] getMe error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: 'Error in server. Please try again later.',

@@ -6,6 +6,13 @@ import { ROLES } from '../utils/constants.js';
 
 const inventoryRouter = Router();
 
+inventoryRouter.get('/health', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Welcome to the Inventory API of Crafb Flow",
+  })
+})
+
 // --- Private Routes (Admin & Kho Manager only) ---
 inventoryRouter.use([jwtAuth, rolePermission([ROLES.ADMIN, ROLES.KHO_MANAGER])]);
 

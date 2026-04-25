@@ -45,7 +45,7 @@ export const getSystemLogsService = async (query, page = 1, limit = 50) => {
             },
         };
     } catch (error) {
-        console.error('[sysLoggingService] getSystemLogsService error:', error);
+        console.log('[sysLoggingService] getSystemLogsService error:', error);
         return {
             success: false,
             message: error.message,

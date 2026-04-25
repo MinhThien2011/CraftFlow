@@ -44,7 +44,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
         } catch (err) {
             // Don't log if it's just a 401
-            // console.error("Failed to fetch user info:", err);
+            // console.log("Failed to fetch user info:", err);
         } finally {
             setLoading(false);
         }
@@ -123,7 +123,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
             await userApi.logout();
         } catch (err) {
-            console.error("Logout failed:", err);
+            console.log("Logout failed:", err);
         } finally {
             setUser(null);
         }

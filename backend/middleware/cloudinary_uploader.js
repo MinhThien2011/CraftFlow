@@ -62,11 +62,21 @@ const uploadImageToCloudinary = (buffer, folder = 'avatar') => {
         }
     });
 };
-export const imageUploader = (folder = 'avatars') => {
+export const imageUploader = (folder = 'avatars', fieldName = 'image', maxCount = 1) => {
+    const dynamicUploader = multer({
+        storage: multer.memoryStorage(),
+        limits: {
+            fileSize: 1024 * 1024 * 20,
+            files: maxCount,
+        },
+        fileFilter,
+    }).fields([{ name: fieldName, maxCount: maxCount }]);
+
     return (req, res, next) => {
-        uploader(req, res, async (err) => {
+        dynamicUploader(req, res, async (err) => {
             if (err) {
                 console.log('[Multer Error]:', err);
+                // ... (error handling remains the same)
                 if (err instanceof multer.MulterError) {
                     let errorMessage = err.message;
                     let detailMessage = '';
@@ -76,10 +86,10 @@ export const imageUploader = (folder = 'avatars') => {
                         detailMessage = 'Maximum allowed size is 20MB.';
                     } else if (err.code === 'LIMIT_UNEXPECTED_FILE') {
                         errorMessage = `Unexpected field '${err.field}'.`;
-                        detailMessage = "Please use the field name 'image' for file uploads.";
+                        detailMessage = `Please use the field name '${fieldName}' for file uploads.`;
                     } else if (err.code === 'LIMIT_FILE_COUNT') {
                         errorMessage = 'Too many files.';
-                        detailMessage = 'You can only upload 1 file at a time.';
+                        detailMessage = `You can only upload ${maxCount} file(s) at a time.`;
                     } else {
                         errorMessage = 'Upload error.';
                         detailMessage = 'Please check the file type and size.';
@@ -98,19 +108,26 @@ export const imageUploader = (folder = 'avatars') => {
             }
 
             try {
-                if (req.files && req.files.image && req.files.image[0]) {
-                    const imageBuffer = req.files.image[0].buffer;
-                    const uploadResult = await uploadImageToCloudinary(imageBuffer, folder || 'avatars');
-                    if (uploadResult) {
-                        req.imageUrl = uploadResult.url;
+                if (req.files && req.files[fieldName]) {
+                    const uploadPromises = req.files[fieldName].map(file => 
+                        uploadImageToCloudinary(file.buffer, folder)
+                    );
+                    
+                    const results = await Promise.all(uploadPromises);
+                    const urls = results.map(r => r.url);
+                    
+                    if (maxCount === 1) {
+                        req.imageUrl = urls[0];
+                    } else {
+                        req.imageUrls = urls;
                     }
                 }
                 next();
             } catch (error) {
-                console.error('[Cloudinary] Upload Error:', error);
+                console.log('[Cloudinary] Upload Error:', error);
                 return res.status(500).json({
                     success: false,
-                    message: 'Failed to upload image.',
+                    message: 'Failed to upload image(s).',
                     error: error.message
                 });
             }

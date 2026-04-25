@@ -16,7 +16,7 @@ export const getDashboardStats = async (req, res) => {
 
     if (!overview.success || !chartData.success || !performance.success) {
       // Log specific errors for debugging
-      console.error('Dashboard stats retrieval errors:', {
+      console.log('Dashboard stats retrieval errors:', {
         overviewError: overview.message,
         chartDataError: chartData.message,
         performanceError: performance.message
@@ -36,7 +36,7 @@ export const getDashboardStats = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('[DashboardController] getDashboardStats error:', error);
+    console.log('[DashboardController] getDashboardStats error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: 'Internal server error while fetching dashboard statistics.'

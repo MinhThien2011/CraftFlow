@@ -1,4 +1,5 @@
 import Material from '../models/Material.js';
+import mongoose from 'mongoose';
 
 /**
  * Process estimate material costs for a product.
@@ -15,8 +16,22 @@ export const processMaterialCosts = async (estimateMaterialCost) => {
   const materialCodes = new Set();
 
   estimateMaterialCost.forEach(item => {
-    if (item.material) materialIds.add(item.material.toString());
-    if (item.materialCode) materialCodes.add(item.materialCode);
+    const { material, materialCode } = item;
+
+    // Handle 'material' field which can be either ID or Code
+    if (material) {
+      const materialStr = material.toString();
+      if (mongoose.Types.ObjectId.isValid(materialStr)) {
+        materialIds.add(materialStr);
+      } else {
+        materialCodes.add(materialStr);
+      }
+    }
+
+    // Handle explicit 'materialCode' field (for backward compatibility)
+    if (materialCode) {
+      materialCodes.add(materialCode);
+    }
   });
 
   const queryConditions = [];
@@ -34,8 +49,21 @@ export const processMaterialCosts = async (estimateMaterialCost) => {
   let totalBaseCost = 0;
   const processedMaterials = estimateMaterialCost.map((item, index) => {
     const { material, materialCode, quantity } = item;
-    const materialDoc = (material && materialMapById.get(material.toString())) || 
-                        (materialCode && materialMapByCode.get(materialCode));
+
+    let materialDoc;
+
+    // 1. Try to find by 'material' field
+    if (material) {
+      const materialStr = material.toString();
+      materialDoc = mongoose.Types.ObjectId.isValid(materialStr)
+        ? materialMapById.get(materialStr)
+        : materialMapByCode.get(materialStr);
+    }
+
+    // 2. Fallback to 'materialCode' field if still not found
+    if (!materialDoc && materialCode) {
+      materialDoc = materialMapByCode.get(materialCode);
+    }
 
     if (!materialDoc) {
       const identifier = material || materialCode || `item at index ${index}`;
@@ -56,8 +84,8 @@ export const processMaterialCosts = async (estimateMaterialCost) => {
     };
   });
 
-  return { 
-    processedMaterials, 
+  return {
+    processedMaterials,
     totalBaseCost: Number(totalBaseCost.toFixed(2))
   };
 };

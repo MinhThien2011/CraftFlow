@@ -76,7 +76,7 @@ export const getAllShelves = async (query = {}) => {
       data: detailedShelves
     };
   } catch (error) {
-    console.error('[ShelfService] getAllShelves error:', error);
+    console.log('[ShelfService] getAllShelves error:', error);
     return { status: 'error', message: 'Internal server error while retrieving shelves.', data: null };
   }
 };
@@ -117,7 +117,7 @@ export const getShelfById = async (id) => {
       }
     };
   } catch (error) {
-    console.error('[ShelfService] getShelfById error:', error);
+    console.log('[ShelfService] getShelfById error:', error);
     return { status: 'error', message: error.message, data: null };
   }
 };
@@ -140,7 +140,7 @@ export const createShelf = async (shelfData) => {
       data: newShelf
     };
   } catch (error) {
-    console.error('[ShelfService] createShelf error:', error);
+    console.log('[ShelfService] createShelf error:', error);
     return { status: 'error', message: 'Failed to create shelf.', data: null };
   }
 };
@@ -163,7 +163,7 @@ export const updateShelf = async (id, updateData) => {
       data: shelf
     };
   } catch (error) {
-    console.error('[ShelfService] updateShelf error:', error);
+    console.log('[ShelfService] updateShelf error:', error);
     return { status: 'error', message: 'Failed to update shelf.', data: null };
   }
 };
@@ -200,7 +200,30 @@ export const deleteShelf = async (id) => {
       data: null
     };
   } catch (error) {
-    console.error('[ShelfService] deleteShelf error:', error);
-    return { status: 'error', message: error.message, data: null };
+    console.log('[ShelfService] deleteShelf error:', error);
+    return { status: 'error', message: 'Failed to delete shelf.', data: null };
+  }
+};
+
+/**
+ * Recalculate and update the current load of a shelf.
+ */
+export const updateShelfLoad = async (shelfId) => {
+  try {
+    const [materials, products] = await Promise.all([
+      Material.find({ shelf: shelfId, isActive: true }).select('currentStock').lean(),
+      Product.find({ shelf: shelfId, isActive: true }).select('currentStock').lean()
+    ]);
+
+    const totalLoad = [...materials, ...products].reduce((sum, item) => sum + (item.currentStock || 0), 0);
+
+    const shelf = await Shelf.findById(shelfId);
+    if (shelf) {
+      shelf.currentLoad = totalLoad;
+      shelf.status = totalLoad >= shelf.maxCapacity ? 'Full' : 'Available';
+      await shelf.save();
+    }
+  } catch (error) {
+    console.error(`[ShelfService] updateShelfLoad error for shelf ${shelfId}:`, error);
   }
 };

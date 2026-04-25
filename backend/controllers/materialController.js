@@ -2,6 +2,7 @@ import Material from '../models/Material.js';
 import InventoryTransaction from '../models/InventoryTransaction.js';
 import { StatusCodes } from 'http-status-codes';
 import * as materialService from '../services/materialService.js';
+import { clearCacheByPattern, getCachedData, setCachedData } from '../utils/redisFetching.js';
 import {
   createMaterialValidator,
   updateMaterialValidator,
@@ -29,6 +30,18 @@ export const getAllMaterials = async (req, res) => {
     const pageNum = parseInt(page || 1);
     const limitNum = parseInt(limit || 10);
 
+    const cacheKey = `material:list:${JSON.stringify({ search, pageNum, limitNum, stockGt, stockLt, priceGt, priceLt, color, unit })}`;
+
+    // 1. Try Redis cache
+    const cachedResult = await getCachedData(cacheKey);
+    if (cachedResult) {
+      return res.status(StatusCodes.OK).json({
+        success: true,
+        message: 'Materials retrieved successfully (from cache).',
+        data: cachedResult
+      });
+    }
+
     const filters = {
       color,
       unit,
@@ -53,16 +66,19 @@ export const getAllMaterials = async (req, res) => {
       });
     }
 
+    // 2. Cache successful result
+    await setCachedData(cacheKey, result.data);
+
     return res.status(StatusCodes.OK).json({
       success: true,
       message: result.message,
       data: result.data
     });
   } catch (error) {
-    console.error('[MaterialController] getAllMaterials error:', error);
+    console.log('[MaterialController] getAllMaterials error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: 'Failed to retrieve materials.',
+      message: 'Failed to retrieve materials: ' + error.message,
       data: null
     });
   }
@@ -79,13 +95,12 @@ export const getMaterialById = async (req, res) => {
     if (!result.success) {
       return res.status(StatusCodes.NOT_FOUND).json(result);
     }
-
     return res.status(StatusCodes.OK).json(result);
   } catch (error) {
-    console.error('[MaterialController] getMaterialById error:', error);
+    console.log('[MaterialController] getMaterialById error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: 'Failed to retrieve material.',
+      message: 'Failed to retrieve material by id: ' + error.message,
       data: null
     });
   }
@@ -105,10 +120,10 @@ export const getMaterialByCode = async (req, res) => {
 
     return res.status(StatusCodes.OK).json(result);
   } catch (error) {
-    console.error('[MaterialController] getMaterialByCode error:', error);
+    console.log('[MaterialController] getMaterialByCode error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: 'Failed to retrieve material by code.',
+      message: 'Failed to retrieve material by code: ' + error.message,
       data: null
     });
   }
@@ -141,10 +156,10 @@ export const getLowStockMaterials = async (req, res) => {
       data: result.data
     });
   } catch (error) {
-    console.error('[MaterialController] getLowStockMaterials error:', error);
+    console.log('[MaterialController] getLowStockMaterials error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: 'Failed to retrieve low stock materials.',
+      message: 'Failed to retrieve low stock materials: ' + error.message,
       data: null
     });
   }
@@ -175,6 +190,9 @@ export const createMaterial = async (req, res) => {
 
     const newMaterial = await Material.create(value);
 
+    // Invalidate cache
+    await clearCacheByPattern('material:list:*');
+
     await logActivity({
       author: req.userId,
       action: 'CREATE_MATERIAL',
@@ -189,10 +207,10 @@ export const createMaterial = async (req, res) => {
       data: { material: newMaterial }
     });
   } catch (error) {
-    console.error('[MaterialController] createMaterial error:', error);
+    console.log('[MaterialController] createMaterial error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: 'Failed to create material.',
+      message: 'Failed to create material: ' + error.message,
       data: null
     });
   }
@@ -207,7 +225,7 @@ export const updateMaterial = async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(StatusCodes.BAD_REQUEST).json({
         success: false,
-        message: 'Material ID is required for update.',
+        message: 'Material ID is required for update: ' + error.message,
         data: null
       });
     }
@@ -224,10 +242,13 @@ export const updateMaterial = async (req, res) => {
     if (!material) {
       return res.status(StatusCodes.NOT_FOUND).json({
         success: false,
-        message: 'Material not found.',
+        message: 'Material not found: ' + error.message,
         data: null
       });
     }
+
+    // Invalidate cache
+    await clearCacheByPattern('material:list:*');
 
     await logActivity({
       author: req.userId,
@@ -244,10 +265,10 @@ export const updateMaterial = async (req, res) => {
       data: { material }
     });
   } catch (error) {
-    console.error('[MaterialController] updateMaterial error:', error);
+    console.log('[MaterialController] updateMaterial error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: 'Failed to update material.',
+      message: 'Failed to update material: ' + error.message,
       data: null
     });
   }
@@ -278,6 +299,9 @@ export const adjustStock = async (req, res) => {
       return res.status(statusCode).json(result);
     }
 
+    // Invalidate cache
+    await clearCacheByPattern('material:list:*');
+
     const { material } = result.data;
     await logActivity({
       author: req.userId,
@@ -294,10 +318,10 @@ export const adjustStock = async (req, res) => {
 
     return res.status(StatusCodes.OK).json(result);
   } catch (error) {
-    console.error('[MaterialController] adjustStock error:', error);
+    console.log('[MaterialController] adjustStock error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: 'Failed to adjust stock.',
+      message: 'Failed to adjust stock: ' + error.message,
       data: null
     });
   }
@@ -350,7 +374,7 @@ export const adjustStockByCode = async (req, res) => {
 
     return res.status(StatusCodes.OK).json(result);
   } catch (error) {
-    console.error('[MaterialController] adjustStockByCode error:', error);
+    console.log('[MaterialController] adjustStockByCode error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: 'Failed to adjust stock via barcode.',
@@ -393,7 +417,7 @@ export const getMaterialHistory = async (req, res) => {
 
     return res.status(StatusCodes.OK).json(result);
   } catch (error) {
-    console.error('[MaterialController] getMaterialHistory error:', error);
+    console.log('[MaterialController] getMaterialHistory error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: 'Failed to retrieve material history.',

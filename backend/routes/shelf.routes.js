@@ -6,6 +6,12 @@ import { ROLES } from '../utils/constants.js';
 
 const shelfRouter = Router();
 
+shelfRouter.get('/health', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Welcome to the Shelf API of Crafb Flow",
+  })
+})
 shelfRouter.use(jwtAuth);
 
 // All roles (Admin, Kho Manager, Production Manager) can view shelves

@@ -10,10 +10,6 @@
         "gender": "male",
         "avatar": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRBgHP9VR3PI61v6fM1RhIUBXk77MT6xsa2Sg",
         "role": "admin",
-        "maxDailyCapacity": 100,
-        "currentAssignedQuantity": 0,
-        "timeoutCountLast30d": 0,
-        "hasWarningFlag": false,
         "isActive": true
     },
     {
@@ -27,10 +23,6 @@
         "gender": "male",
         "avatar": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRBgHP9VR3PI61v6fM1RhIUBXk77MT6xsa2Sg",
         "role": "admin",
-        "maxDailyCapacity": 100,
-        "currentAssignedQuantity": 0,
-        "timeoutCountLast30d": 0,
-        "hasWarningFlag": false,
         "isActive": true
     },
     {
@@ -44,10 +36,19 @@
         "gender": "female",
         "avatar": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRBgHP9VR3PI61v6fM1RhIUBXk77MT6xsa2Sg",
         "role": "admin",
-        "maxDailyCapacity": 100,
-        "currentAssignedQuantity": 0,
-        "timeoutCountLast30d": 0,
-        "hasWarningFlag": false,
+        "isActive": true
+    },
+    {
+        "username": "napoleon.bonaparte",
+        "email": "napoleon.bonaparte@craftflow.com",
+        "fullName": "Napoléon Bonaparte",
+        "password": "CraftFlow@2026",
+        "phone": "0987654329",
+        "address": "Kho số 2, KCN Sóng Thần, Dĩ An, Bình Dương",
+        "birthDay": "1988-05-30",
+        "gender": "male",
+        "avatar": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRBgHP9VR3PI61v6fM1RhIUBXk77MT6xsa2Sg",
+        "role": "production_manager",
         "isActive": true
     },
     {
@@ -61,10 +62,6 @@
         "gender": "male",
         "avatar": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRBgHP9VR3PI61v6fM1RhIUBXk77MT6xsa2Sg",
         "role": "kho_manager",
-        "maxDailyCapacity": 100,
-        "currentAssignedQuantity": 0,
-        "timeoutCountLast30d": 0,
-        "hasWarningFlag": false,
         "isActive": true
     },
     {

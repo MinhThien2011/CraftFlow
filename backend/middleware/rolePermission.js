@@ -1,33 +1,66 @@
 import { StatusCodes } from 'http-status-codes';
 import User from '../models/User.js';
+import { getUserAccessInfo, setUserAccessInfo } from '../utils/redisFetching.js';
 
 /**
- * Middleware to authorize based on user roles.
+ * Middleware to authorize based on user roles and status with Redis caching.
  * @param {Array} allowedRoles - Roles allowed to access the route.
  */
 export function rolePermission(allowedRoles) {
   return async (req, res, next) => {
     try {
-      const user = await User.findById(req.userId).populate('role', 'roleName');
+      const userId = req.userId;
 
-      if (!user) {
-        return res.status(StatusCodes.UNAUTHORIZED).json({
-          data: { message: 'Access denied Unauthorized.' }
+      // 1. Check Redis cache first
+      let accessInfo = await getUserAccessInfo(userId);
+
+      if (!accessInfo) {
+        // 2. If not in cache, query MongoDB
+        const user = await User.findById(userId)
+          .select('isActive')
+          .populate('role', 'roleName')
+          .lean();
+
+        if (!user) {
+          return res.status(StatusCodes.UNAUTHORIZED).json({
+            success: false,
+            message: 'Access denied. User not found.'
+          });
+        }
+
+        accessInfo = {
+          roleName: user.role?.roleName,
+          isActive: user.isActive
+        };
+
+        // 3. Cache the result in Redis
+        if (accessInfo.roleName) {
+          await setUserAccessInfo(userId, accessInfo);
+        }
+      }
+
+      // 4. Check if user is active
+      if (accessInfo.isActive === false) {
+        return res.status(StatusCodes.FORBIDDEN).json({
+          success: false,
+          message: 'Access denied. Account is inactive.'
         });
       }
 
-      const userRole = user.role?.roleName;
-
-      if (!allowedRoles.includes(userRole)) {
+      // 5. Check permissions
+      if (!allowedRoles.includes(accessInfo.roleName)) {
         return res.status(StatusCodes.FORBIDDEN).json({
-          data: { message: 'Access denied. Insufficient permissions.' }
+          success: false,
+          message: 'Access denied. Insufficient permissions.'
         });
       }
 
       next();
     } catch (error) {
+      console.error('[rolePermission] Error:', error);
       return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-        data: { message: 'Error in authorization' }
+        success: false,
+        message: 'Internal server error in authorization.'
       });
     }
   };

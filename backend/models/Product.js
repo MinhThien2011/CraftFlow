@@ -12,7 +12,7 @@ const materialCostSchema = new mongoose.Schema({
   toJSON: {
     versionKey: false,
   },
-    toObject: {
+  toObject: {
     versionKey: false,
   }
 });
@@ -20,6 +20,7 @@ const materialCostSchema = new mongoose.Schema({
 const productSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   code: { type: String, required: true, unique: true, uppercase: true },
+  barcode: { type: String, unique: true, sparse: true, trim: true }, // For QR/Barcode scanning
   description: String,
   category: { type: String, required: true },
   unit: { type: String, default: 'unit' },
@@ -30,7 +31,7 @@ const productSchema = new mongoose.Schema({
   productImage: { type: String, default: 'https://res.cloudinary.com/dvjop6kew/image/upload/v1775898313/products/akyfj6xpovcyhaupebmb.jpg' },
   currentStock: { type: Number, default: 0, min: 0 }, // Current stock quantity
   threshold: { type: Number, default: 5, min: 0 }, // Warning threshold for low stock
-  shelf: { type: mongoose.Schema.Types.ObjectId, ref: 'Shelf' }, // Link to Shelf model
+  shelf: { type: mongoose.Schema.Types.ObjectId, ref: 'Shelf', required: true }, // Link to Shelf model
   locationDetails: { type: String, trim: true }, // Extra details like row/box number
   totalProduced: { type: Number, default: 0, min: 0 } // total produced quantity
 }, {
@@ -59,7 +60,7 @@ productSchema.virtual('stockLevel').get(function () {
  * @param {Object} updateData - The new data for the material (name, code, price, unit, currency)
  */
 productSchema.statics.syncMaterialChanges = async function (materialId, updateData) {
-  const { name, code, price, unit, currency } = updateData;
+  const { barcode, name, code, price, unit, currency } = updateData;
 
   try {
     await this.updateMany(
@@ -80,7 +81,8 @@ productSchema.statics.syncMaterialChanges = async function (materialId, updateDa
                         {
                           materialName: name,
                           materialCode: code,
-                          priceAtTime: price,
+                          barcode: barcode,
+                          priceAtTime: price || 0.0,
                           unit: unit,
                           currency: currency || 'VND',
                         },
@@ -114,13 +116,13 @@ productSchema.statics.syncMaterialChanges = async function (materialId, updateDa
     );
     console.log(`[ProductSync] Successfully updated material ${materialId} in all related products.`);
   } catch (error) {
-    console.error(`[ProductSync] Error syncing material changes for ${materialId}:`, error);
+    console.log(`[ProductSync] Error syncing material changes for ${materialId}:`, error);
   }
 };
 
 productSchema.index({ isActive: 1 });
 productSchema.index({ category: 1 });
-productSchema.index({ name: 1, code: 1 });
+productSchema.index({ name: 1, code: 1, barcode: 1 });
 productSchema.index({ createdAt: -1 });
 
 export default mongoose.model('Product', productSchema);

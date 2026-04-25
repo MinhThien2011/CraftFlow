@@ -24,9 +24,9 @@ const bomItemSchema = new mongoose.Schema({
 });
 
 const bomSchema = new mongoose.Schema({
-    product: {
+    productionOrder: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Product',
+        ref: 'ProductionOrder',
         required: true,
     },
     items: [bomItemSchema],
@@ -35,16 +35,14 @@ const bomSchema = new mongoose.Schema({
 }, {
     timestamps: true,
     toJSON: {
-        // virtuals: true,
         versionKey: false,
     },
     toObject: {
-        // virtuals: true,
         versionKey: false,
     }
 });
 
-bomSchema.index({ product: 1, isActive: 1 });
+bomSchema.index({ productionOrder: 1, isActive: 1 });
 bomSchema.index({ 'items.material': 1 });
 
 export default mongoose.model('Bom', bomSchema);

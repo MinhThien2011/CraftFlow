@@ -86,8 +86,8 @@ export const getProductsByQuery = async (query) => {
       }
     };
   } catch (error) {
-    console.error('[ProductService] getProductsByQuery error:', error);
-    return { status: 'error', message: 'An error occurred while fetching products.', data: null };
+    console.log('[ProductService] getProductsByQuery error:', error);
+    return { status: 'error', message: 'An error occurred while fetching products: ' + error.message, data: null };
   }
 };
 
@@ -105,8 +105,8 @@ export const getProductById = async (id) => {
     }
     return { status: 'success', message: 'Product retrieved successfully.', data: { product: transformProduct(product) } };
   } catch (error) {
-    console.error('[ProductService] getProductById error:', error);
-    return { status: 'error', message: 'An error occurred while fetching the product.', data: null };
+    console.log('[ProductService] getProductById error:', error);
+    return { status: 'error', message: 'An error occurred while fetching the product: ' + error.message, data: null };
   }
 };
 
@@ -151,8 +151,8 @@ export const recordIncomingProduct = async (productId, quantity, type, note, use
     };
   } catch (error) {
     await session.abortTransaction();
-    console.error('[ProductService] recordIncomingProduct error:', error);
-    return { status: 'error', message: error.message, data: null };
+    console.log('[ProductService] recordIncomingProduct error:', error);
+    return { status: 'error', message: 'Failed to record incoming product: ' + error.message, data: null };
   } finally {
     session.endSession();
   }
@@ -204,8 +204,8 @@ export const recordOutgoingProduct = async (productId, quantity, type, note, use
     };
   } catch (error) {
     await session.abortTransaction();
-    console.error('[ProductService] recordOutgoingProduct error:', error);
-    return { status: 'error', message: error.message, data: null };
+    console.log('[ProductService] recordOutgoingProduct error:', error);
+    return { status: 'error', message: 'Failed to record outgoing product: ' + error.message, data: null };
   } finally {
     session.endSession();
   }
@@ -251,8 +251,8 @@ export const getProductHistoryService = async ({ productId, type, direction, pag
       }
     };
   } catch (error) {
-    console.error('[ProductService] getProductHistoryService error:', error);
-    return { status: 'error', message: error.message, data: null };
+    console.log('[ProductService] getProductHistoryService error:', error);
+    return { status: 'error', message: 'Failed to retrieve product history: ' + error.message, data: null };
   }
 };
 
@@ -302,8 +302,8 @@ export const getLowStockProductsService = async ({ search = '', page = 1, limit 
       }
     };
   } catch (error) {
-    console.error('[ProductService] getLowStockProductsService error:', error);
-    return { status: 'error', message: 'An error occurred while fetching low stock products.', data: null };
+    console.log('[ProductService] getLowStockProductsService error:', error);
+    return { status: 'error', message: 'Failed to retrieve low stock products: ' + error.message, data: null };
   }
 };
 
@@ -330,8 +330,8 @@ export const createProduct = async (productData) => {
       data: { product: transformProduct(product) }
     };
   } catch (error) {
-    console.error('[ProductService] createProduct error:', error);
-    return { status: 'error', message: error.message, data: null };
+    console.log('[ProductService] createProduct error:', error);
+    return { status: 'error', message: 'Failed to create product: ' + error.message, data: null };
   }
 };
 
@@ -365,8 +365,8 @@ export const updateProduct = async (id, updateData) => {
       data: { product: transformProduct(updatedProduct) }
     };
   } catch (error) {
-    console.error('[ProductService] updateProduct error:', error);
-    return { status: 'error', message: error.message, data: null };
+    console.log('[ProductService] updateProduct error:', error);
+    return { status: 'error', message: 'Failed to update product: ' + error.message, data: null };
   }
 };
 
@@ -381,7 +381,7 @@ export const deleteProduct = async (id) => {
     }
     return { status: 'success', message: 'Product deactivated successfully.', data: product };
   } catch (error) {
-    console.error('[ProductService] deleteProduct error:', error);
-    return { status: 'error', message: 'An error occurred while deleting the product.', data: null };
+    console.log('[ProductService] deleteProduct error:', error);
+    return { status: 'error', message: 'Failed to deactivate product: ' + error.message, data: null };
   }
 };
