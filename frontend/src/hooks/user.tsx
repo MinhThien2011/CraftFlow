@@ -4,14 +4,26 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { userApi } from "@/api/user.api";
 import { User } from "@/lib/types";
 
+export type UserRole = "admin" | "kho_manager" | "production_manager" | "staff"
+
+export function getRoleName(user: User | null): string {
+    if (!user) return ""
+    if (typeof user.role === "string") return user.role.toLowerCase()
+    return (user.role as any)?.roleName?.toLowerCase() || ""
+}
+
 interface AuthContextType {
     user: User | null;
     loading: boolean;
     error: string | null;
-    login: (identifier: string, password: string) => Promise<{ success: boolean; message: string }>;
+    login: (identifier: string, password: string) => Promise<{ success: boolean; message: string; role?: string }>;
     logout: () => Promise<void>;
     isAuthenticated: boolean;
     isAdmin: boolean;
+    isKhoManager: boolean;
+    isProductionManager: boolean;
+    isStaff: boolean;
+    role: string;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -70,8 +82,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const response = await userApi.login(identifier, password);
             if (response.success && response.data?.user) {
                 const { user } = response.data;
+                const normalizedRole = getRoleName(user);
                 setUser(user);
-                return { success: true, message: "Đăng nhập thành công" };
+                return { success: true, message: "Đăng nhập thành công", role: normalizedRole };
             }
 
             // Map common English errors from BE to Vietnamese
@@ -116,6 +129,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     }, []);
 
+    const role = getRoleName(user)
+
     const value: AuthContextType = useMemo(() => ({
         user,
         loading,
@@ -123,8 +138,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         logout,
         isAuthenticated: !!user,
-        isAdmin: user?.role?.toLowerCase() === "admin",
-    }), [user, loading, error, login, logout]);
+        isAdmin: role === "admin",
+        isKhoManager: role === "kho_manager",
+        isProductionManager: role === "production_manager",
+        isStaff: role === "staff",
+        role,
+    }), [user, loading, error, login, logout, role]);
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

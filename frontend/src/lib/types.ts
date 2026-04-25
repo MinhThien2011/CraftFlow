@@ -105,7 +105,7 @@ export interface MaterialListResponse {
   success: boolean
   message: string
   data: {
-    items: Material[]
+    materials: Material[]
     pagination: PaginationData
   }
 }

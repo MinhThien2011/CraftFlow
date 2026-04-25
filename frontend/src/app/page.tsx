@@ -12,18 +12,23 @@ import { toast } from "sonner"
 
 export default function LoginPage() {
   const router = useRouter()
-  const { login, loading: authLoading, isAuthenticated } = useAuth()
+  const { login, loading: authLoading, isAuthenticated, role } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
 
+  const getHomeByRole = (userRole: string) => {
+    if (userRole === "kho_manager") return "/dashboard_warehouse"
+    return "/dashboard"
+  }
+
   // Redirect if already authenticated
   useEffect(() => {
-    if (isAuthenticated) {
-      router.push("/dashboard")
+    if (isAuthenticated && role) {
+      router.push(getHomeByRole(role))
     }
-  }, [isAuthenticated, router])
+  }, [isAuthenticated, role, router])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -38,7 +43,7 @@ export default function LoginPage() {
       const result = await login(username, password)
       if (result.success) {
         toast.success("Đăng nhập thành công")
-        router.push("/dashboard")
+        router.push(getHomeByRole(result.role || ""))
       } else {
         toast.error(result.message || "Đăng nhập thất bại")
       }
