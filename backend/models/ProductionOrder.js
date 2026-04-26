@@ -30,6 +30,14 @@ const productionOrderSchema = new mongoose.Schema({
   estimatedCompletionTime: { type: Number, default: 0 },
 
   priority: { type: String, enum: Object.values(PRIORITY), default: PRIORITY.MEDIUM },
+  // Material Tracking (BOM)
+  materials: [{
+    material: { type: mongoose.Schema.Types.ObjectId, ref: 'Material' },
+    plannedQuantity: { type: Number, default: 0 },   // Amount from initial BOM
+    issuedQuantity: { type: Number, default: 0 },    // Amount actually picked up from warehouse
+    returnedQuantity: { type: Number, default: 0 },  // Amount returned after production
+    unit: String
+  }],
   // Cost
   totalPlannedCost: Number,
   actualCost: Number,

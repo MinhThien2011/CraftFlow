@@ -37,7 +37,15 @@ export const REQUISITION_STATUS = {
   PREPARING: 'preparing',          // Being prepared in warehouse
   PREPARED: 'prepared',            // Ready for pickup
   COMPLETED: 'completed',          // Materials picked up by staff
+  RETURN_PENDING: 'return_pending', // Return requested by PM
+  RETURNED: 'returned',            // Return completed
   CANCELLED: 'cancelled',          // Cancelled by manager or timeout
+}
+
+export const REQUISITION_TYPE = {
+  ISSUE: 'issue',                 // Normal material issue
+  SUPPLEMENTARY: 'supplementary', // Additional materials needed during production
+  RETURN: 'return',               // Returning excess materials
 }
 
 /**
