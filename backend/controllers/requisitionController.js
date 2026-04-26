@@ -81,6 +81,67 @@ export const requestMaterials = async (req, res) => {
   }
 };
 
+export const approveRequisition = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const adminId = req.userId;
+    const result = await requisitionService.approveRequisition(id, adminId);
+
+    if (result.status === 'error') {
+      return res.status(StatusCodes.BAD_REQUEST).json(result);
+    }
+
+    await logActivity({
+      author: adminId,
+      action: 'APPROVE_MATERIAL_REQUISITION',
+      module: 'MATERIAL_REQUISITION',
+      details: `Approved material requisition: ${id}. Auto-created slip: ${result.data.slip.slipNumber}`,
+      targetId: id,
+      metadata: { slipId: result.data.slip._id }
+    }, req);
+
+    return res.status(StatusCodes.OK).json(result);
+  } catch (error) {
+    console.log("[RequisitionController] approveRequisition error:", error);
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: 'error',
+      message: 'Failed to approve material requisition.',
+      data: null
+    });
+  }
+};
+
+export const updateRequisitionDetails = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await requisitionService.updateRequisitionByManager(id, req.body, req.userId);
+
+    if (result.status === 'error') {
+      return res.status(StatusCodes.BAD_REQUEST).json(result);
+    }
+
+    if (result.changes && result.changes.length > 0) {
+      await logActivity({
+        author: req.userId,
+        action: 'UPDATE_REQUISITION_DETAILS',
+        module: 'MATERIAL_REQUISITION',
+        details: `Updated requisition ${id} details: ${result.changes.map(c => c.field).join(', ')}`,
+        targetId: id,
+        metadata: { changes: result.changes }
+      }, req);
+    }
+
+    return res.status(StatusCodes.OK).json(result);
+  } catch (error) {
+    console.log("[RequisitionController] updateRequisitionDetails error:", error);
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: 'error',
+      message: 'Failed to update material requisition details.',
+      data: null
+    });
+  }
+};
+
 export const updateRequisitionStatus = async (req, res) => {
   try {
     const { id } = req.params;

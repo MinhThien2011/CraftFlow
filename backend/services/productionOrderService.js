@@ -5,12 +5,147 @@ import MaterialAlert from '../models/MaterialAlert.js';
 import Bom from '../models/BOM.js';
 import User from '../models/User.js';
 import ProductionOrderAssignment from '../models/ProductionOrderAssignment.js';
-import InventoryTransaction from '../models/InventoryTransaction.js'; // Import InventoryTransaction
 import MaterialRequisition from '../models/MaterialRequisition.js';
 import InventoryImportExportSlip from '../models/InventoryImportExportSlip.js';
 import { ORDER_STATUS, ROLES, TRANSACTION_TYPE, REQUISITION_STATUS, INVENTORY_IMPORT_EXPORT_SLIP_TYPE, INVENTORY_IMPORT_EXPORT_SLIP_STATUS, PRIORITY } from '../utils/constants.js'; // Import TRANSACTION_TYPE
 import { generateSlipNumber } from '../utils/slipHelper.js';
 import mongoose from 'mongoose';
+
+
+/**
+ * Get all production orders with pagination and filters (Admin/Production Manager).
+ */
+export const getAllProductionOrders = async (queryParams) => {
+  try {
+    const { status, priority, search, page = 1, limit = 10 } = queryParams;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const filter = {};
+    if (status) filter.status = status;
+    if (priority) filter.priority = priority;
+    if (search) {
+      filter.$or = [
+        { orderCode: { $regex: search, $options: 'i' } },
+        { 'products.productName': { $regex: search, $options: 'i' } },
+        { 'products.productCode': { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const [orders, total] = await Promise.all([
+      ProductionOrder.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .populate('products.product', 'name code unit baseCost')
+        .populate('createdBy', 'fullName username')
+        .lean(),
+      ProductionOrder.countDocuments(filter)
+    ]);
+
+    return {
+      status: 'success',
+      message: 'Production orders retrieved successfully.',
+      data: {
+        orders,
+        pagination: {
+          total,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          pages: Math.ceil(total / parseInt(limit))
+        }
+      }
+    };
+  } catch (error) {
+    console.error('[ProductionOrderService] getAllProductionOrders error:', error);
+    return { status: 'error', message: error.message, data: null };
+  }
+};
+
+/**
+ * Get production orders assigned to a specific staff member.
+ */
+export const getStaffProductionOrders = async (staffId, queryParams) => {
+  try {
+    const { status, page = 1, limit = 10 } = queryParams;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // First find assignments for this staff
+    const assignments = await ProductionOrderAssignment.find({ staff: staffId })
+      .select('productionOrder')
+      .lean();
+
+    const orderIds = assignments.map(a => a.productionOrder);
+
+    const filter = { _id: { $in: orderIds } };
+    if (status) filter.status = status;
+
+    const [orders, total] = await Promise.all([
+      ProductionOrder.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .populate('products.product', 'name code unit')
+        .lean(),
+      ProductionOrder.countDocuments(filter)
+    ]);
+
+    return {
+      status: 'success',
+      message: 'Staff production orders retrieved successfully.',
+      data: {
+        orders,
+        pagination: {
+          total,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          pages: Math.ceil(total / parseInt(limit))
+        }
+      }
+    };
+  } catch (error) {
+    console.error('[ProductionOrderService] getStaffProductionOrders error:', error);
+    return { status: 'error', message: error.message, data: null };
+  }
+};
+
+/**
+ * Get a single production order by ID or orderCode with full details.
+ */
+export const getProductionOrderById = async (orderIdentifier) => {
+  try {
+    const isObjectId = mongoose.Types.ObjectId.isValid(orderIdentifier);
+    const order = isObjectId
+      ? await ProductionOrder.findById(orderIdentifier)
+        .populate('products.product')
+        .populate('createdBy', 'fullName username')
+        .lean()
+      : await ProductionOrder.findOne({ orderCode: orderIdentifier })
+        .populate('products.product')
+        .populate('createdBy', 'fullName username')
+        .lean();
+
+    if (!order) throw new Error('Production order not found.');
+
+    const orderId = order._id;
+
+    // Also get assignments for this order
+    const assignments = await ProductionOrderAssignment.find({ productionOrder: orderId })
+      .populate('staff', 'fullName username currentAssignedQuantity')
+      .lean();
+
+    return {
+      status: 'success',
+      message: 'Production order details retrieved.',
+      data: {
+        ...order,
+        assignments
+      }
+    };
+  } catch (error) {
+    console.error('[ProductionOrderService] getProductionOrderById error:', error);
+    return { status: 'error', message: error.message, data: null };
+  }
+};
 
 /**
  * Create a new production order with stock check and automatic material requisition.
@@ -526,7 +661,7 @@ export const updateAssignmentStatus = async (assignmentId, status, completedQuan
 
     await session.commitTransaction();
     return {
-      status: 'success',
+      success: true,
       message: 'Assignment status updated and progress tracked.',
       data: {
         assignment,
@@ -537,7 +672,7 @@ export const updateAssignmentStatus = async (assignmentId, status, completedQuan
   } catch (error) {
     await session.abortTransaction();
     console.log('[ProductionOrderService] updateAssignmentStatus error:', error);
-    return { status: 'error', message: error.message, data: null };
+    return { success: false, message: error.message, data: null };
   } finally {
     session.endSession();
   }
@@ -546,35 +681,67 @@ export const updateAssignmentStatus = async (assignmentId, status, completedQuan
 /**
  * Production Manager creates an internal stock-in receipt for a completed order.
  */
-export const createStockInSlip = async (orderId, managerId, slipData) => {
+export const createStockInSlip = async (orderIdentifier, managerId, slipData) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const order = await ProductionOrder.findById(orderId).populate('products.product').session(session);
-    if (!order) throw new Error('Production order not found.');
+    const isObjectId = mongoose.Types.ObjectId.isValid(orderIdentifier);
+    const order = isObjectId
+      ? await ProductionOrder.findById(orderIdentifier).populate('products.product').session(session)
+      : await ProductionOrder.findOne({ orderCode: orderIdentifier }).populate('products.product').session(session);
+
+    if (!order) {
+      console.error('Production order not found:', orderIdentifier);
+      return {
+        success: false,
+        message: 'Production order not found.',
+        data: null
+      };
+    }
+
+    const orderId = order._id;
+
     if (order.status !== ORDER_STATUS.COMPLETED) {
-      throw new Error('Production order must be completed before creating stock-in slip.');
+      console.error('Production order not completed:', order);
+      return {
+        success: false,
+        message: 'Production order must be completed before creating stock-in slip.',
+        data: null
+      };
     }
 
     // Check if a slip already exists for this order
     const existingSlip = await InventoryImportExportSlip.findOne({ relatedProductionOrder: orderId }).session(session);
     if (existingSlip) {
-      throw new Error('A stock-in slip already exists for this production order.');
+      console.error('A stock-in slip already exists for this production order:', existingSlip);
+      return {
+        success: false,
+        message: 'A stock-in slip already exists for this production order.',
+        data: null
+      };
     }
 
     const slipNumber = await generateSlipNumber(INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT);
 
-    const slipItems = order.products.map(pItem => ({
-      product: pItem.product._id,
-      itemName: pItem.product.name,
-      itemCode: pItem.product.code,
-      unit: pItem.product.unit || 'cái',
-      quantity: {
-        requested: pItem.quantity,
-        actual: 0
-      },
-      unitPrice: pItem.product.baseCost || 0
-    }));
+    const slipItems = order.products.map(pItem => {
+      const quantity = pItem.quantity;
+      const unitPrice = pItem.product.baseCost || 0;
+
+      return {
+        product: pItem.product._id,
+        itemName: pItem.product.name,
+        itemCode: pItem.product.code,
+        unit: pItem.product.unit || 'cái',
+        quantity: {
+          requested: quantity,
+          actual: 0 // Default actual to 0 until warehouse manager confirms
+        },
+        unitPrice: unitPrice,
+        amount: 0 // Amount is 0 because actual quantity is 0
+      };
+    });
+
+    const totalAmount = 0; // Total amount is 0 initially
 
     const newSlip = new InventoryImportExportSlip({
       type: INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT,
@@ -582,6 +749,7 @@ export const createStockInSlip = async (orderId, managerId, slipData) => {
       relatedProductionOrder: orderId,
       reason: `Nhập kho thành phẩm từ lệnh sản xuất ${order.orderCode}`,
       items: slipItems,
+      totalAmount,
       signatures: {
         creator: managerId,
         personInOut: slipData.personInOut || 'Bộ phận sản xuất'
@@ -595,32 +763,54 @@ export const createStockInSlip = async (orderId, managerId, slipData) => {
     await session.commitTransaction();
 
     return {
-      status: 'success',
+      success: true,
       message: 'Internal stock-in slip created. Waiting for Warehouse Manager approval.',
       data: { slip: newSlip }
     };
   } catch (error) {
     await session.abortTransaction();
     console.log('[ProductionOrderService] createStockInSlip error:', error);
-    return { status: 'error', message: error.message, data: null };
+    return { success: false, message: error.message, data: null };
   } finally {
     session.endSession();
   }
 };
 
 /**
- * Get BOM for a specific production order.
+ * Get BOM for a specific production order by ID or orderCode.
  */
-export const getBomByOrderId = async (orderId) => {
+export const getBomByOrderId = async (orderIdentifier) => {
   try {
+    const isObjectId = mongoose.Types.ObjectId.isValid(orderIdentifier);
+    const order = isObjectId
+      ? await ProductionOrder.findById(orderIdentifier).lean()
+      : await ProductionOrder.findOne({ orderCode: orderIdentifier }).lean();
+
+    if (!order) {
+      return {
+        success: false,
+        message: 'Production order not found.',
+        data: null
+      };
+    }
+
+    const orderId = order._id;
+
     const bom = await Bom.findOne({ productionOrder: orderId })
       .populate('items.material', 'name code unit price')
       .lean();
 
-    if (!bom) throw new Error('BOM not found for this production order.');
+    if (!bom) {
+      console.error('BOM not found for this production order:', orderId);
+      return {
+        success: false,
+        message: 'BOM not found for this production order.',
+        data: null
+      };
+    }
 
     return {
-      status: 'success',
+      success: true,
       message: 'BOM retrieved successfully.',
       data: bom
     };

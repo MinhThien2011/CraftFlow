@@ -2,10 +2,84 @@ import MaterialRequisition from '../models/MaterialRequisition.js';
 import Material from '../models/Material.js';
 import ProductionOrder from '../models/ProductionOrder.js';
 import InventoryTransaction from '../models/InventoryTransaction.js';
-import { REQUISITION_STATUS, TRANSACTION_TYPE } from '../utils/constants.js';
+import { REQUISITION_STATUS, TRANSACTION_TYPE, INVENTORY_IMPORT_EXPORT_SLIP_TYPE, INVENTORY_IMPORT_EXPORT_SLIP_STATUS } from '../utils/constants.js';
 import { updateShelfLoad } from './shelfService.js';
 import { allocateBatchesForMaterial, createBatch } from './fifoService.js';
+import { createSlipService } from './importExportSlipService.js';
 import mongoose from 'mongoose';
+
+/**
+ * Admin approves a material requisition.
+ * This automatically creates an Inventory Export Slip.
+ */
+export const approveRequisition = async (requisitionId, adminId) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const requisition = await MaterialRequisition.findById(requisitionId)
+      .populate('items.material')
+      .populate('createdBy', 'fullName')
+      .session(session);
+
+    if (!requisition) throw new Error('Requisition not found.');
+    if (requisition.status !== REQUISITION_STATUS.PENDING) {
+      throw new Error(`Requisition cannot be approved. Current status: ${requisition.status}`);
+    }
+
+    // 1. Update requisition status
+    requisition.status = REQUISITION_STATUS.APPROVED;
+    requisition.adminApprovedBy = adminId;
+
+    // 2. Prepare data for Export Slip
+    const slipItems = requisition.items.map(item => ({
+      material: item.material._id,
+      itemName: item.material.name,
+      itemCode: item.material.code,
+      unit: item.material.unit,
+      quantity: {
+        requested: item.requestedQuantity,
+        actual: 0 // Will be filled by Kho Manager
+      },
+      unitPrice: item.material.unitPrice || 0,
+      amount: 0
+    }));
+
+    const slipData = {
+      type: INVENTORY_IMPORT_EXPORT_SLIP_TYPE.EXPORT,
+      reason: `Xuất kho theo yêu cầu ${requisition.requisitionCode}`,
+      personName: requisition.createdBy?.fullName || 'Người yêu cầu',
+      relatedProductionOrder: requisition.productionOrder,
+      relatedRequisition: requisition._id,
+      items: slipItems,
+      date: new Date(),
+      status: INVENTORY_IMPORT_EXPORT_SLIP_STATUS.PENDING
+    };
+
+    // 3. Create the Export Slip
+    const slipResult = await createSlipService(slipData, adminId);
+    if (!slipResult.success) {
+      throw new Error(`Failed to create export slip: ${slipResult.message}`);
+    }
+
+    const createdSlip = slipResult.data;
+    requisition.relatedSlip = createdSlip._id;
+
+    await requisition.save({ session });
+    await session.commitTransaction();
+
+    return {
+      status: 'success',
+      message: 'Requisition approved and export slip created.',
+      data: { requisition, slip: createdSlip }
+    };
+  } catch (error) {
+    await session.abortTransaction();
+    console.log('[MaterialRequisitionService] approveRequisition error:', error);
+    return { status: 'error', message: error.message, data: null };
+  } finally {
+    session.endSession();
+  }
+};
 
 /**
  * Production Manager requests materials for a production order.
@@ -147,6 +221,56 @@ async function checkStockAvailability(items, session) {
 
   return result;
 }
+
+/**
+ * Production Manager updates requisition details (notes, etc.)
+ */
+export const updateRequisitionByManager = async (requisitionId, updateData, managerId) => {
+  try {
+    const requisition = await MaterialRequisition.findById(requisitionId);
+    if (!requisition) throw new Error('Requisition not found.');
+
+    // Only allow update if pending
+    if (requisition.status !== REQUISITION_STATUS.PENDING) {
+      throw new Error('Can only update requisition when it is in PENDING status.');
+    }
+
+    const allowedFields = ['notes']; // Add more fields if needed, but NOT items
+    let hasChanges = false;
+    const changes = [];
+
+    allowedFields.forEach(field => {
+      if (updateData[field] !== undefined) {
+        const oldValue = requisition[field];
+        const newValue = updateData[field];
+        
+        if (oldValue !== newValue) {
+          changes.push({
+            field,
+            oldValue,
+            newValue
+          });
+          requisition[field] = newValue;
+          hasChanges = true;
+        }
+      }
+    });
+
+    if (hasChanges) {
+      await requisition.save();
+    }
+
+    return {
+      status: 'success',
+      message: hasChanges ? 'Requisition updated successfully.' : 'No changes detected.',
+      data: requisition,
+      changes: changes
+    };
+  } catch (error) {
+    console.log('[MaterialRequisitionService] updateRequisitionByManager error:', error);
+    return { status: 'error', message: error.message, data: null };
+  }
+};
 
 /**
  * Warehouse Manager updates requisition status.

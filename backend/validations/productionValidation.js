@@ -1,7 +1,7 @@
 import Joi from 'joi';
 import { ORDER_STATUS, TRANSACTION_TYPE } from '../utils/constants.js';
 
-const objectId = Joi.string().hex().length(24).messages({
+export const objectId = Joi.string().hex().length(24).messages({
   'string.pattern.base': `"{{#label}}" must be a valid MongoDB ObjectId`,
 });
 
@@ -47,7 +47,6 @@ const outgoingProductSchema = Joi.object({
 });
 
 const createStockInSlipSchema = Joi.object({
-  actualQuantity: Joi.number().min(1).optional(),
   personInOut: Joi.string().trim().allow(''),
   notes: Joi.string().trim().allow(''),
   // images: Joi.array().items(Joi.string()).optional(),

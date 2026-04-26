@@ -27,6 +27,7 @@ const InventoryImportExportSlipSchema = new mongoose.Schema({
         type: String,
         enum: Object.values(INVENTORY_IMPORT_EXPORT_SLIP_STATUS),
         default: INVENTORY_IMPORT_EXPORT_SLIP_STATUS.PENDING,
+        trim: true,
     },
 
     // --- Header Information ---
@@ -59,6 +60,10 @@ const InventoryImportExportSlipSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'PurchaseOrder',
     },
+    relatedRequisition: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'MaterialRequisition',
+    },
     warehouse: {
         name: { type: String, trim: true }, // "Nhập/Xuất tại kho (ngăn lô)"
         location: { type: String, trim: true }, // "Địa điểm"
@@ -84,7 +89,8 @@ const InventoryImportExportSlipSchema = new mongoose.Schema({
 
         quantity: {
             requested: { type: Number, required: true, default: 0 }, // "Theo chứng từ" / "Yêu cầu"
-            actual: { type: Number, required: true, default: 0 },    // "Thực nhập" / "Thực xuất"
+            provisional: { type: Number, default: 0 },              // "Số lượng tạm tính" (at RECEIVED)
+            actual: { type: Number, required: true, default: 0 },    // "Thực nhập" / "Thực xuất" (at INSPECTED)
         },
         unitPrice: { type: Number, required: true, default: 0 },    // "Đơn giá"
         amount: { type: Number, required: true, default: 0 },       // "Thành tiền"
@@ -92,6 +98,10 @@ const InventoryImportExportSlipSchema = new mongoose.Schema({
         // Batch tracking for FIFO
         batchNumber: { type: String }, // Batch number for this specific item
         expirationDate: { type: Date }, // Expiration date for this batch
+
+        // Storage details
+        shelf: { type: mongoose.Schema.Types.ObjectId, ref: 'Shelf' }, // Vị trí kho (Shelf/Bin)
+        itemNote: { type: String, trim: true }, // Ghi chú riêng cho từng mặt hàng (e.g., "bị móp méo")
     }],
 
     // --- Totals ---
@@ -138,6 +148,9 @@ const InventoryImportExportSlipSchema = new mongoose.Schema({
         type: String,
     }],
     inStockAt: { // Timestamp when status became IN_STOCK
+        type: Date,
+    },
+    finalizedAt: { // Timestamp when status became IN_STOCK or COMPLETED
         type: Date,
     },
     isImageUploadLate: { // Flag if image uploaded after 3 days

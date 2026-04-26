@@ -1,11 +1,17 @@
 import Joi from 'joi';
+import { objectId } from './productionValidation.js';
 
-const requestValidateSchema = Joi.object({
-    id: Joi.string().hex().length(24).required().messages({
-        'string.hex': 'ID must be a valid MongoDB object ID.',
-        'string.length': 'ID must be exactly 24 characters long.',
-        'any.required': 'ID is required.'
-    })
-});
 
-export const paramsValidator = (data) => requestValidateSchema.validate(data);
+/**
+ * Schema Factory: Tạo ra schema có sẵn ID và cho phép thêm các trường khác
+ * @param {Object} extraFields - Các trường bổ sung (Vd: { categoryId: Joi.string() })
+ */
+export const commonParamsSchema = (extraFields = {}, includeId = true, abortEarly = false, stripUnknown = true) => {
+    const shape = { ...extraFields };
+    if (includeId) {
+        shape.id = objectId.required();
+    }
+    const schema = Joi.object(shape);
+
+    return (data) => schema.validate(data, { abortEarly, stripUnknown });
+};

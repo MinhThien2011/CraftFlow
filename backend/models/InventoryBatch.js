@@ -61,6 +61,10 @@ const inventoryBatchSchema = new mongoose.Schema({
         type: Boolean,
         default: false,
     },
+    shelf: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Shelf',
+    },
     notes: String,
 }, {
     timestamps: true,
@@ -73,10 +77,8 @@ inventoryBatchSchema.index({ material: 1, expirationDate: 1 });
 inventoryBatchSchema.index({ isExhausted: 1 });
 
 inventoryBatchSchema.pre('save', function(next) {
-    if (this.quantityRemaining <= 0) {
-        this.isExhausted = true;
-    } else {
-        this.isExhausted = false;
+    if (this.isModified('quantityRemaining')) {
+        this.isExhausted = this.quantityRemaining <= 0;
     }
     next();
 });

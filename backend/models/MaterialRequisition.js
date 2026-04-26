@@ -75,6 +75,14 @@ const requisitionSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
+  adminApprovedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  relatedSlip: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'InventoryImportExportSlip'
+  },
   evidenceImage: String,
   preparedAt: Date,
   completedAt: Date,

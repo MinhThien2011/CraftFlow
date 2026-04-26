@@ -109,6 +109,7 @@ export const createBatchesFromImport = async (importData, session) => {
                 unitCost: item.unitPrice || 0,
                 receivedDate: new Date(),
                 expirationDate: item.expirationDate || null,
+                shelf: item.shelf,
                 relatedPurchaseOrder,
                 relatedImportSlip,
                 relatedProductionOrder,
