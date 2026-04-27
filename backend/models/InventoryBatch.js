@@ -76,11 +76,11 @@ inventoryBatchSchema.index({ material: 1, receivedDate: 1 });
 inventoryBatchSchema.index({ material: 1, expirationDate: 1 });
 inventoryBatchSchema.index({ isExhausted: 1 });
 
-inventoryBatchSchema.pre('save', function(next) {
+inventoryBatchSchema.pre('save', function() {
     if (this.isModified('quantityRemaining')) {
         this.isExhausted = this.quantityRemaining <= 0;
     }
-    next();
+    return this;
 });
 
 export default mongoose.model('InventoryBatch', inventoryBatchSchema);

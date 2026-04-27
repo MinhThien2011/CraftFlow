@@ -2,7 +2,7 @@ import joi from 'joi';
 import { PURCHASE_ORDER_STATUS } from '../utils/constants.js';
 
 const purchaseOrderSchema = joi.object({
-    orderReason: joi.string().required(),
+    orderReason: joi.string().optional(),
     priority: joi.string().valid('low', 'medium', 'high', 'urgent').default('medium'),
     productionOrder: joi.string().allow('', null),
     materialAlert: joi.string().allow('', null),

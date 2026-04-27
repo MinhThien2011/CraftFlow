@@ -6,7 +6,8 @@ import InventoryTransaction from "../models/InventoryTransaction.js";
 import Shelf from "../models/Shelf.js";
 import { INVENTORY_IMPORT_EXPORT_SLIP_STATUS, INVENTORY_IMPORT_EXPORT_SLIP_TYPE, TRANSACTION_TYPE } from "../utils/constants.js";
 import { updateShelfLoad } from "./shelfService.js";
-import { createBatchesFromImport, generateBatchNumber } from "./fifoService.js";
+import { createBatchesFromImport, generateBatchNumber, allocateBatchesForMaterial } from "./fifoService.js";
+import mongoose from "mongoose";
 
 
 export const createSlipService = async (data, userId) => {
@@ -92,7 +93,7 @@ export const updateSlipStatusService = async (slipId, newStatus, updateData, use
         const currentStatus = slip.status.trim();
         const targetStatus = newStatus.trim();
 
-        // --- Validate Status Transition ---
+        // --- 1. Validate Status Transition ---
         const validTransitions = isImport ? {
             [INVENTORY_IMPORT_EXPORT_SLIP_STATUS.PENDING]: [INVENTORY_IMPORT_EXPORT_SLIP_STATUS.RECEIVED, INVENTORY_IMPORT_EXPORT_SLIP_STATUS.CANCELLED],
             [INVENTORY_IMPORT_EXPORT_SLIP_STATUS.RECEIVED]: [INVENTORY_IMPORT_EXPORT_SLIP_STATUS.INSPECTED, INVENTORY_IMPORT_EXPORT_SLIP_STATUS.CANCELLED],
@@ -111,12 +112,57 @@ export const updateSlipStatusService = async (slipId, newStatus, updateData, use
             return { success: false, message: `Invalid status transition from ${currentStatus} to ${targetStatus} for ${slip.type} slip`, data: null };
         }
 
+        // --- 2. Data Validation & Integrity Checks ---
+        const inputItems = [...(updateData.items || []), ...(updateData.scannedItems || [])];
+
+        // Ensure all items in updateData exist in the slip using itemCode, material, or product
+        const slipItemIdentifiers = new Set();
+        slip.items.forEach(item => {
+            if (item.itemCode) slipItemIdentifiers.add(item.itemCode.toString());
+            if (item.material) slipItemIdentifiers.add(item.material.toString());
+            if (item.product) slipItemIdentifiers.add(item.product.toString());
+        });
+
+        for (const item of inputItems) {
+            const identifier = item.itemCode || item.material || item.product;
+            if (!identifier || !slipItemIdentifiers.has(identifier.toString())) {
+                return {
+                    success: false,
+                    message: `Item identifier '${identifier || 'unknown'}' in update data does not match any item (by itemCode, material, or product) in slip ${slip.slipNumber}`,
+                    data: null
+                };
+            }
+        }
+
+        // Specific checks for RECEIVED transition
+        if (targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.RECEIVED) {
+            if (inputItems.length === 0) {
+                return { success: false, message: 'Update data must contain items when transitioning to RECEIVED status', data: null };
+            }
+            for (const item of inputItems) {
+                if (item.provisionalQuantity === undefined || item.provisionalQuantity === null || item.provisionalQuantity < 0) {
+                    return { success: false, message: `Item ${item.itemCode || 'at identifier ' + (item.material || item.product)} is missing valid provisionalQuantity`, data: null };
+                }
+            }
+        }
+
+        // Specific checks for INSPECTED/INSPECTING transition
+        if (targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.INSPECTED || targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.INSPECTING) {
+            if (inputItems.length === 0) {
+                return { success: false, message: 'Update data must contain items when transitioning to INSPECTED status', data: null };
+            }
+            for (const item of inputItems) {
+                if (item.actualQuantity === undefined || item.actualQuantity === null || item.actualQuantity < 0) {
+                    return { success: false, message: `Item ${item.itemCode || 'at identifier ' + (item.material || item.product)} is missing valid actualQuantity`, data: null };
+                }
+            }
+        }
+
         let warnings = [];
 
-        // --- Robust Data Mapping ---
+        // --- 3. Robust Data Mapping ---
         // Create a lookup map for update items by multiple possible identifiers
         const updatesMap = new Map();
-        const inputItems = [...(updateData.items || []), ...(updateData.scannedItems || [])];
 
         inputItems.forEach(item => {
             // Priority: actualQuantity > provisionalQuantity
@@ -132,41 +178,38 @@ export const updateSlipStatusService = async (slipId, newStatus, updateData, use
             if (item.itemCode) updatesMap.set(item.itemCode.toString(), itemData);
             if (item.material) updatesMap.set(item.material.toString(), itemData);
             if (item.product) updatesMap.set(item.product.toString(), itemData);
-            if (item._id) updatesMap.set(item._id.toString(), itemData);
-            if (item.id) updatesMap.set(item.id.toString(), itemData);
         });
 
-        // --- Process Item Updates based on New Status ---
+        // --- 4. Process Item Updates based on New Status ---
         for (const slipItem of slip.items) {
             const updateInfo = updatesMap.get(slipItem.itemCode) ??
                 updatesMap.get(slipItem.material?.toString()) ??
-                updatesMap.get(slipItem.product?.toString()) ??
-                updatesMap.get(slipItem._id?.toString());
+                updatesMap.get(slipItem.product?.toString());
 
             if (updateInfo) {
-                // 1. Handle Quantities
+                // Handle Quantities
                 if (targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.RECEIVED) {
-                    slipItem.quantity.provisional = updateInfo.quantity ?? slipItem.quantity.requested;
+                    slipItem.quantity.provisional = updateInfo.quantity;
                 } else if (targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.INSPECTED || targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.INSPECTING) {
-                    slipItem.quantity.actual = updateInfo.quantity ?? slipItem.quantity.provisional ?? slipItem.quantity.requested;
+                    slipItem.quantity.actual = updateInfo.quantity;
 
                     if (slipItem.quantity.actual !== slipItem.quantity.requested) {
                         warnings.push(`Số lượng lệch cho mã ${slipItem.itemCode}: Yêu cầu ${slipItem.quantity.requested}, Thực tế ${slipItem.quantity.actual}`);
                     }
                 }
 
-                // 2. Handle Item Notes
+                // Handle Item Notes
                 if (updateInfo.itemNote) {
                     slipItem.itemNote = updateInfo.itemNote;
                 }
 
-                // 3. Handle Batch & Expiry (Import only)
+                // Handle Batch & Expiry (Import only)
                 if (isImport && (targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.INSPECTED)) {
                     slipItem.batchNumber = updateInfo.batchNumber || slipItem.batchNumber || await generateBatchNumber(slipItem.itemCode);
                     if (updateInfo.expirationDate) slipItem.expirationDate = updateInfo.expirationDate;
                 }
 
-                // 4. Handle Shelf Suggestion & Override
+                // Handle Shelf Suggestion & Override
                 if (isImport && (targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.INSPECTED)) {
                     if (updateInfo.shelf) {
                         slipItem.shelf = updateInfo.shelf;
@@ -294,7 +337,6 @@ export const uploadSlipImagesService = async (slipId, imageUrls, userId) => {
  * Optimized with Promise.all for performance
  */
 async function finalizeInventoryUpdate(slip, userId, session) {
-    // For IMPORT slips, create inventory batches for FIFO tracking
     if (slip.type === INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT) {
         const batchResult = await createBatchesFromImport({
             items: slip.items.map(item => ({
@@ -317,57 +359,87 @@ async function finalizeInventoryUpdate(slip, userId, session) {
         }
     }
 
-    const updatePromises = slip.items.map(async (item) => {
-        const Model = item.material ? Material : (item.product ? Product : null);
-        if (!Model) return;
+    const warnings = [];
+    const transactionDocs = [];
 
-        const entityId = item.material || item.product;
-        const doc = await Model.findById(entityId).session(session);
-        if (!doc) return;
+    for (const item of slip.items) {
+        if (!item.material) continue;
 
-        const beforeStock = doc.currentStock;
-        const change = item.quantity.actual;
+        const material = await Material.findById(item.material).session(session);
+        if (!material) {
+            warnings.push(`Material ${item.material} not found, skipping.`);
+            continue;
+        }
 
-        // Update main stock level
-        if (slip.type === INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT) {
-            doc.currentStock += change;
+        const beforeStock = material.currentStock;
+        const quantityToIssue = item.quantity.actual;
 
-            if (item.shelf && doc.shelf?.toString() !== item.shelf.toString()) {
-                doc.shelf = item.shelf;
+        if (slip.type === INVENTORY_IMPORT_EXPORT_SLIP_TYPE.EXPORT) {
+            const fifoResult = await allocateBatchesForMaterial(
+                item.material,
+                quantityToIssue,
+                session
+            );
+
+            if (!fifoResult.success) {
+                throw new Error(
+                    `FIFO allocation failed for material ${material.code} (${material.name}): ${fifoResult.message}`
+                );
+            }
+
+            const batchAllocations = fifoResult.data;
+
+            for (const allocation of batchAllocations) {
+                transactionDocs.push({
+                    material: item.material,
+                    type: TRANSACTION_TYPE.SALES_OUT,
+                    quantity: -allocation.quantityAllocated,
+                    beforeStock,
+                    afterStock: beforeStock,
+                    performedBy: userId,
+                    note: `FIFO issue via slip ${slip.slipNumber}. Batch: ${allocation.batchNumber}. ${item.itemNote || ''}`,
+                    orderRef: slip.slipNumber,
+                    batch: allocation.batch
+                });
+
+                beforeStock -= allocation.quantityAllocated;
+            }
+
+            material.currentStock -= quantityToIssue;
+            await material.save({ session });
+
+            if (material.shelf) {
+                await updateShelfLoad(material.shelf);
             }
         } else {
-            doc.currentStock -= change;
+            material.currentStock += quantityToIssue;
+            if (item.shelf && material.shelf?.toString() !== item.shelf.toString()) {
+                material.shelf = item.shelf;
+            }
+            await material.save({ session });
+
+            if (material.shelf) {
+                await updateShelfLoad(material.shelf);
+            }
+
+            transactionDocs.push({
+                material: item.material,
+                type: TRANSACTION_TYPE.PRODUCTION_IN,
+                quantity: quantityToIssue,
+                beforeStock,
+                afterStock: material.currentStock,
+                performedBy: userId,
+                note: `Finalized import via slip ${slip.slipNumber}. ${item.itemNote || ''}`,
+                orderRef: slip.slipNumber
+            });
         }
+    }
 
-        await doc.save({ session });
+    if (transactionDocs.length > 0) {
+        await InventoryTransaction.create(transactionDocs, { session });
+    }
 
-        // Update shelf load
-        if (doc.shelf) {
-            await updateShelfLoad(doc.shelf);
-        }
-
-        // Determine transaction type
-        let transType;
-        if (slip.type === INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT) {
-            transType = TRANSACTION_TYPE.PRODUCTION_IN;
-        } else {
-            transType = TRANSACTION_TYPE.SALES_OUT;
-        }
-
-        return InventoryTransaction.create([{
-            [item.material ? 'material' : 'product']: entityId,
-            type: transType,
-            quantity: change,
-            beforeStock,
-            afterStock: doc.currentStock,
-            performedBy: userId,
-            note: `Finalized via slip ${slip.slipNumber}. ${item.itemNote || ''}`,
-            orderRef: slip.slipNumber,
-            batchNumber: item.batchNumber
-        }], { session });
-    });
-
-    await Promise.all(updatePromises);
+    return warnings;
 }
 
 export const getSlipByIdService = async (id) => {

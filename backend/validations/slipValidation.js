@@ -73,8 +73,6 @@ const updateStatusValidationSchema = joi.object({
         itemCode: joi.string().optional().trim(),
         material: joi.string().optional(),
         product: joi.string().optional(),
-        _id: joi.string().optional(),
-        id: joi.string().optional(),
 
         actualQuantity: joi.number().optional().min(0),
         provisionalQuantity: joi.number().optional().min(0),
