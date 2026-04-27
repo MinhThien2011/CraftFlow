@@ -22,8 +22,12 @@ export const buildUpdatePayload = (userdata, updateData) => {
             }
         }
     }
-    console.log('userdata', userdata);
-    console.log('updateData', updateData);
-    console.log('updatePayload', updatePayload);
     return updatePayload;
+}
+
+export const isMatchOfArrayItems = (arr1, arr2) => {
+    if (arr1.length !== arr2.length) return false;
+    const set1 = new Set(arr1);
+    const set2 = new Set(arr2);
+    return [...set1].every(item => set2.has(item));
 }

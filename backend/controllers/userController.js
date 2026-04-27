@@ -87,7 +87,7 @@ export const getAllUsers = async (req, res) => {
 export const getUserById = async (req, res) => {
   try {
     const { id } = req.params;
-    const   result = await userService.getUserById(id);
+    const result = await userService.getUserById(id);
 
     if (!result.success) {
       const statusCode = result.message === 'User not found.' ? StatusCodes.NOT_FOUND : StatusCodes.INTERNAL_SERVER_ERROR;
@@ -285,14 +285,20 @@ export const deleteUser = async (req, res) => {
 export const updateUserStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { isActive } = req.body
-    if (!isActive || isActive === undefined) {
+    let { isActive } = req?.body;
+
+    // 1. Kiểm tra sự tồn tại và ép kiểu về Boolean chuẩn
+    if (isActive === undefined || isActive === null) {
       return res.status(StatusCodes.BAD_REQUEST).json({
         success: false,
         message: 'No active status provided.',
         data: null
       });
     }
+
+    isActive = Boolean(isActive);
+    const newStatus = String(isActive).toLowerCase() === 'true';
+
     const user = await User.findById(id).populate('role', 'roleName');
 
     if (!user) {
@@ -302,17 +308,21 @@ export const updateUserStatus = async (req, res) => {
         data: null
       });
     }
-    if (isActive) {
-      user.isActive = isActive;
-    } else {
-      user.isActive = !user.isActive;
+
+    if (user.isActive === newStatus) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: `User ${user.username} is already ${newStatus ? 'enabled' : 'disabled'}.`,
+        data: user
+      });
     }
+
+    user.isActive = newStatus;
     await user.save();
 
-    // Invalidate Redis cache
     await Promise.all([
-        delUserAccessInfo(id),
-        clearCacheByPattern('user:list:*')
+      delUserAccessInfo(id),
+      clearCacheByPattern('user:list:*')
     ]);
 
     await logActivity({
@@ -326,7 +336,7 @@ export const updateUserStatus = async (req, res) => {
 
     return res.status(StatusCodes.OK).json({
       success: true,
-      message: `User ${user.isActive ? 'enabled' : 'disabled'} successfully.`,
+      message: `User ${user.username} ${user.isActive ? 'enabled' : 'disabled'} successfully.`,
       data: { user }
     });
 

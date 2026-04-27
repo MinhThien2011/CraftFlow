@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { REQUISITION_STATUS } from '../utils/constants.js';
+import { REQUISITION_STATUS, REQUISITION_TYPE } from '../utils/constants.js';
 
 const materialItemSchema = new mongoose.Schema({
   material: {
@@ -13,6 +13,10 @@ const materialItemSchema = new mongoose.Schema({
     min: 0
   },
   actualQuantity: {
+    type: Number,
+    default: 0
+  },
+  returnedQuantity: {
     type: Number,
     default: 0
   },
@@ -65,6 +69,16 @@ const requisitionSchema = new mongoose.Schema({
     required: true
   },
   items: [materialItemSchema],
+  type: {
+    type: String,
+    enum: Object.values(REQUISITION_TYPE),
+    default: REQUISITION_TYPE.ISSUE
+  },
+  parentRequisition: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'MaterialRequisition',
+    default: null
+  },
   status: {
     type: String,
     enum: Object.values(REQUISITION_STATUS),
@@ -74,6 +88,14 @@ const requisitionSchema = new mongoose.Schema({
   khoManager: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
+  },
+  adminApprovedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  relatedSlip: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'InventoryImportExportSlip'
   },
   evidenceImage: String,
   preparedAt: Date,

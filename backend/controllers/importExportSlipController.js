@@ -1,7 +1,7 @@
 import * as importExportSlipService from "../services/importExportSlipService.js";
 import { INVENTORY_IMPORT_EXPORT_SLIP_STATUS } from "../utils/constants.js";
 import { logActivity } from "../utils/logger.js";
-import { slipValidatior, receivedStatusValidation } from "../validations/SlipValidation.js";
+import { slipUpdateStatusValidator, slipValidatior } from "../validations/slipValidation.js";
 
 export const createImportExportSlip = async (req, res) => {
     try {
@@ -27,44 +27,72 @@ export const createImportExportSlip = async (req, res) => {
     }
 };
 
+export const updateSlipByManager = async (req, res) => {
+    try {
+        const userId = req.userId;
+        const { id } = req.params;
+
+        const result = await importExportSlipService.updateSlipByManagerService(id, req.body, userId);
+
+        if (!result.success) {
+            return res.status(400).json({ error: result.message });
+        }
+
+        // Log detailed changes
+        if (result.changes && result.changes.length > 0) {
+            await logActivity({
+                author: userId,
+                action: 'UPDATE_IMPORT_EXPORT_SLIP_DETAILS',
+                module: 'IMPORT_EXPORT_SLIP',
+                details: `User ${userId} updated slip ${id} fields: ${result.changes.map(c => c.field).join(', ')}`,
+                targetId: id,
+                metadata: { changes: result.changes }
+            }, req, true);
+        }
+
+        res.status(200).json(result);
+    } catch (error) {
+        res.status(400).json({ error: 'Failed to update slip details: ' + error.message });
+    }
+};
+
 export const updateSlipStatus = async (req, res) => {
     try {
         const userId = req.userId;
         const { id } = req.params;
-        const { status } = req.body;
-        if (!status) {
-            return res.status(400).json({ error: 'Status is required' });
+
+        const { error, value } = slipUpdateStatusValidator(req.body);
+        if (error) {
+            return res.status(400).json({ error: error.details.map(d => d.message) });
         }
 
-        let validatedData = req.body;
+        const { status } = value;
+        const result = await importExportSlipService.updateSlipStatusService(id, status, value, userId);
 
-        // Specific validation for RECEIVED status (QR/Barcode scanning)
-        if (status === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.RECEIVED) {
-            const { error, value } = receivedStatusValidation(req.body);
-            if (error) {
-                return res.status(400).json({ error: error.details.map(d => d.message) });
-            }
-            validatedData = value;
+        if (result.success) {
+            const { slip, warnings } = result.data;
+
+            await logActivity({
+                author: userId,
+                action: 'UPDATE_IMPORT_EXPORT_SLIP_STATUS',
+                module: 'IMPORT_EXPORT_SLIP',
+                details: `User ${userId} updated slip ${id} status to ${status}`,
+                targetId: id,
+                metadata: { status, warnings: warnings?.length > 0 ? warnings : undefined }
+            }, req, true);
+
+            return res.status(200).json({
+                success: true,
+                data: slip,
+                warnings: warnings?.length > 0 ? warnings : undefined
+            });
         }
 
-        const { slip, warnings } = await importExportSlipService.updateSlipStatusService(id, status, validatedData, userId);
+        return res.status(400).json({ success: false, message: result.message || 'Failed to update slip status', data: result.data });
 
-        await logActivity({
-            author: userId,
-            action: 'UPDATE_IMPORT_EXPORT_SLIP_STATUS',
-            module: 'IMPORT_EXPORT_SLIP',
-            details: `User ${userId} updated slip ${id} status to ${status}`,
-            targetId: id,
-            metadata: { status, warnings: warnings.length > 0 ? warnings : undefined }
-        }, req, true);
-
-        res.status(200).json({
-            success: true,
-            data: slip,
-            warnings: warnings.length > 0 ? warnings : undefined
-        });
     } catch (error) {
-        res.status(400).json({ error: 'Failed to update slip status: ' + error.message });
+        console.error('[updateSlipStatus] unexpected error:', error);
+        return res.status(500).json({ error: 'Internal server error: ' + error.message });
     }
 };
 
@@ -135,10 +163,10 @@ export const uploadSlipImages = async (req, res) => {
 
         if (result.success) {
             await logActivity({
-                author: req.userId,
+                author: userId,
                 action: 'UPLOAD_SLIP_IMAGES',
                 module: 'IMPORT_EXPORT_SLIP',
-                details: `User ${req.userId} uploaded images for slip ${id}. Late: ${result.data.isImageUploadLate}`,
+                details: `User ${userId} uploaded images for slip ${id}. Late: ${result.data.isImageUploadLate}`,
                 targetId: id,
                 metadata: { isLate: result.data.isImageUploadLate }
             }, req, true);
@@ -147,6 +175,6 @@ export const uploadSlipImages = async (req, res) => {
         return res.status(200).json(result);
     } catch (error) {
         console.error('[uploadSlipImages] error:', error);
-        return res.status(500).json({ status: 'error', message: error.message });
+        return res.status(500).json({ error: 'Failed to upload slip images: ' + error.message });
     }
 };

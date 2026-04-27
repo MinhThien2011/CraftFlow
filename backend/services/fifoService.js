@@ -5,17 +5,30 @@ import { TRANSACTION_TYPE } from '../utils/constants.js';
 import mongoose from 'mongoose';
 
 const BATCH_PREFIX = 'BATCH';
+const MAX_RETRY_ATTEMPTS = 10;
 
 export const generateBatchNumber = async (materialCode = 'MAT') => {
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const basePattern = `${BATCH_PREFIX}-${materialCode.toUpperCase()}-${dateStr}-`;
 
-    const count = await InventoryBatch.countDocuments({
-        createdAt: { $gte: today }
-    });
+    for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
 
-    return `${BATCH_PREFIX}-${materialCode.toUpperCase()}-${dateStr}-${(count + 1).toString().padStart(4, '0')}`;
+        const count = await InventoryBatch.countDocuments({
+            batchNumber: { $regex: `^${basePattern}` },
+            createdAt: { $gte: today }
+        });
+
+        const candidateNumber = `${basePattern}${(count + 1).toString().padStart(4, '0')}`;
+
+        const existing = await InventoryBatch.findOne({ batchNumber: candidateNumber }).lean();
+        if (!existing) {
+            return candidateNumber;
+        }
+    }
+
+    throw new Error(`Failed to generate unique batch number after ${MAX_RETRY_ATTEMPTS} attempts`);
 };
 
 export const createBatch = async (batchData) => {
@@ -109,6 +122,7 @@ export const createBatchesFromImport = async (importData, session) => {
                 unitCost: item.unitPrice || 0,
                 receivedDate: new Date(),
                 expirationDate: item.expirationDate || null,
+                shelf: item.shelf,
                 relatedPurchaseOrder,
                 relatedImportSlip,
                 relatedProductionOrder,

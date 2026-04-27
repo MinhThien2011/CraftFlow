@@ -3,6 +3,7 @@ export const ROLES = {
   STAFF: 'staff',
   KHO_MANAGER: 'kho_manager',
   PRODUCTION_MANAGER: 'production_manager',
+  PRODUCT_MANAGER: 'product_manager',
 };
 
 /**
@@ -31,11 +32,20 @@ export const ORDER_STATUS = {
  */
 export const REQUISITION_STATUS = {
   PENDING: 'pending',              // Staff requested
+  APPROVED: 'approved',            // Admin approved
   ACCEPTED: 'accepted',            // Kho manager accepted
   PREPARING: 'preparing',          // Being prepared in warehouse
   PREPARED: 'prepared',            // Ready for pickup
   COMPLETED: 'completed',          // Materials picked up by staff
+  RETURN_PENDING: 'return_pending', // Return requested by PM
+  RETURNED: 'returned',            // Return completed
   CANCELLED: 'cancelled',          // Cancelled by manager or timeout
+}
+
+export const REQUISITION_TYPE = {
+  ISSUE: 'issue',                 // Normal material issue
+  SUPPLEMENTARY: 'supplementary', // Additional materials needed during production
+  RETURN: 'return',               // Returning excess materials
 }
 
 /**
@@ -95,10 +105,14 @@ export const INVENTORY_IMPORT_EXPORT_SLIP_TYPE = {
 }
 
 export const INVENTORY_IMPORT_EXPORT_SLIP_STATUS = {
-  PENDING: 'pending',
-  RECEIVED: 'received',
-  INSPECTED: 'inspected',
-  IN_STOCK: 'in_stock',
+  PENDING: 'pending',     // Mới tạo, chờ xử lý
+  RECEIVED: 'received',   // Đã nhận hàng (Import) / Đang soạn hàng (Export)
+  INSPECTED: 'inspected', // Đã kiểm tra (Import)
+  INSPECTING: 'inspecting', // Đang kiểm kê (Export)
+  IN_STOCK: 'in_stock',   // Đã vào kho (Import) - Cho phép upload ảnh
+  COMPLETED: 'completed', // Đã hoàn tất (Export) - Cho phép upload ảnh
+  VERIFIED: 'verified',   // Đã xác thực ảnh chứng từ (Sau 3 ngày)
+  CANCELLED: 'cancelled', // Đã hủy
 }
 
 export const PURCHASE_ORDER_STATUS = {
