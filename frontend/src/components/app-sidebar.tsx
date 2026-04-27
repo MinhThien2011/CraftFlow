@@ -45,7 +45,7 @@ interface AppSidebarProps {
 const navigation = [
   { name: "Tổng quan", href: "/dashboard", icon: LayoutDashboard, roles: ["admin"] },
   { name: "Tổng quan kho (WMS)", href: "/dashboard_warehouse", icon: PackageOpen, roles: ["kho_manager"] },
-  { name: "Kho hàng", href: "/inventory", icon: Package, roles: ["admin"] },
+  { name: "Kho hàng", href: "/inventory", icon: Package, roles: ["admin", "kho_manager"] },
   { name: "Kho nguyên liệu", href: "/inventory/materials", icon: Package, roles: ["admin"] },
   { name: "Kiểm kê kho", href: "/inventory/stocktake", icon: ClipboardList, roles: ["kho_manager"] },
   { name: "Nhập kho", href: "/receiving", icon: PackagePlus, roles: ["kho_manager"] },
@@ -219,6 +219,18 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
             >
               <PackageOpen className="h-5 w-5 shrink-0" />
               <span className="flex-1">Tổng quan kho (WMS)</span>
+            </Link>
+            <Link
+              href="/inventory"
+              className={cn(
+                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                pathname === "/inventory" || pathname.startsWith("/inventory/")
+                  ? "bg-primary text-primary-foreground"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent"
+              )}
+            >
+              <Package className="h-5 w-5 shrink-0" />
+              <span className="flex-1">Kho hàng</span>
             </Link>
 
             {warehouseGroupedNavigation.map((group) => {
