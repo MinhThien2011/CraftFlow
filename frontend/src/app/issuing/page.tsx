@@ -246,7 +246,7 @@ export default function IssuingPage() {
 
       {/* ── Detail + Approve Dialog ── */}
       <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setJustApproved(false) }}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-150">
           <DialogHeader>
             <DialogTitle>Chi tiết phiếu xuất {currentNote?.code}</DialogTitle>
             <DialogDescription>Thông tin chi tiết phiếu xuất kho</DialogDescription>
