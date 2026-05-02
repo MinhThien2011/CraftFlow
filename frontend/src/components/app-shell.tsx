@@ -45,6 +45,7 @@ export function AppShell({ children, title, subtitle }: AppShellProps) {
     (pathname.startsWith("/reports/") && !isReportsInventoryPath)
   const isInventoryRootPath = pathname === "/inventory" || pathname === "/inventory/"
   const isKhoInventoryAllowedPath =
+    isInventoryRootPath ||
     pathname === "/inventory/stocktake" ||
     pathname.startsWith("/inventory/stocktake/")
 
