@@ -2,9 +2,17 @@ import { generateSlipNumber } from "../utils/slipHelper.js";
 import InventoryImportExportSlip from "../models/InventoryImportExportSlip.js";
 import Material from "../models/Material.js";
 import Product from "../models/Product.js";
+import ProductionOrder from "../models/ProductionOrder.js";
+import MaterialRequisition from "../models/MaterialRequisition.js";
 import InventoryTransaction from "../models/InventoryTransaction.js";
 import Shelf from "../models/Shelf.js";
-import { INVENTORY_IMPORT_EXPORT_SLIP_STATUS, INVENTORY_IMPORT_EXPORT_SLIP_TYPE, TRANSACTION_TYPE } from "../utils/constants.js";
+import {
+    INVENTORY_IMPORT_EXPORT_SLIP_STATUS,
+    INVENTORY_IMPORT_EXPORT_SLIP_TYPE,
+    TRANSACTION_TYPE,
+    REQUISITION_STATUS,
+    REQUISITION_TYPE
+} from "../utils/constants.js";
 import { updateShelfLoad } from "./shelfService.js";
 import { createBatchesFromImport, generateBatchNumber, allocateBatchesForMaterial } from "./fifoService.js";
 import mongoose from "mongoose";
@@ -437,6 +445,75 @@ async function finalizeInventoryUpdate(slip, userId, session) {
 
     if (transactionDocs.length > 0) {
         await InventoryTransaction.create(transactionDocs, { session });
+    }
+
+    // --- Post-Inventory Update Logic (Material Requisitions & Production Orders) ---
+    if (slip.relatedRequisition) {
+        const requisition = await MaterialRequisition.findById(slip.relatedRequisition).session(session);
+        if (requisition) {
+            if (requisition.type === REQUISITION_TYPE.RETURN) {
+                // If this is a return slip being completed, finalize the requisition and update production order
+                requisition.status = REQUISITION_STATUS.RETURNED;
+                requisition.completedAt = new Date();
+
+                const productionOrder = await ProductionOrder.findById(requisition.productionOrder).session(session);
+                if (productionOrder) {
+                    for (const item of slip.items) {
+                        if (item.material) {
+                            const matId = item.material.toString();
+                            const bomIndex = productionOrder.materials.findIndex(m => m.material.toString() === matId);
+                            if (bomIndex > -1) {
+                                productionOrder.materials[bomIndex].returnedQuantity += item.quantity.actual;
+                            } else {
+                                // Material was not in initial BOM, add it as returned
+                                productionOrder.materials.push({
+                                    material: item.material,
+                                    plannedQuantity: 0,
+                                    issuedQuantity: 0,
+                                    returnedQuantity: item.quantity.actual,
+                                    unit: item.unit
+                                });
+                            }
+
+                            // Also update returnedQuantity in requisition items for tracking
+                            const reqItemIndex = requisition.items.findIndex(ri => ri.material.toString() === matId);
+                            if (reqItemIndex > -1) {
+                                requisition.items[reqItemIndex].returnedQuantity = item.quantity.actual;
+                            }
+                        }
+                    }
+                    await productionOrder.save({ session });
+                }
+                await requisition.save({ session });
+                console.log(`[ImportExportSlip] Finalized return requisition ${requisition.requisitionCode} via slip ${slip.slipNumber}`);
+            } else {
+                // For normal issue/supplementary requisitions
+                requisition.status = REQUISITION_STATUS.COMPLETED;
+                requisition.completedAt = new Date();
+
+                const productionOrder = await ProductionOrder.findById(requisition.productionOrder).session(session);
+                if (productionOrder) {
+                    for (const item of slip.items) {
+                        if (item.material) {
+                            const matId = item.material.toString();
+                            const bomIndex = productionOrder.materials.findIndex(m => m.material.toString() === matId);
+                            if (bomIndex > -1) {
+                                productionOrder.materials[bomIndex].issuedQuantity += item.quantity.actual;
+                            }
+
+                            // Update actualQuantity in requisition items
+                            const reqItemIndex = requisition.items.findIndex(ri => ri.material.toString() === matId);
+                            if (reqItemIndex > -1) {
+                                requisition.items[reqItemIndex].actualQuantity = item.quantity.actual;
+                            }
+                        }
+                    }
+                    await productionOrder.save({ session });
+                }
+                await requisition.save({ session });
+                console.log(`[ImportExportSlip] Finalized issue requisition ${requisition.requisitionCode} via slip ${slip.slipNumber}`);
+            }
+        }
     }
 
     return warnings;

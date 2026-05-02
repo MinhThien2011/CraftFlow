@@ -8,22 +8,36 @@ export const createImportExportSlip = async (req, res) => {
         const userId = req.userId;
         const { error, value } = slipValidatior(req.body);
         if (error) {
-            return res.status(400).json({ error: error.details.map(d => d.message) });
+            return res.status(400).json({ 
+                status: 'error',
+                message: 'Dữ liệu không hợp lệ.',
+                details: error.details.map(d => d.message) 
+            });
         }
 
-        const slip = await importExportSlipService.createSlipService(value, userId);
-        res.status(201).json(slip);
+        const slipResult = await importExportSlipService.createSlipService(value, userId);
+        if (!slipResult.success) {
+            return res.status(400).json({ 
+                status: 'error',
+                message: slipResult.message 
+            });
+        }
+
+        res.status(201).json(slipResult);
 
         await logActivity({
             author: userId,
             action: 'CREATE_IMPORT_EXPORT_SLIP',
             module: 'IMPORT_EXPORT_SLIP',
-            details: `User ${userId} created import/export slip: ${slip._id}`,
-            targetId: slip._id,
-            metadata: { status: slip.status }
+            details: `User ${userId} created import/export slip: ${slipResult.data._id}`,
+            targetId: slipResult.data._id,
+            metadata: { status: slipResult.data.status }
         }, req, true);
     } catch (error) {
-        res.status(400).json({ error: 'Failed to create import/export slip: ' + error.message });
+        res.status(500).json({ 
+            status: 'error',
+            message: 'Lỗi hệ thống khi tạo phiếu: ' + error.message 
+        });
     }
 };
 

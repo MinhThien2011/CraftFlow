@@ -7,6 +7,11 @@ const assignmentSchema = new mongoose.Schema({
     ref: 'ProductionOrder',
     required: true,
   },
+  product: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Product',
+    required: true,
+  },
   staff: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

@@ -11,31 +11,30 @@ export const passwordComplexity = Joi.string()
   });
 
 const userSchema = Joi.object({
-  username: Joi.string().min(3).max(30).required().messages({
-    'string.min': 'Username must be at least 3 characters long.',
-    'string.max': 'Username cannot exceed 30 characters.',
-    'any.required': 'Username is required.'
+  username: Joi.string().alphanum().min(3).max(30).required().messages({
+    'string.min': 'Tên đăng nhập phải có ít nhất 3 ký tự.',
+    'any.required': 'Tên đăng nhập là bắt buộc.'
+  }),
+  password: Joi.string().pattern(new RegExp('^[a-zA-Z0-9]{3,30}$')).required().messages({
+    'string.pattern.base': 'Mật khẩu chỉ được chứa chữ cái và số, từ 3-30 ký tự.'
   }),
   email: Joi.string().email().required().messages({
-    'string.email': 'Email must be a valid email address.',
-    'any.required': 'Email is required.'
+    'string.email': 'Email không hợp lệ.',
+    'any.required': 'Email là bắt buộc.'
   }),
-  password: passwordComplexity.required(),
   fullName: Joi.string().min(3).required().messages({
-    'string.min': 'Full name must be at least 3 characters long.',
-    'any.required': 'Full name is required.'
+    'string.min': 'Họ tên phải có ít nhất 3 ký tự.'
   }),
-  phone: Joi.string().pattern(/^[0-9]{10,11}$/).required().messages({
-    'string.pattern.base': 'Phone number must be 10 or 11 digits long.',
-    'any.required': 'Phone number is required.'
+  phone: Joi.string().pattern(/^[0-9]{10}$/).required().messages({
+    'string.pattern.base': 'Số điện thoại phải có đúng 10 chữ số.'
   }),
-  address: Joi.string().required().messages({
-    'any.required': 'Address is required.'
-  }),
+  address: Joi.string().optional().allow(''),
   birthDay: Joi.date().optional(),
   gender: Joi.string().valid('male', 'female').default('male'),
   avatar: Joi.string().uri().optional().allow(''),
-  role: Joi.string().optional(),
+  role: Joi.string().hex().length(24).required().messages({
+    'any.required': 'Vai trò là bắt buộc.'
+  }),
   isActive: Joi.boolean().default(true),
   maxDailyCapacity: Joi.number().integer().min(0).default(100),
 }).required();

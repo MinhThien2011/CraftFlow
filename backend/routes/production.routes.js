@@ -12,7 +12,8 @@ import {
   getProductionOrderById,
   getSuggestions,
   reassignTask,
-  updateAssignmentStatus
+  updateAssignmentStatus,
+  updateOrderStatus
 } from '../controllers/productionOrderController.js';
 import { validate } from '../middleware/paramsValidator.js';
 import { commonParamsSchema } from '../validations/paramsValidator.js';
@@ -38,7 +39,8 @@ productionRouter.get('/', rolePermission([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER,
 productionRouter.post('/', rolePermission([ROLES.PRODUCTION_MANAGER]), createOrder);
 productionRouter.post('/assign', rolePermission([ROLES.PRODUCTION_MANAGER]), assignOrder);
 productionRouter.post('/reassign', rolePermission([ROLES.PRODUCTION_MANAGER]), reassignTask);
-productionRouter.patch('/assignments/:id/status', rolePermission([ROLES.PRODUCTION_MANAGER, ROLES.STAFF]), updateAssignmentStatus);
+productionRouter.patch('/:id/status', rolePermission([ROLES.PRODUCTION_MANAGER, ROLES.ADMIN]), updateOrderStatus);
+productionRouter.patch('/assignments/:id/status', rolePermission([ROLES.PRODUCTION_MANAGER, ROLES.STAFF, ROLES.ADMIN]), updateAssignmentStatus);
 productionRouter.patch('/:id/check-materials', rolePermission([ROLES.PRODUCTION_MANAGER]), checkMaterials);
 productionRouter.get('/:id/bom', rolePermission([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.STAFF, ROLES.KHO_MANAGER]), getBom);
 productionRouter.post('/:id/stock-in', rolePermission([ROLES.PRODUCTION_MANAGER]), createStockInSlip);

@@ -23,6 +23,7 @@ const assignOrderSchema = Joi.object({
   assignments: Joi.array().items(
     Joi.object({
       staffId: objectId.required(),
+      productId: objectId.required(),
       assignedQuantity: Joi.number().integer().min(1).required(),
     })
   ).min(1).required(),
@@ -35,8 +36,14 @@ const reassignTaskSchema = Joi.object({
 });
 
 const updateAssignmentStatusSchema = Joi.object({
-  status: Joi.string().valid(...Object.values(ORDER_STATUS)).required(),
-  completedQuantity: Joi.number().integer().min(0).optional(),
+  status: Joi.string().valid(...Object.values(ORDER_STATUS)).required().messages({
+    'any.only': 'Trạng thái đơn hàng không hợp lệ.',
+    'any.required': 'Trạng thái là bắt buộc.'
+  }),
+  completedQuantity: Joi.number().integer().min(0).optional().messages({
+    'number.min': 'Số lượng hoàn thành không được âm.',
+    'number.base': 'Số lượng hoàn thành phải là một con số.'
+  }),
 });
 
 const outgoingProductSchema = Joi.object({

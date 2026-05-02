@@ -12,6 +12,8 @@ import shelfRouter from "./shelf.routes.js";
 import slipRouter from "./slip.routes.js";
 import purchaseOrderRouter from "./purchaseOrder.routes.js";
 import batchRouter from "./batch.routes.js";
+import shrinkageRouter from "./shrinkage.routes.js";
+import agentRouter from "../agent/routes.js";
 
 const mainRouter = Router();
 
@@ -34,5 +36,7 @@ mainRouter.use('/shelves', shelfRouter);
 mainRouter.use('/slips', slipRouter);
 mainRouter.use('/purchaseOrders', purchaseOrderRouter);
 mainRouter.use('/batches', batchRouter);
+mainRouter.use('/shrinkage', shrinkageRouter);
+mainRouter.use('/agent', agentRouter);
 
 export default mainRouter;

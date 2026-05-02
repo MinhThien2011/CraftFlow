@@ -227,23 +227,8 @@ export const approveReturnRequisition = async (requisitionId, managerId) => {
       throw new Error('Requisition is not in return_pending status.');
     }
 
-    requisition.status = REQUISITION_STATUS.RETURNED;
+    requisition.status = REQUISITION_STATUS.RETURN_APPROVED;
     requisition.khoManager = managerId;
-    requisition.completedAt = new Date();
-
-    // Update ProductionOrder returnedQuantity
-    const productionOrder = await ProductionOrder.findById(requisition.productionOrder).session(session);
-    if (productionOrder) {
-      for (const item of requisition.items) {
-        const materialIndex = productionOrder.materials.findIndex(m => m.material.toString() === item.material._id.toString());
-        if (materialIndex > -1) {
-          productionOrder.materials[materialIndex].returnedQuantity += item.requestedQuantity;
-        }
-        // Also update returnedQuantity in requisition items for tracking
-        item.returnedQuantity = item.requestedQuantity;
-      }
-      await productionOrder.save({ session });
-    }
 
     // Create an IMPORT slip for the returned materials
     const slipItems = requisition.items.map(item => ({
@@ -253,11 +238,13 @@ export const approveReturnRequisition = async (requisitionId, managerId) => {
       unit: item.material.unit,
       quantity: {
         requested: item.requestedQuantity,
-        actual: item.requestedQuantity // For returns, we assume the quantity returned is correct
+        actual: item.requestedQuantity // Initial suggestion, will be verified during import
       },
       unitPrice: item.material.price || 0,
       amount: (item.material.price || 0) * item.requestedQuantity
     }));
+
+    const productionOrder = await ProductionOrder.findById(requisition.productionOrder).session(session);
 
     const slipData = {
       type: INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT,

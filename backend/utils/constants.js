@@ -38,6 +38,7 @@ export const REQUISITION_STATUS = {
   PREPARED: 'prepared',            // Ready for pickup
   COMPLETED: 'completed',          // Materials picked up by staff
   RETURN_PENDING: 'return_pending', // Return requested by PM
+  RETURN_APPROVED: 'return_approved', // Return approved by Kho Manager, waiting for actual stock move
   RETURNED: 'returned',            // Return completed
   CANCELLED: 'cancelled',          // Cancelled by manager or timeout
 }
@@ -85,6 +86,17 @@ export const STOCK_LEVEL = {
   LOW: 'low',          // Below threshold
   NORMAL: 'normal',       // Adequate stock
   OVERSTOCK: 'overstock',    // Excess stock
+};
+
+/**
+ * Inventory Shrinkage Statuses
+ */
+export const SHRINKAGE_STATUS = {
+  PENDING: 'pending',     // Created by Kho Manager
+  CHECKING: 'checking',   // Admin is checking
+  RESOLVED: 'resolved',   // Issues identified, ready for decision
+  ACCEPTED: 'accepted',   // Admin accepted, inventory will be deducted
+  REJECTED: 'rejected',   // Admin rejected
 };
 
 /**

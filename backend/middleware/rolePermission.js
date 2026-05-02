@@ -55,6 +55,7 @@ export function rolePermission(allowedRoles) {
         });
       }
 
+      req.userRole = accessInfo.roleName;
       next();
     } catch (error) {
       console.error('[rolePermission] Error:', error);

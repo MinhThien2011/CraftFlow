@@ -427,7 +427,8 @@ export const getStaffSuggestions = async () => {
 };
 
 /**
- * Assign sub-orders to staff.
+ * Assign sub-orders (tasks) to staff by product and quantity.
+ * Supports splitting a single order product into multiple staff assignments.
  */
 export const assignProductionOrder = async (orderId, assignments) => {
   const session = await mongoose.startSession();
@@ -444,22 +445,40 @@ export const assignProductionOrder = async (orderId, assignments) => {
     const staffMembers = await User.find({ _id: { $in: staffIds } }).session(session);
     const staffMap = new Map(staffMembers.map(s => [s._id.toString(), s]));
 
-    let totalAssigned = 0;
+    const productMap = new Map(order.products.map(p => [p.product.toString(), p.quantity]));
     const newAssignments = [];
 
-    // Fetch existing assignments to check total quantity
+    // Fetch existing assignments for this order to check total quantity per product
     const existingAssignments = await ProductionOrderAssignment.find({ productionOrder: orderId }).session(session);
-    const alreadyAssignedQuantity = existingAssignments.reduce((sum, a) => sum + a.assignedQuantity, 0);
+
+    // Group existing assignments by product
+    const assignedPerProduct = new Map();
+    existingAssignments.forEach(a => {
+      const productId = a.product.toString();
+      assignedPerProduct.set(productId, (assignedPerProduct.get(productId) || 0) + a.assignedQuantity);
+    });
 
     for (const assign of assignments) {
-      const { staffId, assignedQuantity } = assign;
+      const { staffId, productId, assignedQuantity } = assign;
 
       if (!staffMap.has(staffId)) {
         throw new Error(`Staff member with ID ${staffId} not found.`);
       }
 
+      if (!productMap.has(productId)) {
+        throw new Error(`Product ${productId} is not part of production order ${order.orderCode}.`);
+      }
+
+      const totalProductQty = productMap.get(productId);
+      const currentlyAssignedQty = assignedPerProduct.get(productId) || 0;
+
+      if (currentlyAssignedQty + assignedQuantity > totalProductQty) {
+        throw new Error(`Total assigned quantity (${currentlyAssignedQty + assignedQuantity}) for product ${productId} exceeds order quantity (${totalProductQty}).`);
+      }
+
       const newAssign = new ProductionOrderAssignment({
         productionOrder: orderId,
+        product: productId,
         staff: staffId,
         assignedQuantity,
         status: ORDER_STATUS.ASSIGNED
@@ -473,18 +492,19 @@ export const assignProductionOrder = async (orderId, assignments) => {
       }, { session });
 
       newAssignments.push(newAssign);
-      totalAssigned += assignedQuantity;
-    }
 
-    if (alreadyAssignedQuantity + totalAssigned > order.quantity) {
-      throw new Error(`Total assigned quantity (${alreadyAssignedQuantity + totalAssigned}) exceeds order quantity (${order.quantity}).`);
+      // Update our local tracking map
+      assignedPerProduct.set(productId, currentlyAssignedQty + assignedQuantity);
     }
 
     order.status = ORDER_STATUS.ASSIGNED;
     await order.save({ session });
 
     await session.commitTransaction();
-    console.log(`[Production] Order ${orderId} assigned to ${newAssignments.length} staff members. Total assigned: ${alreadyAssignedQuantity + totalAssigned}/${order.quantity}`);
+
+    // Log final results for debugging
+    const summary = Array.from(assignedPerProduct.entries()).map(([pId, qty]) => `${pId}: ${qty}/${productMap.get(pId)}`);
+    console.log(`[Production] Order ${orderId} assigned. Summary: ${summary.join(', ')}`);
 
     return {
       status: 'success',
@@ -492,8 +512,8 @@ export const assignProductionOrder = async (orderId, assignments) => {
       data: { assignments: newAssignments }
     };
   } catch (error) {
-    await session.abortTransaction();
-    console.log('[ProductionOrderService] assignProductionOrder error:', error);
+    if (session.inTransaction()) await session.abortTransaction();
+    console.error('[ProductionOrderService] assignProductionOrder error:', error);
     return { status: 'error', message: error.message, data: null };
   } finally {
     session.endSession();
@@ -501,7 +521,43 @@ export const assignProductionOrder = async (orderId, assignments) => {
 };
 
 /**
- * Reassign a sub-order to a different staff.
+ * Update the overall production order status.
+ * Only accessible by Production Manager or Admin.
+ */
+export const updateProductionOrderStatus = async (orderId, status, notes = '') => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const order = await ProductionOrder.findById(orderId).session(session);
+    if (!order) throw new Error('Production order not found.');
+
+    const oldStatus = order.status;
+    order.status = status;
+    if (notes) order.holdReason = notes; // Using holdReason as a general note field for status changes
+
+    if (status === ORDER_STATUS.COMPLETED && oldStatus !== ORDER_STATUS.COMPLETED) {
+      order.completedAt = new Date();
+    }
+
+    await order.save({ session });
+    await session.commitTransaction();
+
+    return {
+      status: 'success',
+      message: `Production order status updated to ${status}.`,
+      data: { order }
+    };
+  } catch (error) {
+    if (session.inTransaction()) await session.abortTransaction();
+    console.error('[ProductionOrderService] updateProductionOrderStatus error:', error);
+    return { status: 'error', message: error.message, data: null };
+  } finally {
+    session.endSession();
+  }
+};
+
+/**
+ * Reassign sub-orders to staff.
  */
 export const reassignProductionOrder = async (assignmentId, newStaffId, reason = '') => {
   const session = await mongoose.startSession();
@@ -551,128 +607,107 @@ export const reassignProductionOrder = async (assignmentId, newStaffId, reason =
 };
 
 /**
- * Update sub-order status and check if parent order is completed.
- * Enhanced with milestone reporting (50%, 75%, 100%) and better logging.
- * @param {string} assignmentId - ID of the assignment to update
- * @param {string} status - New status
- * @param {number} completedQuantity - New completed quantity
- * @param {string} [actorId] - Optional actor ID for security check (if staff)
+ * Update sub-order (assignment) status and progress.
+ * Staff can report their progress, while the system auto-transitions the parent order status.
  */
-export const updateAssignmentStatus = async (assignmentId, status, completedQuantity = 0, actorId = null) => {
+export const updateAssignmentStatus = async (assignmentId, status, completedQuantity = 0, actorId = null, actorRole = null) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const assignment = await ProductionOrderAssignment.findById(assignmentId).populate({
-      path: 'productionOrder',
-      populate: { path: 'products.product' }
-    });
+    const assignment = await ProductionOrderAssignment.findById(assignmentId).session(session);
     if (!assignment) throw new Error('Assignment not found.');
 
-    // Security check: If actor is provided, it must be the assigned staff
-    if (actorId && assignment.staff.toString() !== actorId.toString()) {
+    const orderId = assignment.productionOrder;
+    const order = await ProductionOrder.findById(orderId).session(session);
+    if (!order) throw new Error('Parent production order not found.');
+
+    // 1. Validation & Permissions
+    const isStaff = actorRole === ROLES.STAFF;
+
+    // If actor is staff, they can only update their own assignment
+    if (isStaff && assignment.staff.toString() !== actorId.toString()) {
       throw new Error('You are not authorized to update this assignment.');
     }
 
     const oldStatus = assignment.status;
+    const oldCompletedQty = assignment.completedQuantity;
+
+    // 2. Update Assignment Fields
     assignment.status = status;
 
-    // Set startedAt when first moving to IN_PRODUCTION
-    if (status === ORDER_STATUS.IN_PRODUCTION && !assignment.startedAt) {
-      assignment.startedAt = new Date();
-      console.log(`[Production] Assignment ${assignmentId} started at ${assignment.startedAt}`);
-    }
-
-    if (completedQuantity > 0) {
+    if (completedQuantity !== undefined) {
       if (completedQuantity > assignment.assignedQuantity) {
         throw new Error(`Completed quantity (${completedQuantity}) cannot exceed assigned quantity (${assignment.assignedQuantity}).`);
       }
       assignment.completedQuantity = completedQuantity;
     }
 
+    // Set timestamps based on status
+    if (status === ORDER_STATUS.IN_PRODUCTION && !assignment.startedAt) {
+      assignment.startedAt = new Date();
+    }
+    if (status === ORDER_STATUS.COMPLETED) {
+      assignment.finishedAt = new Date();
+      assignment.completedQuantity = assignment.assignedQuantity; // Auto-complete if marked as COMPLETED
+    }
+
+    // 3. Update Staff Workload if status changes to COMPLETED
+    if (status === ORDER_STATUS.COMPLETED && oldStatus !== ORDER_STATUS.COMPLETED) {
+      await User.findByIdAndUpdate(assignment.staff, {
+        $inc: { currentAssignedQuantity: -assignment.assignedQuantity }
+      }, { session });
+    } else if (oldStatus === ORDER_STATUS.COMPLETED && status !== ORDER_STATUS.COMPLETED) {
+      // If moving back from COMPLETED (e.g. by PM)
+      await User.findByIdAndUpdate(assignment.staff, {
+        $inc: { currentAssignedQuantity: assignment.assignedQuantity }
+      }, { session });
+    }
+
     // Milestone Reporting Logic (50%, 75%, 100%)
     const progressPercent = (assignment.completedQuantity / assignment.assignedQuantity) * 100;
     const milestones = [50, 75, 100];
-
     for (const milestone of milestones) {
       if (progressPercent >= milestone && !assignment.reportedMilestones.includes(milestone)) {
         assignment.reportedMilestones.push(milestone);
         assignment.lastReportedAt = new Date();
-
-        // Calculate time-based progress for logging/analytics
-        let timeProgressMsg = '';
-        if (assignment.startedAt) {
-          // Access product using products.product field
-          const product = assignment.productionOrder.products.find(p => p.productId === assignment.productionOrder.productId);
-          if (!product) throw new Error('Product not found in order.');
-          const estimatedTimePerUnit = product.product.estimatedProductionTime || 0; // assuming minutes
-          const totalEstimatedMinutes = assignment.assignedQuantity * estimatedTimePerUnit;
-          const actualElapsedMinutes = (new Date() - assignment.startedAt) / (1000 * 60);
-
-          timeProgressMsg = `(Time progress: ${actualElapsedMinutes.toFixed(1)}/${totalEstimatedMinutes} mins)`;
-        }
-
-        console.log(`[ProductionReport] Milestone ${milestone}% reached for Assignment ${assignmentId}. Quantity: ${assignment.completedQuantity}/${assignment.assignedQuantity} ${timeProgressMsg}`);
       }
-    }
-
-    if (status === ORDER_STATUS.COMPLETED) {
-      // Force 100% milestone if completed
-      if (!assignment.reportedMilestones.includes(100)) {
-        assignment.reportedMilestones.push(100);
-      }
-      assignment.completedQuantity = assignment.assignedQuantity; // Ensure full quantity
-      assignment.finishedAt = new Date();
-
-      // Reduce staff workload upon completion
-      await User.findByIdAndUpdate(assignment.staff, {
-        $inc: { currentAssignedQuantity: -assignment.assignedQuantity }
-      }, { session });
     }
 
     await assignment.save({ session });
 
-    // Check parent order completion
-    const parentOrderId = assignment.productionOrder._id;
-    const allAssignments = await ProductionOrderAssignment.find({ productionOrder: parentOrderId }).session(session);
+    // 4. Auto-transition Parent Order Status
+    const allAssignments = await ProductionOrderAssignment.find({ productionOrder: orderId }).session(session);
 
     const allCompleted = allAssignments.every(a => a.status === ORDER_STATUS.COMPLETED);
+    const anyInProduction = allAssignments.some(a => a.status === ORDER_STATUS.IN_PRODUCTION);
+    const anyCompleted = allAssignments.some(a => a.status === ORDER_STATUS.COMPLETED);
+
+    let newOrderStatus = order.status;
 
     if (allCompleted) {
-      const completedOrder = await ProductionOrder.findByIdAndUpdate(parentOrderId, {
-        status: ORDER_STATUS.COMPLETED,
-        completedAt: new Date()
-      }, { session, returnDocument: 'after' }).lean();
+      newOrderStatus = ORDER_STATUS.COMPLETED;
+      order.completedAt = new Date();
+    } else if (anyInProduction || anyCompleted) {
+      newOrderStatus = anyCompleted ? ORDER_STATUS.PARTIALLY_COMPLETE : ORDER_STATUS.IN_PRODUCTION;
+    }
 
-      // Note: Product inventory is no longer updated here. 
-      // It will be updated via InventoryImportExportSlip created by Production Manager.
-
-      console.log(`[Production] Parent Order ${parentOrderId} fully completed. Waiting for Stock-In Slip.`);
-    } else {
-      // Check if any is in production
-      const anyInProduction = allAssignments.some(a =>
-        [ORDER_STATUS.IN_PRODUCTION, ORDER_STATUS.PARTIALLY_COMPLETE].includes(a.status)
-      );
-      if (anyInProduction) {
-        await ProductionOrder.findByIdAndUpdate(parentOrderId, {
-          status: ORDER_STATUS.IN_PRODUCTION
-        }, { session });
-      }
+    if (newOrderStatus !== order.status) {
+      order.status = newOrderStatus;
+      await order.save({ session });
+      console.log(`[Production] Order ${order.orderCode} auto-transitioned to ${newOrderStatus}`);
     }
 
     await session.commitTransaction();
+
     return {
-      success: true,
-      message: 'Assignment status updated and progress tracked.',
-      data: {
-        assignment,
-        orderCompleted: allCompleted,
-        newMilestones: assignment.reportedMilestones
-      }
+      status: 'success',
+      message: 'Assignment updated successfully.',
+      data: { assignment, orderStatus: order.status }
     };
   } catch (error) {
-    await session.abortTransaction();
-    console.log('[ProductionOrderService] updateAssignmentStatus error:', error);
-    return { success: false, message: error.message, data: null };
+    if (session.inTransaction()) await session.abortTransaction();
+    console.error('[ProductionOrderService] updateAssignmentStatus error:', error);
+    return { status: 'error', message: error.message, data: null };
   } finally {
     session.endSession();
   }

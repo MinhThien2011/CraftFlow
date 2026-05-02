@@ -239,6 +239,48 @@ export const checkMaterials = async (req, res) => {
   }
 };
 
+export const updateOrderStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, notes } = req.body;
+
+    if (!status || !Object.values(ORDER_STATUS).includes(status)) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        status: 'error',
+        message: 'Invalid production order status.',
+        data: null
+      });
+    }
+
+    const result = await productionOrderService.updateProductionOrderStatus(id, status, notes);
+
+    if (result.status === 'error') {
+      return res.status(StatusCodes.BAD_REQUEST).json(result);
+    }
+
+    // Invalidate caches
+    clearCacheByPattern('production:list:*');
+    clearCacheByPattern(`production:detail:${id}`);
+
+    await logActivity({
+      author: req.userId,
+      action: 'UPDATE_PRODUCTION_ORDER_STATUS',
+      module: 'PRODUCTION',
+      details: `Production order ${id} status updated to ${status}`,
+      targetId: id
+    }, req);
+
+    return res.status(StatusCodes.OK).json(result);
+  } catch (error) {
+    console.error('[ProductionOrderController] updateOrderStatus error:', error);
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: 'error',
+      message: 'Failed to update production order status.',
+      data: null
+    });
+  }
+};
+
 export const reassignTask = async (req, res) => {
   try {
     const { error, value } = reassignTaskValidator(req.body);
@@ -303,19 +345,14 @@ export const updateAssignmentStatus = async (req, res) => {
       });
     }
     const userId = req.userId;
+    const userRole = req.userRole;
     const { id } = req.params;
     const { status, completedQuantity } = value;
 
-    let result;
-    // Security check: Staff can only update their own assignments
-    if (req.userRole === ROLES.STAFF) {
-      result = await productionOrderService.updateAssignmentStatus(id, status, completedQuantity, userId);
-    } else {
-      result = await productionOrderService.updateAssignmentStatus(id, status, completedQuantity);
-    }
+    const result = await productionOrderService.updateAssignmentStatus(id, status, completedQuantity, userId, userRole);
 
     if (result.status === 'error') {
-      return res.status(req.userRole === ROLES.STAFF ? StatusCodes.FORBIDDEN : StatusCodes.BAD_REQUEST).json(result);
+      return res.status(userRole === ROLES.STAFF ? StatusCodes.FORBIDDEN : StatusCodes.BAD_REQUEST).json(result);
     }
 
     // Invalidate caches
@@ -353,7 +390,7 @@ export const getBom = async (req, res) => {
     const { id } = req.params;
     const result = await productionOrderService.getBomByOrderId(id);
 
-    if (!result.success ) {
+    if (!result.success) {
       return res.status(StatusCodes.NOT_FOUND).json({
         status: 'error',
         message: result.message,
@@ -390,7 +427,7 @@ export const createStockInSlip = async (req, res) => {
     const { id } = req.params; // Order ID
     const result = await productionOrderService.createStockInSlip(id, req.userId, value);
 
-    if (!result.success ) {
+    if (!result.success) {
       return res.status(StatusCodes.BAD_REQUEST).json({
         status: 'error',
         message: result.message,
