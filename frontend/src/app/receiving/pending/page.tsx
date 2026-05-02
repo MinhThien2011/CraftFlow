@@ -28,6 +28,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 
+import { Progress } from "@/components/ui/progress"
+
 const pendingReceipts = [
   {
     id: 'PN-2024-00125',
@@ -70,6 +72,7 @@ export default function ReceivingPendingPage() {
   const [approveDialogOpen, setApproveDialogOpen] = useState(false)
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
   const [signatureConfirmed, setSignatureConfirmed] = useState(false)
+  const [detailOpen, setDetailOpen] = useState(false)
 
   const filteredReceipts = pendingReceipts.filter(
     (receipt) =>
@@ -149,7 +152,10 @@ export default function ReceivingPendingPage() {
                     <TableCell>{receipt.createdAt}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="icon" className="size-8">
+                        <Button variant="ghost" size="icon" className="size-8" onClick={() => {
+                          setSelectedReceipt(receipt);
+                          setDetailOpen(true);
+                        }}>
                           <Eye className="size-4" />
                         </Button>
                         
@@ -265,6 +271,149 @@ export default function ReceivingPendingPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Detail Modal - centered overlay */}
+      {detailOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
+          onClick={() => setDetailOpen(false)}
+        >
+          <div
+            className="relative w-full max-w-lg mx-4 bg-[#FCFBF9] border border-[#EDE3D5] rounded-[28px] overflow-hidden shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close button */}
+            <button
+              onClick={() => setDetailOpen(false)}
+              className="absolute top-4 right-4 size-8 flex items-center justify-center rounded-full bg-[#F1EFE9] hover:bg-[#EDE3D5] text-[#8C8375] transition-colors"
+            >
+              <X className="size-4" />
+            </button>
+
+            <div className="p-6 space-y-5 overflow-y-auto max-h-[85vh]">
+              {/* Title */}
+              <div>
+                <div className="flex items-center gap-3 mb-1">
+                  <h2 className="text-xl font-bold text-[#4A3F31]">
+                    {selectedReceipt?.id}
+                  </h2>
+                  <Badge className="bg-[#E8F5E9] text-[#2E7D32] hover:bg-[#E8F5E9] border-none rounded-full px-3 text-xs">
+                    Đã qua QC
+                  </Badge>
+                </div>
+                <p className="text-sm text-[#8C8375]">
+                  Chi tiết phiếu nhập kho từ {selectedReceipt?.supplier}
+                </p>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-white p-5 rounded-2xl border border-[#F1EFE9] shadow-sm space-y-2.5">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-semibold text-[#8C8375] uppercase tracking-wider">
+                      Tổng số lượng
+                    </span>
+                    <span className="text-[#967E5B] font-bold text-sm">86%</span>
+                  </div>
+                  <div className="text-2xl font-bold text-[#4A3F31]">
+                    {selectedReceipt?.totalQuantity}{' '}
+                    <span className="text-base font-normal text-[#8C8375]">/ 1000</span>
+                  </div>
+                  <Progress
+                    value={86}
+                    className="h-1.5 bg-[#F1EFE9] [&>div]:bg-[#967E5B]"
+                  />
+                </div>
+
+                <div className="bg-white p-5 rounded-2xl border border-[#F1EFE9] shadow-sm space-y-2.5">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-semibold text-[#8C8375] uppercase tracking-wider">
+                      Giá trị đơn
+                    </span>
+                    <PenTool className="size-3.5 text-[#8C8375]" />
+                  </div>
+                  <div className="text-xl font-bold text-[#4A3F31] leading-tight">
+                    {selectedReceipt?.amount}
+                  </div>
+                  <p className="text-xs text-[#8C8375]">
+                    Thanh toán:{' '}
+                    <span className="text-[#4A3F31] font-medium">Chuyển khoản</span>
+                  </p>
+                </div>
+              </div>
+
+              {/* Items Table */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-bold text-[#4A3F31]">
+                  Danh sách vật tư thực nhập
+                </h3>
+                <div className="bg-white rounded-2xl border border-[#F1EFE9] overflow-hidden shadow-sm">
+                  <Table>
+                    <TableHeader className="bg-[#FAF9F6]">
+                      <TableRow className="hover:bg-transparent border-b border-[#F1EFE9]">
+                        <TableHead className="text-[#8C8375] font-semibold py-3 text-xs">
+                          Mặt hàng
+                        </TableHead>
+                        <TableHead className="text-right text-[#8C8375] font-semibold text-xs">
+                          PO
+                        </TableHead>
+                        <TableHead className="text-right text-[#8C8375] font-semibold text-xs">
+                          Thực nhập
+                        </TableHead>
+                        <TableHead className="text-right text-[#2E7D32] font-semibold text-xs">
+                          Đạt QC
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      <TableRow className="hover:bg-[#FCFBF9]">
+                        <TableCell className="py-3 font-medium text-[#4A3F31] text-sm">
+                          Sợi len Cotton 2/32
+                        </TableCell>
+                        <TableCell className="text-right text-[#8C8375] text-sm">500</TableCell>
+                        <TableCell className="text-right text-[#4A3F31] text-sm">500</TableCell>
+                        <TableCell className="text-right font-bold text-[#2E7D32] text-sm">
+                          500
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+
+              {/* QC Note */}
+              <div className="p-4 rounded-2xl bg-[#FFFBEB] border border-[#FEF3C7] flex gap-3">
+                <div className="bg-[#F59E0B] p-1.5 rounded-lg h-fit shrink-0">
+                  <Eye className="size-3.5 text-white" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-[#92400E] text-xs">
+                    Ghi chú kiểm định (QC)
+                  </h4>
+                  <p className="text-[#B45309] text-xs mt-1 italic leading-relaxed">
+                    "Hàng đúng quy cách, bao bì nguyên vẹn. Đã kiểm tra xác suất 10% lô hàng."
+                  </p>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-1">
+                <Button className="flex-1 h-11 rounded-xl bg-[#967E5B] hover:bg-[#7D684A] text-white transition-all shadow-md shadow-[#967E5B]/20 text-sm">
+                  Duyệt phiếu nhập
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex-1 h-11 rounded-xl border-[#EDE3D5] text-[#8C8375] hover:bg-white hover:text-[#4A3F31] text-sm"
+                  onClick={() => setDetailOpen(false)}
+                >
+                  Từ chối
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   )
 }

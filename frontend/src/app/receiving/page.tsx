@@ -415,7 +415,7 @@ function QRScanner({ open, onOpenChange, onScanSuccess }: QRScannerProps) {
           {scannedData && (
             <div className="space-y-4">
               <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4 flex items-start gap-3">
-                <CheckCircle2 className="w-6 h-6 text-green-600 flex-shrink-0 mt-0.5" />
+                <CheckCircle2 className="w-6 h-6 text-green-600 shrink-0 mt-0.5" />
                 <div className="flex-1">
                   <p className="font-medium text-green-900 mb-2">Quét thành công!</p>
                   <div className="space-y-2 text-sm">
@@ -668,7 +668,7 @@ export default function ReceivingPage() {
                                     <Eye className="size-4" />
                                   </Button>
                                 </DialogTrigger>
-                                <DialogContent className="sm:max-w-[600px]">
+                                <DialogContent className="sm:max-w-150">
                                   <DialogHeader>
                                     <DialogTitle>Chi tiết phiếu nhập {note.code}</DialogTitle>
                                     <DialogDescription>
