@@ -1,6 +1,7 @@
 // Warehouse module mock data (isolated from main app mock-data to avoid name clashes)
 
 export interface MaterialRequisition {
+  rejectReason?: string
   id: string
   code: string
   staffName: string
