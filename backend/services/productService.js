@@ -140,7 +140,7 @@ export const recordIncomingProduct = async (productId, quantity, type, note, use
       sender: logistics.sender,
       orderRef: logistics.orderRef,
       location: logistics.location || product.location
-    }], { session });
+    }], { session, ordered: true });
 
     await session.commitTransaction();
 
@@ -193,7 +193,7 @@ export const recordOutgoingProduct = async (productId, quantity, type, note, use
       customer: logistics.customer,
       orderRef: logistics.orderRef,
       location: logistics.location || product.location
-    }], { session });
+    }], { session, ordered: true });
 
     await session.commitTransaction();
 

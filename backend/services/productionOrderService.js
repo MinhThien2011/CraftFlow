@@ -427,6 +427,83 @@ export const getStaffSuggestions = async () => {
 };
 
 /**
+ * Automatically check and update all INSUFFICIENT_MATERIALS orders.
+ * Triggered when inventory is replenished.
+ */
+export const autoUpdateInsufficientOrders = async (materialIds = [], session = null) => {
+  try {
+    const query = { status: ORDER_STATUS.INSUFFICIENT_MATERIALS };
+
+    // If specific materialIds are provided, only check orders that use those materials
+    if (materialIds.length > 0) {
+      // We need to find orders whose BOM contains these materials
+      // For simplicity, we can fetch all INSUFFICIENT orders and check, 
+      // but for better performance we can query by BOM if needed.
+      // Here we'll use a more targeted query if materialIds are provided.
+      const boms = await Bom.find({
+        'items.material': { $in: materialIds },
+        isActive: true
+      }).select('productionOrder').lean();
+
+      const orderIdsFromBoms = boms.map(b => b.productionOrder);
+      query._id = { $in: orderIdsFromBoms };
+    }
+
+    const orders = await ProductionOrder.find(query)
+      .populate('products.product')
+      .session(session);
+
+    if (orders.length === 0) return { status: 'success', updatedCount: 0 };
+
+    let updatedCount = 0;
+    for (const order of orders) {
+      // Recalculate requirements
+      const materialRequirements = new Map();
+      for (const item of order.products) {
+        const product = item.product;
+        if (!product || !product.estimateMaterialCost) continue;
+
+        for (const matCost of product.estimateMaterialCost) {
+          const matId = matCost.material.toString();
+          const needed = matCost.quantity * item.quantity;
+          materialRequirements.set(matId, (materialRequirements.get(matId) || 0) + needed);
+        }
+      }
+
+      // Check stock
+      let isEnough = true;
+      for (const [matId, neededQuantity] of materialRequirements.entries()) {
+        const material = await Material.findById(matId).session(session).lean();
+        if (!material || material.currentStock < neededQuantity) {
+          isEnough = false;
+          break;
+        }
+      }
+
+      if (isEnough) {
+        order.status = ORDER_STATUS.READY_TO_ASSIGN;
+        await order.save({ session });
+
+        // Resolve alerts
+        await MaterialAlert.updateMany(
+          { productionOrder: order._id, status: 'pending' },
+          { status: 'resolved' },
+          { session }
+        );
+
+        updatedCount++;
+        console.log(`[Production] Order ${order.orderCode} auto-transitioned to READY_TO_ASSIGN`);
+      }
+    }
+
+    return { status: 'success', updatedCount };
+  } catch (error) {
+    console.error('[ProductionOrderService] autoUpdateInsufficientOrders error:', error);
+    return { status: 'error', message: error.message };
+  }
+};
+
+/**
  * Assign sub-orders (tasks) to staff by product and quantity.
  * Supports splitting a single order product into multiple staff assignments.
  */
@@ -716,7 +793,7 @@ export const updateAssignmentStatus = async (assignmentId, status, completedQuan
 /**
  * Production Manager creates an internal stock-in receipt for a completed order.
  */
-export const createStockInSlip = async (orderIdentifier, managerId, slipData) => {
+export const createStockInSlip = async (orderIdentifier, managerId, slipData = {}) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {

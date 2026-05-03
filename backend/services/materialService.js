@@ -125,7 +125,7 @@ export const adjustMaterialStock = async (materialId, { type, quantity, note, se
       orderRef,
       location: material.location,
       note: note || `Manual adjustment: ${type}`
-    }], { session });
+    }], { session, ordered: true });
 
     await session.commitTransaction();
 

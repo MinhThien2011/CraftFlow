@@ -15,6 +15,7 @@ import {
 } from "../utils/constants.js";
 import { updateShelfLoad } from "./shelfService.js";
 import { createBatchesFromImport, generateBatchNumber, allocateBatchesForMaterial } from "./fifoService.js";
+import { autoUpdateInsufficientOrders } from "./productionOrderService.js";
 import mongoose from "mongoose";
 
 
@@ -444,10 +445,17 @@ async function finalizeInventoryUpdate(slip, userId, session) {
     }
 
     if (transactionDocs.length > 0) {
-        await InventoryTransaction.create(transactionDocs, { session });
+        await InventoryTransaction.create(transactionDocs, { session, ordered: true });
     }
 
-    // --- Post-Inventory Update Logic (Material Requisitions & Production Orders) ---
+    // --- Post-Inventory Update Logic ---
+    // 1. Trigger auto-update for orders with insufficient materials
+    if (slip.type === INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT) {
+        const materialIds = slip.items.map(item => item.material).filter(id => !!id);
+        await autoUpdateInsufficientOrders(materialIds, session);
+    }
+
+    // 2. Handle Material Requisitions & Production Orders (Existing logic)
     if (slip.relatedRequisition) {
         const requisition = await MaterialRequisition.findById(slip.relatedRequisition).session(session);
         if (requisition) {

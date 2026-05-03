@@ -6,6 +6,7 @@ import { REQUISITION_STATUS, TRANSACTION_TYPE, INVENTORY_IMPORT_EXPORT_SLIP_TYPE
 import { updateShelfLoad } from './shelfService.js';
 import { allocateBatchesForMaterial, createBatch } from './fifoService.js';
 import { createSlipService } from './importExportSlipService.js';
+import { autoUpdateInsufficientOrders } from './productionOrderService.js';
 import mongoose from 'mongoose';
 
 /**
@@ -265,6 +266,10 @@ export const approveReturnRequisition = async (requisitionId, managerId) => {
     requisition.relatedSlip = slipResult.data._id;
     await requisition.save({ session });
 
+    // Trigger auto-update for orders with insufficient materials (since materials are returned)
+    const returnedMaterialIds = requisition.items.map(item => item.material._id);
+    await autoUpdateInsufficientOrders(returnedMaterialIds, session);
+
     await session.commitTransaction();
     return {
       status: 'success',
@@ -508,7 +513,7 @@ export const updateRequisitionStatus = async (requisitionId, managerId, status, 
               performedBy: managerId,
               khoManager: managerId,
               note: `Issued for requisition ${requisition.requisitionCode}. Batch: ${allocation.batchNumber}. FIFO allocation.`
-            }], { session });
+            }], { session, ordered: true });
           }
 
           // Update material's total stock
