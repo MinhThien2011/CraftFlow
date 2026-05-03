@@ -116,7 +116,7 @@ export default function ProductsPage() {
     try {
       const response = await productApi.getProducts(params)
       if (response.status === "success" || response.success) {
-        setProducts(response.data.products)
+        setProducts(response.data.items || [])
         // Adapt pagination format if needed
         const apiPagination = response.data.pagination as any
         setPagination({
