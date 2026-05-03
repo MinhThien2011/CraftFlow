@@ -116,8 +116,8 @@ const warehouseGroupedNavigation = [
     icon: FileSearch,
     children: [
       { name: "Kệ nguyên liệu", href: "/locations/materials" },
-      { name: "Kệ thành phẩm", href: "/locations/materials?zone=finished" },
-      { name: "Gắn vị trí lô hàng", href: "/locations/materials?mode=assign" },
+      { name: "Kệ thành phẩm", href: "/locations/materials/products" },
+      { name: "Gắn vị trí lô hàng", href: "/locations/materials/assign" },
     ],
   },
   {

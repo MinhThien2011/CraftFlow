@@ -73,7 +73,13 @@ export function AppShell({ children, title, subtitle }: AppShellProps) {
       return
     }
 
-    if (role === "admin" && (isWarehouseFeaturePath || isReportsInventoryPath)) {
+    // Allow admin to access locations for oversight
+    if (role === "admin" && isWarehouseFeaturePath && !isKhoManagerOnlyPath) {
+      // Admin can access locations for monitoring purposes
+      return
+    }
+
+    if (role === "admin" && (isWarehouseFeaturePath || isReportsInventoryPath) && isKhoManagerOnlyPath) {
       router.push("/dashboard")
       return
     }
