@@ -31,10 +31,7 @@ slipRouter.get('/:id', getSlipById);
 slipRouter.patch('/:id/status', rolePermission([ROLES.KHO_MANAGER, ROLES.ADMIN]), updateSlipStatus);
 
 // Upload signed slip images (Multiple images support)
-slipRouter.post('/:id/upload-images', 
-  rolePermission([ROLES.KHO_MANAGER, ROLES.ADMIN]), 
-  imageUploader('slips', 'evidenceImages', 5), // Upload to 'slips' folder, field 'evidenceImages', max 5 files
-  uploadSlipImages
+slipRouter.post('/:id/upload-images', rolePermission([ROLES.KHO_MANAGER, ROLES.ADMIN]), imageUploader('slips', 'evidenceImages', 5), uploadSlipImages
 );
 
 export default slipRouter;

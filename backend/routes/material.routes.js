@@ -1,14 +1,14 @@
 import { Router } from 'express';
-import { 
-  getAllMaterials, 
-  getLowStockMaterials, 
+import {
+  getAllMaterials,
+  getLowStockMaterials,
   getMaterialByCode,
   getMaterialById,
-  createMaterial, 
-  updateMaterial, 
-  adjustStock, 
+  createMaterial,
+  updateMaterial,
+  adjustStock,
   adjustStockByCode,
-  getMaterialHistory 
+  getMaterialHistory
 } from '../controllers/materialController.js';
 import { jwtAuth } from '../middleware/jwtAuth.js';
 import { rolePermission } from '../middleware/rolePermission.js';
@@ -34,11 +34,14 @@ materialRouter.get('/history', getMaterialHistory);
 materialRouter.get('/:id/history', getMaterialHistory);
 materialRouter.get('/:id', getMaterialById);
 
-// --- Admin & Kho Manager Routes (Admin only can view, Kho Manager can modify) ---
-materialRouter.post('/', rolePermission([ROLES.KHO_MANAGER]), createMaterial);
-materialRouter.patch('/:id', rolePermission([ROLES.KHO_MANAGER]), updateMaterial);
-materialRouter.post('/adjust-by-code', rolePermission([ROLES.KHO_MANAGER]), adjustStockByCode);
-materialRouter.post('/:id/adjust-stock', rolePermission([ROLES.KHO_MANAGER]), adjustStock);
+// --- Admin & Kho Manager Routes ---
+// Note: Manual adjustments are discouraged. Use Shrinkage or Requisitions for tracking.
+materialRouter.post('/', rolePermission([ROLES.ADMIN, ROLES.KHO_MANAGER]), createMaterial);
+materialRouter.patch('/:id', rolePermission([ROLES.ADMIN, ROLES.KHO_MANAGER]), updateMaterial);
+
+// --- Admin Routes ---
+materialRouter.post('/adjust-by-code', rolePermission([ROLES.ADMIN]), adjustStockByCode);
+materialRouter.post('/:id/adjust-stock', rolePermission([ROLES.ADMIN]), adjustStock);
 
 
 export default materialRouter;

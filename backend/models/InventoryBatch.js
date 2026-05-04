@@ -9,7 +9,10 @@ const inventoryBatchSchema = new mongoose.Schema({
     material: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Material',
-        required: true,
+    },
+    product: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Product',
     },
     quantityReceived: {
         type: Number,
@@ -73,10 +76,12 @@ const inventoryBatchSchema = new mongoose.Schema({
 });
 
 inventoryBatchSchema.index({ material: 1, receivedDate: 1 });
+inventoryBatchSchema.index({ product: 1, receivedDate: 1 });
 inventoryBatchSchema.index({ material: 1, expirationDate: 1 });
+inventoryBatchSchema.index({ product: 1, expirationDate: 1 });
 inventoryBatchSchema.index({ isExhausted: 1 });
 
-inventoryBatchSchema.pre('save', function() {
+inventoryBatchSchema.pre('save', function () {
     if (this.isModified('quantityRemaining')) {
         this.isExhausted = this.quantityRemaining <= 0;
     }

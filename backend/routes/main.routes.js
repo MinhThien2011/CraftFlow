@@ -14,6 +14,7 @@ import purchaseOrderRouter from "./purchaseOrder.routes.js";
 import batchRouter from "./batch.routes.js";
 import shrinkageRouter from "./shrinkage.routes.js";
 import agentRouter from "../agent/routes.js";
+import productExportRouter from "./productExport.routes.js";
 
 const mainRouter = Router();
 
@@ -38,5 +39,6 @@ mainRouter.use('/purchaseOrders', purchaseOrderRouter);
 mainRouter.use('/batches', batchRouter);
 mainRouter.use('/shrinkage', shrinkageRouter);
 mainRouter.use('/agent', agentRouter);
+mainRouter.use('/product-exports', productExportRouter);
 
 export default mainRouter;

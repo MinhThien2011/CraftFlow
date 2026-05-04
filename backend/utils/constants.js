@@ -47,6 +47,7 @@ export const REQUISITION_TYPE = {
   ISSUE: 'issue',                 // Normal material issue
   SUPPLEMENTARY: 'supplementary', // Additional materials needed during production
   RETURN: 'return',               // Returning excess materials
+  PRODUCT_EXPORT: 'product_export', // Exporting finished products
 }
 
 /**
