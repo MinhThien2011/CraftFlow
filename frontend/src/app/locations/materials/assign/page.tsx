@@ -416,7 +416,7 @@ export default function LotLocationPage() {
                     <CardContent>
                       <div className="relative pl-4">
                         {/* Vertical line */}
-                        <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border" />
+                        <div className="absolute left-1.75 top-2 bottom-2 w-px bg-border" />
 
                         <div className="space-y-4">
                           {lotHistory.map(hist => (
@@ -523,7 +523,7 @@ export default function LotLocationPage() {
             </CardHeader>
             <CardContent>
               <div className="relative pl-5">
-                <div className="absolute left-[9px] top-2 bottom-2 w-px bg-border" />
+                <div className="absolute left-2.25 top-2 bottom-2 w-px bg-border" />
                 <div className="space-y-5">
                   {lotMovementHistory.map(hist => {
                     const lot = lotItems.find(l => l.id === hist.lotId)
