@@ -28,6 +28,7 @@ export function AppShell({ children, title, subtitle }: AppShellProps) {
     "/defects",
   ]
   const khoManagerOnlyPrefixes = ["/dashboard_warehouse"]
+  const productionManagerPrefixes = ["/production-management"]
 
   const adminPrefixes = [
     "/dashboard",
@@ -67,6 +68,9 @@ export function AppShell({ children, title, subtitle }: AppShellProps) {
     const isAdminPath = adminPrefixes.some(
       (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
     )
+    const isProductionManagerPath = productionManagerPrefixes.some(
+      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+    )
 
     if (role === "admin" && isKhoManagerOnlyPath) {
       router.push("/dashboard")
@@ -89,11 +93,26 @@ export function AppShell({ children, title, subtitle }: AppShellProps) {
       (
         isAdminPath ||
         isAdminReportsPath ||
-        isInventoryRootPath
+        isInventoryRootPath ||
+        isProductionManagerPath
       ) &&
       !isKhoInventoryAllowedPath
     ) {
       router.push("/dashboard_warehouse")
+      return
+    }
+
+    if (role === "production_manager" && !isProductionManagerPath) {
+      router.push("/production-management/dashboard")
+      return
+    }
+
+    if (role !== "production_manager" && isProductionManagerPath) {
+      if (role === "kho_manager") {
+        router.push("/dashboard_warehouse")
+      } else {
+        router.push("/dashboard")
+      }
     }
   }, [loading, isAuthenticated, role, pathname, router])
 

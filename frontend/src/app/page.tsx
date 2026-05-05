@@ -20,6 +20,7 @@ export default function LoginPage() {
 
   const getHomeByRole = (userRole: string) => {
     if (userRole === "kho_manager") return "/dashboard_warehouse"
+    if (userRole === "production_manager") return "/production-management/dashboard"
     return "/dashboard"
   }
 
