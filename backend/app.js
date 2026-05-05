@@ -14,7 +14,6 @@ const app = express();
 redisConnect();
 connectToDatabase();
 setupGracefulShutdown();
-
 // logger.init('PET RESCUE').batch([
 //     { cmd: 'step', args: [1, 5, 'Connect DB'] },
 //     { cmd: 'step', args: [3, 5, 'Load Models'] },

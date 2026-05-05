@@ -9,7 +9,9 @@ import MaterialRequisition from './MaterialRequisition.js';
 import Product from './Product.js';
 import ProductionOrder from './ProductionOrder.js';
 import ProductionOrderAssignment from './ProductionOrderAssignment.js';
+import PurchaseOrder from './PurchaseOrder.js';
 import Role from './Roles.js';
+import Shelf from './Shelf.js';
 import User from './User.js';
 
 export const models_list = {
@@ -25,5 +27,8 @@ export const models_list = {
     ProductionOrder,
     ProductionOrderAssignment,
     Role,
-    User
+    User,
+    Shelf,
+    PurchaseOrder,
+    
 };
