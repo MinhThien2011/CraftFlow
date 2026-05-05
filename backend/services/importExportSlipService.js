@@ -350,6 +350,7 @@ async function finalizeInventoryUpdate(slip, userId, session) {
         const batchResult = await createBatchesFromImport({
             items: slip.items.map(item => ({
                 material: item.material,
+                product: item.product,
                 itemCode: item.itemCode,
                 unit: item.unit,
                 quantity: item.quantity,
@@ -372,75 +373,152 @@ async function finalizeInventoryUpdate(slip, userId, session) {
     const transactionDocs = [];
 
     for (const item of slip.items) {
-        if (!item.material) continue;
-
-        const material = await Material.findById(item.material).session(session);
-        if (!material) {
-            warnings.push(`Material ${item.material} not found, skipping.`);
-            continue;
-        }
-
-        const beforeStock = material.currentStock;
-        const quantityToIssue = item.quantity.actual;
-
-        if (slip.type === INVENTORY_IMPORT_EXPORT_SLIP_TYPE.EXPORT) {
-            const fifoResult = await allocateBatchesForMaterial(
-                item.material,
-                quantityToIssue,
-                session
-            );
-
-            if (!fifoResult.success) {
-                throw new Error(
-                    `FIFO allocation failed for material ${material.code} (${material.name}): ${fifoResult.message}`
-                );
+        // --- Case 1: Item is a Material ---
+        if (item.material) {
+            const material = await Material.findById(item.material).session(session);
+            if (!material) {
+                warnings.push(`Material ${item.material} not found, skipping.`);
+                continue;
             }
 
-            const batchAllocations = fifoResult.data;
+            const beforeStock = material.currentStock;
+            const quantityToIssue = item.quantity.actual;
 
-            for (const allocation of batchAllocations) {
+            if (slip.type === INVENTORY_IMPORT_EXPORT_SLIP_TYPE.EXPORT) {
+                const fifoResult = await allocateBatchesForMaterial(
+                    item.material,
+                    quantityToIssue,
+                    session
+                );
+
+                if (!fifoResult.success) {
+                    throw new Error(
+                        `FIFO allocation failed for material ${material.code} (${material.name}): ${fifoResult.message}`
+                    );
+                }
+
+                const batchAllocations = fifoResult.data;
+
+                for (const allocation of batchAllocations) {
+                    transactionDocs.push({
+                        material: item.material,
+                        type: TRANSACTION_TYPE.SALES_OUT,
+                        quantity: -allocation.quantityAllocated,
+                        beforeStock,
+                        afterStock: beforeStock,
+                        performedBy: userId,
+                        note: `FIFO issue via slip ${slip.slipNumber}. Batch: ${allocation.batchNumber}. ${item.itemNote || ''}`,
+                        orderRef: slip.slipNumber,
+                        batch: allocation.batch
+                    });
+
+                    beforeStock -= allocation.quantityAllocated;
+                }
+
+                material.currentStock -= quantityToIssue;
+                await material.save({ session });
+
+                if (material.shelf) {
+                    await updateShelfLoad(material.shelf);
+                }
+            } else {
+                material.currentStock += quantityToIssue;
+                if (item.shelf && material.shelf?.toString() !== item.shelf.toString()) {
+                    material.shelf = item.shelf;
+                }
+                await material.save({ session });
+
+                if (material.shelf) {
+                    await updateShelfLoad(material.shelf);
+                }
+
                 transactionDocs.push({
                     material: item.material,
-                    type: TRANSACTION_TYPE.SALES_OUT,
-                    quantity: -allocation.quantityAllocated,
+                    type: TRANSACTION_TYPE.PRODUCTION_IN,
+                    quantity: quantityToIssue,
                     beforeStock,
-                    afterStock: beforeStock,
+                    afterStock: material.currentStock,
                     performedBy: userId,
-                    note: `FIFO issue via slip ${slip.slipNumber}. Batch: ${allocation.batchNumber}. ${item.itemNote || ''}`,
-                    orderRef: slip.slipNumber,
-                    batch: allocation.batch
+                    note: `Finalized import via slip ${slip.slipNumber}. ${item.itemNote || ''}`,
+                    orderRef: slip.slipNumber
+                });
+            }
+        }
+        // --- Case 2: Item is a Product (Finished Goods) ---
+        else if (item.product) {
+            const product = await Product.findById(item.product).session(session);
+            if (!product) {
+                warnings.push(`Product ${item.product} not found, skipping.`);
+                continue;
+            }
+
+            const beforeStock = product.currentStock;
+            const quantityToUpdate = item.quantity.actual;
+
+            if (slip.type === INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT) {
+                // Product Import: Usually finished goods coming from production
+                product.currentStock += quantityToUpdate;
+
+                // Update shelf if provided
+                if (item.shelf && product.shelf?.toString() !== item.shelf.toString()) {
+                    product.shelf = item.shelf;
+                }
+
+                await product.save({ session });
+
+                if (product.shelf) {
+                    await updateShelfLoad(product.shelf);
+                }
+
+                transactionDocs.push({
+                    product: item.product,
+                    type: TRANSACTION_TYPE.PRODUCTION_IN,
+                    quantity: quantityToUpdate,
+                    beforeStock,
+                    afterStock: product.currentStock,
+                    performedBy: userId,
+                    note: `Nhập kho thành phẩm từ sản xuất via slip ${slip.slipNumber}. ${item.itemNote || ''}`,
+                    orderRef: slip.slipNumber
+                });
+            } else {
+                // Product Export: Apply FIFO logic
+                const fifoResult = await allocateBatchesForItem({
+                    productId: item.product,
+                    quantityNeeded: quantityToUpdate,
+                    session
                 });
 
-                beforeStock -= allocation.quantityAllocated;
-            }
+                if (!fifoResult.success) {
+                    throw new Error(
+                        `FIFO allocation failed for product ${product.code} (${product.name}): ${fifoResult.message}`
+                    );
+                }
 
-            material.currentStock -= quantityToIssue;
-            await material.save({ session });
+                const batchAllocations = fifoResult.data;
 
-            if (material.shelf) {
-                await updateShelfLoad(material.shelf);
-            }
-        } else {
-            material.currentStock += quantityToIssue;
-            if (item.shelf && material.shelf?.toString() !== item.shelf.toString()) {
-                material.shelf = item.shelf;
-            }
-            await material.save({ session });
+                for (const allocation of batchAllocations) {
+                    transactionDocs.push({
+                        product: item.product,
+                        type: TRANSACTION_TYPE.SALES_OUT,
+                        quantity: -allocation.quantityAllocated,
+                        beforeStock,
+                        afterStock: beforeStock,
+                        performedBy: userId,
+                        note: `FIFO product export via slip ${slip.slipNumber}. Batch: ${allocation.batchNumber}. ${item.itemNote || ''}`,
+                        orderRef: slip.slipNumber,
+                        batch: allocation.batch
+                    });
 
-            if (material.shelf) {
-                await updateShelfLoad(material.shelf);
-            }
+                    beforeStock -= allocation.quantityAllocated;
+                }
 
-            transactionDocs.push({
-                material: item.material,
-                type: TRANSACTION_TYPE.PRODUCTION_IN,
-                quantity: quantityToIssue,
-                beforeStock,
-                afterStock: material.currentStock,
-                performedBy: userId,
-                note: `Finalized import via slip ${slip.slipNumber}. ${item.itemNote || ''}`,
-                orderRef: slip.slipNumber
-            });
+                product.currentStock -= quantityToUpdate;
+                await product.save({ session });
+
+                if (product.shelf) {
+                    await updateShelfLoad(product.shelf);
+                }
+            }
         }
     }
 

@@ -42,39 +42,23 @@ productRouter.use(jwtAuth)
 // @route   POST /api/products
 // @desc    Create a new product with image upload
 productRouter.post(
-    '/',
-    rolePermission([ROLES.PRODUCTION_MANAGER]),
-    imageUploader('products'),
-    productController.createProduct
+  '/',
+  rolePermission([ROLES.PRODUCTION_MANAGER]),
+  imageUploader('products'),
+  productController.createProduct
 );
 
 // @route   PUT /api/products/:id
 // @desc    Update an existing product with image upload
-productRouter.put(
-    '/:id',
-    rolePermission([ROLES.PRODUCTION_MANAGER]),
-    imageUploader('products'),
-    productController.updateProduct
+productRouter.put('/:id', rolePermission([ROLES.PRODUCTION_MANAGER]), imageUploader('products'), productController.updateProduct
 );
 
 // @route   DELETE /api/products/:id
 // @desc    Deactivate a product (soft delete)
-productRouter.delete('/:id', rolePermission([ROLES.PRODUCTION_MANAGER]), productController.deleteProduct);
+productRouter.delete('/:id', rolePermission([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER]), productController.deleteProduct);
 
-// @route   POST /api/products/incoming
-// @desc    Record incoming products (e.g., from production, returns)
-productRouter.post(
-    '/incoming',
-    rolePermission([ROLES.KHO_MANAGER, ROLES.PRODUCTION_MANAGER]),
-    productController.incomingProduct
-);
+productRouter.post('/incoming', rolePermission([ROLES.ADMIN]), productController.incomingProduct);
 
-// @route   POST /api/products/outgoing
-// @desc    Record outgoing products (e.g., sales, damage)
-productRouter.post(
-    '/outgoing',
-    rolePermission([ROLES.KHO_MANAGER]),
-    productController.outgoingProduct
-);
+productRouter.post('/outgoing', rolePermission([ROLES.ADMIN]), productController.outgoingProduct);
 
 export default productRouter;

@@ -48,16 +48,27 @@ export const createBatch = async (batchData) => {
     }
 };
 
-export const allocateBatchesForMaterial = async (materialId, quantityNeeded, session) => {
+/**
+ * Generic function to allocate batches using FIFO logic.
+ * Works for both Materials and Products.
+ */
+export const allocateBatchesForItem = async ({ materialId, productId, quantityNeeded, session }) => {
     try {
-        const batches = await InventoryBatch.find({
-            material: materialId,
+        const query = {
             isExhausted: false,
             $or: [
                 { expirationDate: null },
                 { expirationDate: { $gt: new Date() } }
             ]
-        }).sort({ receivedDate: 1, expirationDate: 1 }).session(session);
+        };
+
+        if (materialId) query.material = materialId;
+        else if (productId) query.product = productId;
+        else throw new Error('Either materialId or productId must be provided for batch allocation.');
+
+        const batches = await InventoryBatch.find(query)
+            .sort({ receivedDate: 1, expirationDate: 1 })
+            .session(session);
 
         const allocations = [];
         let remainingQuantity = quantityNeeded;
@@ -95,9 +106,16 @@ export const allocateBatchesForMaterial = async (materialId, quantityNeeded, ses
 
         return { success: true, data: allocations, message: 'Batches allocated successfully' };
     } catch (error) {
-        console.error('[FIFOService] allocateBatchesForMaterial error:', error);
+        console.error('[FIFOService] allocateBatchesForItem error:', error);
         return { success: false, message: error.message, data: null };
     }
+};
+
+/**
+ * Legacy wrapper for allocateBatchesForMaterial
+ */
+export const allocateBatchesForMaterial = async (materialId, quantityNeeded, session) => {
+    return allocateBatchesForItem({ materialId, quantityNeeded, session });
 };
 
 export const createBatchesFromImport = async (importData, session) => {
@@ -106,19 +124,27 @@ export const createBatchesFromImport = async (importData, session) => {
         const createdBatches = [];
 
         for (const item of items) {
-            if (!item.material || !item.quantity?.actual || item.quantity.actual <= 0) continue;
+            const isMaterial = !!item.material;
+            const isProduct = !!item.product;
+            
+            if ((!isMaterial && !isProduct) || !item.quantity?.actual || item.quantity.actual <= 0) continue;
 
-            const material = await Material.findById(item.material).session(session);
-            if (!material) continue;
+            let code = item.itemCode;
+            if (!code) {
+                const Model = isMaterial ? Material : mongoose.model('Product');
+                const doc = await Model.findById(item.material || item.product).session(session);
+                code = doc?.code || (isMaterial ? 'MAT' : 'PROD');
+            }
 
-            const batchNumber = item.batchNumber || await generateBatchNumber(material.code);
+            const batchNumber = item.batchNumber || await generateBatchNumber(code);
 
             const batch = new InventoryBatch({
                 batchNumber,
-                material: item.material,
+                material: item.material || null,
+                product: item.product || null,
                 quantityReceived: item.quantity.actual,
                 quantityRemaining: item.quantity.actual,
-                unit: item.unit || material.unit,
+                unit: item.unit || 'unit',
                 unitCost: item.unitPrice || 0,
                 receivedDate: new Date(),
                 expirationDate: item.expirationDate || null,
