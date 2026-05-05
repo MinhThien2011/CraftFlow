@@ -14,12 +14,15 @@ import {
     REQUISITION_TYPE
 } from "../utils/constants.js";
 import { updateShelfLoad } from "./shelfService.js";
-import { createBatchesFromImport, generateBatchNumber, allocateBatchesForMaterial } from "./fifoService.js";
+import { createBatchesFromImport, generateBatchNumber, allocateBatchesForMaterial, allocateBatchesForItem } from "./fifoService.js";
 import { autoUpdateInsufficientOrders } from "./productionOrderService.js";
+import inventoryEvents from "../events/inventoryEvents.js";
 import mongoose from "mongoose";
 
 
-export const createSlipService = async (data, userId) => {
+import { ServiceResponse } from "../utils/serviceHelper.js";
+
+export const createSlipService = async (data, userId, session = null) => {
     try {
         if (!data.slipNumber) {
             // Generate a new slip number if not provided
@@ -35,17 +38,17 @@ export const createSlipService = async (data, userId) => {
             }
         };
 
-        const slip = await InventoryImportExportSlip.create(slipData);
-        return { success: true, data: slip, message: 'Slip created successfully' };
+        const [slip] = await InventoryImportExportSlip.create([slipData], { session });
+        return ServiceResponse(true, 'Slip created successfully', slip, 201);
     } catch (error) {
         console.log('[createSlipService] error:', error);
-        return { success: false, message: 'Failed to create slip: ' + error.message, data: null };
+        return ServiceResponse(false, 'Failed to create slip: ' + error.message);
     }
 };
 
-export const updateSlipByManagerService = async (slipId, updateData, userId) => {
+export const updateSlipByManagerService = async (slipId, updateData, userId, session = null) => {
     try {
-        const slip = await InventoryImportExportSlip.findById(slipId);
+        const slip = await InventoryImportExportSlip.findById(slipId).session(session);
         if (!slip) throw new Error('Slip not found');
 
         // Fields allowed to be updated by Manager (excluding items)
@@ -76,27 +79,123 @@ export const updateSlipByManagerService = async (slipId, updateData, userId) => 
         });
 
         if (hasChanges) {
-            await slip.save();
+            await slip.save({ session });
         }
 
-        return {
-            success: true,
-            message: hasChanges ? 'Slip updated successfully' : 'No changes detected',
-            data: slip,
-            changes: changes // Return changes for logging in controller
-        };
+        return ServiceResponse(true, hasChanges ? 'Slip updated successfully' : 'No changes detected', slip);
     } catch (error) {
         console.log('[updateSlipByManagerService] error:', error);
-        return { success: false, message: 'Failed to update slip: ' + error.message, data: null };
+        return ServiceResponse(false, 'Failed to update slip: ' + error.message);
     }
 };
 
+/**
+ * Internal helper to handle Material inventory updates.
+ */
+async function processMaterialUpdate(item, slip, userId, session, transactionDocs, warnings) {
+    const material = await Material.findById(item.material).session(session);
+    if (!material) {
+        warnings.push(`Material ${item.material} not found, skipping.`);
+        return;
+    }
+
+    let beforeStock = material.currentStock;
+    const quantity = item.quantity.actual;
+
+    if (slip.type === INVENTORY_IMPORT_EXPORT_SLIP_TYPE.EXPORT) {
+        const fifoResult = await allocateBatchesForMaterial(item.material, quantity, session);
+        if (!fifoResult.success) throw new Error(`FIFO failed for ${material.code}: ${fifoResult.message}`);
+
+        for (const allocation of fifoResult.data) {
+            transactionDocs.push({
+                material: item.material,
+                type: TRANSACTION_TYPE.SALES_OUT,
+                quantity: -allocation.quantityAllocated,
+                beforeStock,
+                afterStock: beforeStock - allocation.quantityAllocated,
+                performedBy: userId,
+                note: `FIFO via ${slip.slipNumber}. Batch: ${allocation.batchNumber}`,
+                orderRef: slip.slipNumber,
+                batch: allocation.batch
+            });
+            beforeStock -= allocation.quantityAllocated;
+        }
+        material.currentStock -= quantity;
+    } else {
+        material.currentStock += quantity;
+        if (item.shelf) material.shelf = item.shelf;
+        transactionDocs.push({
+            material: item.material,
+            type: TRANSACTION_TYPE.PRODUCTION_IN,
+            quantity,
+            beforeStock,
+            afterStock: material.currentStock,
+            performedBy: userId,
+            note: `Import via ${slip.slipNumber}`,
+            orderRef: slip.slipNumber
+        });
+    }
+    await material.save({ session });
+    if (material.shelf) await updateShelfLoad(material.shelf);
+}
+
+/**
+ * Internal helper to handle Product inventory updates.
+ */
+async function processProductUpdate(item, slip, userId, session, transactionDocs, warnings) {
+    const product = await Product.findById(item.product).session(session);
+    if (!product) {
+        warnings.push(`Product ${item.product} not found, skipping.`);
+        return;
+    }
+
+    let beforeStock = product.currentStock;
+    const quantity = item.quantity.actual;
+
+    if (slip.type === INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT) {
+        product.currentStock += quantity;
+        if (item.shelf) product.shelf = item.shelf;
+        transactionDocs.push({
+            product: item.product,
+            type: TRANSACTION_TYPE.PRODUCTION_IN,
+            quantity,
+            beforeStock,
+            afterStock: product.currentStock,
+            performedBy: userId,
+            note: `Product import via ${slip.slipNumber}`,
+            orderRef: slip.slipNumber
+        });
+    } else {
+        const fifoResult = await allocateBatchesForItem({ productId: item.product, quantityNeeded: quantity, session });
+        if (!fifoResult.success) throw new Error(`FIFO failed for product ${product.code}: ${fifoResult.message}`);
+
+        for (const allocation of fifoResult.data) {
+            transactionDocs.push({
+                product: item.product,
+                type: TRANSACTION_TYPE.SALES_OUT,
+                quantity: -allocation.quantityAllocated,
+                beforeStock,
+                afterStock: beforeStock - allocation.quantityAllocated,
+                performedBy: userId,
+                note: `FIFO product via ${slip.slipNumber}. Batch: ${allocation.batchNumber}`,
+                orderRef: slip.slipNumber,
+                batch: allocation.batch
+            });
+            beforeStock -= allocation.quantityAllocated;
+        }
+        product.currentStock -= quantity;
+    }
+    await product.save({ session });
+    if (product.shelf) await updateShelfLoad(product.shelf);
+}
+
+/**
+ * Standardize slip status update with clean SRP.
+ */
 export const updateSlipStatusService = async (slipId, newStatus, updateData, userId) => {
     try {
         const slip = await InventoryImportExportSlip.findById(slipId);
-        if (!slip) {
-            return { success: false, message: 'Slip not found', data: null };
-        }
+        if (!slip) return ServiceResponse(false, 'Slip not found');
 
         const isImport = slip.type === INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT;
         const currentStatus = slip.status.trim();
@@ -118,13 +217,12 @@ export const updateSlipStatusService = async (slipId, newStatus, updateData, use
         };
 
         if (!validTransitions[currentStatus]?.includes(targetStatus)) {
-            return { success: false, message: `Invalid status transition from ${currentStatus} to ${targetStatus} for ${slip.type} slip`, data: null };
+            return ServiceResponse(false, `Invalid status transition from ${currentStatus} to ${targetStatus} for ${slip.type} slip`);
         }
 
         // --- 2. Data Validation & Integrity Checks ---
         const inputItems = [...(updateData.items || []), ...(updateData.scannedItems || [])];
 
-        // Ensure all items in updateData exist in the slip using itemCode, material, or product
         const slipItemIdentifiers = new Set();
         slip.items.forEach(item => {
             if (item.itemCode) slipItemIdentifiers.add(item.itemCode.toString());
@@ -135,156 +233,123 @@ export const updateSlipStatusService = async (slipId, newStatus, updateData, use
         for (const item of inputItems) {
             const identifier = item.itemCode || item.material || item.product;
             if (!identifier || !slipItemIdentifiers.has(identifier.toString())) {
-                return {
-                    success: false,
-                    message: `Item identifier '${identifier || 'unknown'}' in update data does not match any item (by itemCode, material, or product) in slip ${slip.slipNumber}`,
-                    data: null
-                };
+                return ServiceResponse(false, `Item identifier '${identifier || 'unknown'}' in update data does not match any item in slip ${slip.slipNumber}`);
             }
         }
 
-        // Specific checks for RECEIVED transition
         if (targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.RECEIVED) {
-            if (inputItems.length === 0) {
-                return { success: false, message: 'Update data must contain items when transitioning to RECEIVED status', data: null };
-            }
+            if (inputItems.length === 0) return ServiceResponse(false, 'Update data must contain items when transitioning to RECEIVED status');
             for (const item of inputItems) {
                 if (item.provisionalQuantity === undefined || item.provisionalQuantity === null || item.provisionalQuantity < 0) {
-                    return { success: false, message: `Item ${item.itemCode || 'at identifier ' + (item.material || item.product)} is missing valid provisionalQuantity`, data: null };
+                    return ServiceResponse(false, `Item ${item.itemCode || 'at identifier ' + (item.material || item.product)} is missing valid provisionalQuantity`);
                 }
             }
         }
 
-        // Specific checks for INSPECTED/INSPECTING transition
         if (targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.INSPECTED || targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.INSPECTING) {
-            if (inputItems.length === 0) {
-                return { success: false, message: 'Update data must contain items when transitioning to INSPECTED status', data: null };
-            }
+            if (inputItems.length === 0) return ServiceResponse(false, 'Update data must contain items when transitioning to INSPECTED status');
             for (const item of inputItems) {
                 if (item.actualQuantity === undefined || item.actualQuantity === null || item.actualQuantity < 0) {
-                    return { success: false, message: `Item ${item.itemCode || 'at identifier ' + (item.material || item.product)} is missing valid actualQuantity`, data: null };
+                    return ServiceResponse(false, `Item ${item.itemCode || 'at identifier ' + (item.material || item.product)} is missing valid actualQuantity`);
                 }
             }
         }
 
         let warnings = [];
-
-        // --- 3. Robust Data Mapping ---
-        // Create a lookup map for update items by multiple possible identifiers
         const updatesMap = new Map();
-
         inputItems.forEach(item => {
-            // Priority: actualQuantity > provisionalQuantity
             const qty = item.actualQuantity ?? item.provisionalQuantity;
-            const itemData = {
-                quantity: qty,
-                itemNote: item.itemNote,
-                batchNumber: item.batchNumber,
-                expirationDate: item.expirationDate,
-                shelf: item.shelf
-            };
-
+            const itemData = { quantity: qty, itemNote: item.itemNote, batchNumber: item.batchNumber, expirationDate: item.expirationDate, shelf: item.shelf };
             if (item.itemCode) updatesMap.set(item.itemCode.toString(), itemData);
             if (item.material) updatesMap.set(item.material.toString(), itemData);
             if (item.product) updatesMap.set(item.product.toString(), itemData);
         });
 
-        // --- 4. Process Item Updates based on New Status ---
         for (const slipItem of slip.items) {
-            const updateInfo = updatesMap.get(slipItem.itemCode) ??
-                updatesMap.get(slipItem.material?.toString()) ??
-                updatesMap.get(slipItem.product?.toString());
-
+            const updateInfo = updatesMap.get(slipItem.itemCode) ?? updatesMap.get(slipItem.material?.toString()) ?? updatesMap.get(slipItem.product?.toString());
             if (updateInfo) {
-                // Handle Quantities
-                if (targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.RECEIVED) {
-                    slipItem.quantity.provisional = updateInfo.quantity;
-                } else if (targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.INSPECTED || targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.INSPECTING) {
+                if (targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.RECEIVED) slipItem.quantity.provisional = updateInfo.quantity;
+                else if (targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.INSPECTED || targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.INSPECTING) {
                     slipItem.quantity.actual = updateInfo.quantity;
-
-                    if (slipItem.quantity.actual !== slipItem.quantity.requested) {
-                        warnings.push(`Số lượng lệch cho mã ${slipItem.itemCode}: Yêu cầu ${slipItem.quantity.requested}, Thực tế ${slipItem.quantity.actual}`);
-                    }
+                    if (slipItem.quantity.actual !== slipItem.quantity.requested) warnings.push(`Số lượng lệch cho mã ${slipItem.itemCode}: Yêu cầu ${slipItem.quantity.requested}, Thực tế ${slipItem.quantity.actual}`);
                 }
-
-                // Handle Item Notes
-                if (updateInfo.itemNote) {
-                    slipItem.itemNote = updateInfo.itemNote;
-                }
-
-                // Handle Batch & Expiry (Import only)
+                if (updateInfo.itemNote) slipItem.itemNote = updateInfo.itemNote;
                 if (isImport && (targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.INSPECTED)) {
                     slipItem.batchNumber = updateInfo.batchNumber || slipItem.batchNumber || await generateBatchNumber(slipItem.itemCode);
                     if (updateInfo.expirationDate) slipItem.expirationDate = updateInfo.expirationDate;
-                }
-
-                // Handle Shelf Suggestion & Override
-                if (isImport && (targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.INSPECTED)) {
-                    if (updateInfo.shelf) {
-                        slipItem.shelf = updateInfo.shelf;
-                    } else if (!slipItem.shelf) {
-                        // Auto-suggest shelf from Material/Product preference
+                    if (updateInfo.shelf) slipItem.shelf = updateInfo.shelf;
+                    else if (!slipItem.shelf) {
                         const Model = slipItem.material ? Material : (slipItem.product ? Product : null);
                         if (Model) {
                             const doc = await Model.findById(slipItem.material || slipItem.product).select('shelf');
-                            if (doc?.shelf) {
-                                slipItem.shelf = doc.shelf;
-                            }
+                            if (doc?.shelf) slipItem.shelf = doc.shelf;
                         }
                     }
                 }
             }
         }
 
-        // --- Final Validation before Completion ---
         if (targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.IN_STOCK || targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.COMPLETED) {
             const zeroActualItems = slip.items.filter(item => item.quantity.actual === 0);
-            if (zeroActualItems.length > 0) {
-                return {
-                    success: false,
-                    message: `Cannot complete slip while there are items with actual quantity 0: ${zeroActualItems.map(i => i.itemCode).join(', ')}`,
-                    data: zeroActualItems
-                };
-            }
+            if (zeroActualItems.length > 0) return ServiceResponse(false, `Cannot complete slip while there are items with actual quantity 0: ${zeroActualItems.map(i => i.itemCode).join(', ')}`);
         }
 
-        // --- Specific Status Logic ---
-        if (targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.RECEIVED) {
-            if (!slip.signatures.storekeeper) {
-                slip.signatures.storekeeper = userId;
-            }
+        if (targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.RECEIVED && !slip.signatures.storekeeper) {
+            slip.signatures.storekeeper = userId;
         }
 
         slip.status = targetStatus;
 
-        // Use a transaction to ensure all inventory updates are atomic
         const session = await mongoose.startSession();
         session.startTransaction();
 
         try {
             if (targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.IN_STOCK || targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.COMPLETED) {
-                await finalizeInventoryUpdate(slip, userId, session);
+                if (isImport) {
+                    await createBatchesFromImport({
+                        items: slip.items.map(item => ({
+                            material: item.material,
+                            product: item.product,
+                            itemCode: item.itemCode,
+                            unit: item.unit,
+                            quantity: item.quantity,
+                            unitPrice: item.unitPrice,
+                            batchNumber: item.batchNumber,
+                            expirationDate: item.expirationDate,
+                            shelf: item.shelf
+                        })),
+                        relatedPurchaseOrder: slip.relatedPurchaseOrder,
+                        relatedImportSlip: slip._id,
+                        relatedProductionOrder: slip.relatedProductionOrder
+                    }, session);
+                }
+
+                const transactionDocs = [];
+                for (const item of slip.items) {
+                    if (item.material) await processMaterialUpdate(item, slip, userId, session, transactionDocs, warnings);
+                    else if (item.product) await processProductUpdate(item, slip, userId, session, transactionDocs, warnings);
+                }
+
+                if (transactionDocs.length > 0) await InventoryTransaction.create(transactionDocs, { session });
+
+                inventoryEvents.emit('inventory_finalized', { slip, userId, session });
+
                 slip.finalizedAt = new Date();
                 if (isImport) slip.inStockAt = slip.finalizedAt;
             }
 
             await slip.save({ session });
             await session.commitTransaction();
+            return ServiceResponse(true, `Slip updated to ${targetStatus}`, { slip, warnings });
         } catch (error) {
             await session.abortTransaction();
             throw error;
         } finally {
             session.endSession();
         }
-
-        return {
-            success: true,
-            message: `Slip ${slip.slipNumber} status updated to ${targetStatus} successfully`,
-            data: { slip, warnings }
-        };
     } catch (error) {
         console.error('[updateSlipStatusService] error:', error);
-        return { success: false, message: 'Failed to update slip status: ' + error.message, data: null };
+        return ServiceResponse(false, error.message);
     }
 };
 

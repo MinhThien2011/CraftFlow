@@ -1,6 +1,16 @@
 import mongoose from 'mongoose';
 import { REQUISITION_STATUS, REQUISITION_TYPE } from '../utils/constants.js';
 
+const batchAllocationSchema = new mongoose.Schema({
+  batch: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'InventoryBatch'
+  },
+  batchNumber: String,
+  quantityAllocated: { type: Number, required: true, min: 0 },
+  expirationDate: Date
+}, { _id: false });
+
 const materialItemSchema = new mongoose.Schema({
   material: {
     type: mongoose.Schema.Types.ObjectId,
@@ -20,37 +30,11 @@ const materialItemSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
-  batchAllocations: [{
-    batch: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'InventoryBatch'
-    },
-    batchNumber: String,
-    quantityAllocated: {
-      type: Number,
-      required: true,
-      min: 0
-    },
-    expirationDate: Date
-  }]
+  batchAllocations: [batchAllocationSchema]
 }, {
   _id: true,
-  toJSON: {
-    // virtuals: true,
-    versionKey: false,
-    // transform: function (doc, ret) {
-    //   delete ret._id;
-    //   return ret;
-    // }
-  },
-  toObject: {
-    // virtuals: true,
-    versionKey: false,
-    // transform: function (doc, ret) {
-    //   delete ret._id;
-    //   return ret;
-    // }
-  }
+  toJSON: { versionKey: false },
+  toObject: { versionKey: false }
 });
 
 const requisitionSchema = new mongoose.Schema({
@@ -114,7 +98,9 @@ const requisitionSchema = new mongoose.Schema({
   }
 });
 
-requisitionSchema.index({ staff: 1, status: 1 });
-requisitionSchema.index({ status: 1, timeoutAt: 1 });
+requisitionSchema.index({ productionOrder: 1 });
+requisitionSchema.index({ createdBy: 1 });
+requisitionSchema.index({ relatedSlip: 1 });
+requisitionSchema.index({ parentRequisition: 1 });
 
 export default mongoose.model('MaterialRequisition', requisitionSchema);

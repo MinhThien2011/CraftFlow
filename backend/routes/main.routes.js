@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { apiLimiter } from "../middleware/rateLimit.js";
 import authRouter from "./auth.routes.js";
 import userRouter from "./user.routes.js";
 import materialRouter from "./material.routes.js";
@@ -13,10 +14,12 @@ import slipRouter from "./slip.routes.js";
 import purchaseOrderRouter from "./purchaseOrder.routes.js";
 import batchRouter from "./batch.routes.js";
 import shrinkageRouter from "./shrinkage.routes.js";
-import agentRouter from "../agent/routes.js";
 import productExportRouter from "./productExport.routes.js";
+import notificationRouter from "./notification.routes.js";
 
 const mainRouter = Router();
+
+mainRouter.use(apiLimiter);
 
 mainRouter.get('/health', (req, res) => {
     res.status(200).json({
@@ -38,7 +41,7 @@ mainRouter.use('/slips', slipRouter);
 mainRouter.use('/purchaseOrders', purchaseOrderRouter);
 mainRouter.use('/batches', batchRouter);
 mainRouter.use('/shrinkage', shrinkageRouter);
-mainRouter.use('/agent', agentRouter);
 mainRouter.use('/product-exports', productExportRouter);
+mainRouter.use('/notifications', notificationRouter);
 
 export default mainRouter;

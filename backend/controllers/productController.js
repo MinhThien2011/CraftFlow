@@ -10,12 +10,15 @@ import {
 import { logActivity } from '../utils/logger.js';
 import { handleServiceResponse } from '../utils/responseHelper.js';
 
+import { generateNormalizedCacheKey } from '../utils/serviceHelper.js';
+
 /**
  * Controller to get all products with advanced query features.
  */
 export const getAllProducts = async (req, res) => {
   try {
-    const cacheKey = `product:list:${JSON.stringify(req.query)}`;
+    const allowedParams = ['page', 'limit', 'search', 'category', 'status', 'sortBy', 'order'];
+    const cacheKey = generateNormalizedCacheKey('product:list', req.query, allowedParams);
 
     // 1. Try Redis cache
     const cachedResult = await getCachedData(cacheKey);

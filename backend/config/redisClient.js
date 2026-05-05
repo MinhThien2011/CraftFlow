@@ -17,6 +17,8 @@ export const client = createClient({
         port: process.env.REDIS_PORT,
         retryStrategy,
         reconnectOnError,
+        keepAlive: 30000, // 30 seconds
+        connectTimeout: 10000,
     }
 });
 
@@ -37,21 +39,19 @@ export const redisConnect = async () => {
         console.log('❌ Redis Client Error', err);
     }
 }
-const redisCheckStatus = (timeout = 10000) => {
+const redisCheckStatus = (timeout = 30000) => {
     setInterval(async () => {
-        if (!client.isOpen) {
-            console.log("🔄 Redis not open, reconnecting...");
-            try {
+        try {
+            if (!client.isOpen) {
+                console.log("🔄 [Redis] Connection lost, attempting to reconnect...");
                 await client.connect();
-            } catch (err) {
-                console.error("❌ Redis reconnect failed:", err.message);
-            }
-        } else {
-            try {
+            } else if (client.isReady) {
+                // Heartbeat ping to keep the connection alive
                 await client.ping();
-            } catch (err) {
-                console.error("❌ Redis ping failed:", err.message);
+                // console.log("💓 [Redis] Heartbeat sent");
             }
+        } catch (err) {
+            console.error("❌ [Redis] Health check failed:", err.message);
         }
     }, timeout);
 }

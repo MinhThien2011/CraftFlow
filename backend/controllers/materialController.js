@@ -12,25 +12,15 @@ import {
 import { TRANSACTION_TYPE } from '../utils/constants.js';
 import { logActivity } from '../utils/logger.js';
 import mongoose from 'mongoose';
+import { generateNormalizedCacheKey } from '../utils/serviceHelper.js';
 
 /**
  * Get all materials with filtering, search, and pagination.
  */
 export const getAllMaterials = async (req, res) => {
   try {
-    const {
-      search = '',
-      page = 1,
-      limit = 10,
-      stockGt, stockLt,
-      priceGt, priceLt,
-      color, unit
-    } = req.query;
-
-    const pageNum = parseInt(page || 1);
-    const limitNum = parseInt(limit || 10);
-
-    const cacheKey = `material:list:${JSON.stringify({ search, pageNum, limitNum, stockGt, stockLt, priceGt, priceLt, color, unit })}`;
+    const allowedParams = ['search', 'page', 'limit', 'stockGt', 'stockLt', 'priceGt', 'priceLt', 'color', 'unit'];
+    const cacheKey = generateNormalizedCacheKey('material:list', req.query, allowedParams);;
 
     // 1. Try Redis cache
     const cachedResult = await getCachedData(cacheKey);
@@ -41,6 +31,15 @@ export const getAllMaterials = async (req, res) => {
         data: cachedResult
       });
     }
+
+    const {
+      search = '',
+      page = 1,
+      limit = 10,
+      stockGt, stockLt,
+      priceGt, priceLt,
+      color, unit
+    } = req.query;
 
     const filters = {
       color,
@@ -53,33 +52,24 @@ export const getAllMaterials = async (req, res) => {
 
     const result = await materialService.getMaterials({
       search,
-      page: pageNum,
-      limit: limitNum,
+      page,
+      limit,
       filters
     });
 
     if (!result.success) {
-      return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-        success: false,
-        message: result.message,
-        data: null
-      });
+      return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json(result);
     }
 
     // 2. Cache successful result
     await setCachedData(cacheKey, result.data);
 
-    return res.status(StatusCodes.OK).json({
-      success: true,
-      message: result.message,
-      data: result.data
-    });
+    return res.status(StatusCodes.OK).json(result);
   } catch (error) {
     console.log('[MaterialController] getAllMaterials error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: 'Failed to retrieve materials: ' + error.message,
-      data: null
+      message: 'Failed to retrieve materials: ' + error.message
     });
   }
 };
@@ -93,15 +83,14 @@ export const getMaterialById = async (req, res) => {
     const result = await materialService.getMaterialByIdOrCode({ id });
 
     if (!result.success) {
-      return res.status(StatusCodes.NOT_FOUND).json(result);
+      return res.status(result.statusCode || StatusCodes.NOT_FOUND).json(result);
     }
     return res.status(StatusCodes.OK).json(result);
   } catch (error) {
     console.log('[MaterialController] getMaterialById error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: 'Failed to retrieve material by id: ' + error.message,
-      data: null
+      message: 'Failed to retrieve material.'
     });
   }
 };
@@ -174,21 +163,14 @@ export const createMaterial = async (req, res) => {
     if (error) {
       return res.status(StatusCodes.BAD_REQUEST).json({
         success: false,
-        message: error.details.map(d => d.message).join(', '),
-        data: null
+        message: error.details.map(d => d.message).join(', ')
       });
     }
 
-    const existingMaterial = await Material.findOne({ code: value.code.toUpperCase() });
-    if (existingMaterial) {
-      return res.status(StatusCodes.CONFLICT).json({
-        success: false,
-        message: 'Material code already exists.',
-        data: null
-      });
+    const result = await materialService.createMaterialService(value);
+    if (!result.success) {
+      return res.status(result.statusCode || StatusCodes.BAD_REQUEST).json(result);
     }
-
-    const newMaterial = await Material.create(value);
 
     // Invalidate cache
     await clearCacheByPattern('material:list:*');
@@ -197,21 +179,16 @@ export const createMaterial = async (req, res) => {
       author: req.userId,
       action: 'CREATE_MATERIAL',
       module: 'MATERIAL',
-      details: `Created new material: ${newMaterial.name} (${newMaterial.code})`,
-      targetId: newMaterial._id
+      details: `Created new material: ${result.data.name} (${result.data.code})`,
+      targetId: result.data._id
     }, req);
 
-    return res.status(StatusCodes.CREATED).json({
-      success: true,
-      message: 'Material created successfully.',
-      data: { material: newMaterial }
-    });
+    return res.status(StatusCodes.CREATED).json(result);
   } catch (error) {
     console.log('[MaterialController] createMaterial error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: 'Failed to create material: ' + error.message,
-      data: null
+      message: 'Failed to create material: ' + error.message
     });
   }
 };
@@ -222,54 +199,38 @@ export const createMaterial = async (req, res) => {
 export const updateMaterial = async (req, res) => {
   try {
     const { id } = req.params;
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(StatusCodes.BAD_REQUEST).json({
-        success: false,
-        message: 'Material ID is required for update: ' + error.message,
-        data: null
-      });
-    }
     const { error, value } = updateMaterialValidator(req.body);
     if (error) {
       return res.status(StatusCodes.BAD_REQUEST).json({
         success: false,
-        message: error.details.map(d => d.message).join(', '),
-        data: null
+        message: error.details.map(d => d.message).join(', ')
       });
     }
 
-    const material = await Material.findByIdAndUpdate(id, value, { returnDocument: 'after' });
-    if (!material) {
-      return res.status(StatusCodes.NOT_FOUND).json({
-        success: false,
-        message: 'Material not found: ' + error.message,
-        data: null
-      });
+    const result = await materialService.updateMaterialService(id, value);
+    if (!result.success) {
+      return res.status(result.statusCode || StatusCodes.BAD_REQUEST).json(result);
     }
 
     // Invalidate cache
     await clearCacheByPattern('material:list:*');
+    await clearCacheByPattern(`material:detail:${id}`);
+    await clearCacheByPattern('product:list:*'); // Because products depend on material info
 
     await logActivity({
       author: req.userId,
       action: 'UPDATE_MATERIAL',
       module: 'MATERIAL',
-      details: `Updated material: ${material.name} (${material.code})`,
-      targetId: material._id,
-      metadata: value
+      details: `Updated material: ${result.data.name} (${result.data.code})`,
+      targetId: result.data._id
     }, req);
 
-    return res.status(StatusCodes.OK).json({
-      success: true,
-      message: 'Material updated successfully.',
-      data: { material }
-    });
+    return res.status(StatusCodes.OK).json(result);
   } catch (error) {
     console.log('[MaterialController] updateMaterial error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: 'Failed to update material: ' + error.message,
-      data: null
+      message: 'Failed to update material: ' + error.message
     });
   }
 };

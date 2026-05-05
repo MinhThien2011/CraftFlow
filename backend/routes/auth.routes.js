@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { changePassword, getUserInfo, login, logout, refreshPassword } from "../controllers/authController.js";
 import { jwtAuth } from "../middleware/jwtAuth.js";
+import { loginLimiter, strictLimiter } from "../middleware/rateLimit.js";
 
 const authRouter = Router();
 
@@ -11,10 +12,10 @@ authRouter.get('/health', (req, res) => {
     })
 })
 
-authRouter.post('/login', login);
+authRouter.post('/login', loginLimiter, login);
 authRouter.get('/user', jwtAuth, getUserInfo);
-authRouter.post('/refresh-password', refreshPassword);
-authRouter.post('/change-password', jwtAuth, changePassword);
+authRouter.post('/refresh-password', strictLimiter, refreshPassword);
+authRouter.post('/change-password', jwtAuth, strictLimiter, changePassword);
 authRouter.post('/logout', jwtAuth, logout);
 
 export default authRouter;

@@ -1,9 +1,11 @@
 import Material from '../models/Material.js';
 import InventoryTransaction from '../models/InventoryTransaction.js';
 import MaterialRequisition from '../models/MaterialRequisition.js';
+import Product from '../models/Product.js';
 import { REQUISITION_STATUS } from '../utils/constants.js';
 import mongoose from 'mongoose';
 import { standardlizeResponseDataHelper } from '../utils/standardlizeResponseData.js';
+import { ServiceResponse } from '../utils/serviceHelper.js';
 
 const MAX_LIMIT = 100;
 
@@ -48,19 +50,15 @@ export const getMaterials = async ({ search = '', page = 1, limit = 10, filters 
     Material.countDocuments(query)
   ]);
 
-  return {
-    success: true,
-    message: 'Materials retrieved successfully.',
-    data: {
-      materials: standardlizeResponseDataHelper(materials),
-      pagination: {
-        total,
-        page: pageNum,
-        limit: limitNum,
-        pages: Math.ceil(total / limitNum)
-      }
+  return ServiceResponse(true, 'Materials retrieved successfully.', {
+    materials: standardlizeResponseDataHelper(materials),
+    pagination: {
+      total,
+      page: pageNum,
+      limit: limitNum,
+      pages: Math.ceil(total / limitNum)
     }
-  };
+  });
 };
 
 /**
@@ -74,17 +72,84 @@ export const getMaterialByIdOrCode = async ({ id, code }) => {
       .lean();
 
     if (!material) {
-      return { success: false, message: 'Material not found.', data: null };
+      return ServiceResponse(false, 'Material not found.', null, 404);
     }
 
-    return {
-      success: true,
-      message: 'Material retrieved successfully.',
-      data: standardlizeResponseDataHelper([material])[0]
-    };
+    return ServiceResponse(true, 'Material retrieved successfully.', standardlizeResponseDataHelper([material])[0]);
   } catch (error) {
     console.log('[materialService] getMaterialByIdOrCode error:', error);
-    return { success: false, message: 'Failed to retrieve material: ' + error.message, data: null };
+    return ServiceResponse(false, 'Failed to retrieve material: ' + error.message);
+  }
+};
+
+/**
+ * Create a new material.
+ */
+export const createMaterialService = async (materialData) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const existingMaterial = await Material.findOne({ code: materialData.code.toUpperCase() }).session(session);
+    if (existingMaterial) {
+      throw new Error('Material code already exists.');
+    }
+
+    const [newMaterial] = await Material.create([materialData], { session });
+
+    // Sync with Product (Optional: only if you want initial sync)
+    await Product.syncMaterialChanges(newMaterial._id, {
+      name: newMaterial.name,
+      code: newMaterial.code,
+      price: newMaterial.price,
+      unit: newMaterial.unit,
+      currency: newMaterial.currency
+    });
+
+    await session.commitTransaction();
+    return ServiceResponse(true, 'Material created successfully.', newMaterial, 201);
+  } catch (error) {
+    await session.abortTransaction();
+    console.log('[materialService] createMaterialService error:', error);
+    return ServiceResponse(false, error.message);
+  } finally {
+    session.endSession();
+  }
+};
+
+/**
+ * Update an existing material and sync with Products.
+ */
+export const updateMaterialService = async (id, updateData) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const material = await Material.findByIdAndUpdate(id, updateData, { 
+      session, 
+      new: true, 
+      runValidators: true 
+    });
+
+    if (!material) {
+      throw new Error('Material not found.');
+    }
+
+    // FIX ISSUE 4: Sync material changes to Products in the same transaction
+    await Product.syncMaterialChanges(material._id, {
+      name: material.name,
+      code: material.code,
+      price: material.price,
+      unit: material.unit,
+      currency: material.currency
+    });
+
+    await session.commitTransaction();
+    return ServiceResponse(true, 'Material updated successfully.', material);
+  } catch (error) {
+    await session.abortTransaction();
+    console.log('[materialService] updateMaterialService error:', error);
+    return ServiceResponse(false, error.message);
+  } finally {
+    session.endSession();
   }
 };
 
@@ -102,42 +167,35 @@ export const adjustMaterialStock = async (materialId, { type, quantity, note, se
     }
 
     const beforeStock = material.currentStock;
-    const afterStock = beforeStock + quantity;
+    material.currentStock += quantity;
 
-    if (afterStock < 0) {
-      throw new Error('Stock cannot be less than 0.');
+    if (material.currentStock < 0) {
+      throw new Error(`Insufficient stock for material ${material.code}. Available: ${beforeStock}, Adjustment: ${quantity}`);
     }
 
-    // 1. Update stock
-    material.currentStock = afterStock;
     await material.save({ session });
 
-    // 2. Record transaction
-    const transaction = await InventoryTransaction.create([{
-      material: material._id,
+    const transaction = new InventoryTransaction({
+      material: materialId,
       type,
       quantity,
       beforeStock,
-      afterStock,
-      performedBy,
+      afterStock: material.currentStock,
       sender,
       receiver,
       orderRef,
-      location: material.location,
-      note: note || `Manual adjustment: ${type}`
-    }], { session, ordered: true });
+      note,
+      performedBy
+    });
 
+    await transaction.save({ session });
     await session.commitTransaction();
 
-    return {
-      success: true,
-      message: 'Stock adjusted successfully.',
-      data: { material, transaction: transaction[0] }
-    };
+    return ServiceResponse(true, 'Stock adjusted successfully.', material);
   } catch (error) {
     await session.abortTransaction();
     console.log('[materialService] adjustMaterialStock error:', error);
-    return { success: false, message: 'Failed to adjust stock: ' + error.message, data: null };
+    return ServiceResponse(false, error.message);
   } finally {
     session.endSession();
   }
@@ -192,60 +250,14 @@ export const getMaterialHistoryService = async ({ materialId, type, direction, p
  * Get materials with low stock.
  * Includes materials below threshold AND materials with pending demand exceeding current stock.
  */
-export const getLowStockMaterialsService = async ({ search = '', page = 1, limit = 10 }) => {
+export const getLowStockMaterialsService = async ({ page = 1, limit = 10 }) => {
   try {
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(MAX_LIMIT, Math.max(1, parseInt(limit)));
     const skip = (pageNum - 1) * limitNum;
 
-    // Build the aggregation pipeline
     const pipeline = [
-      { $match: { isActive: true } },
-      // Optional: search by name/code early in the pipeline
-      ...(search ? [{
-        $match: {
-          $or: [
-            { name: { $regex: search, $options: 'i' } },
-            { code: { $regex: search, $options: 'i' } }
-          ]
-        }
-      }] : []),
-      // Lookup pending requisitions demand for each material
-      {
-        $lookup: {
-          from: 'materialrequisitions',
-          let: { materialId: '$_id' },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [
-                    { $in: ['$status', [REQUISITION_STATUS.PENDING, REQUISITION_STATUS.ACCEPTED, REQUISITION_STATUS.PREPARING]] }
-                  ]
-                }
-              }
-            },
-            { $unwind: '$items' },
-            { $match: { $expr: { $eq: ['$items.material', '$$materialId'] } } },
-            { $group: { _id: null, totalDemand: { $sum: '$items.requestedQuantity' } } }
-          ],
-          as: 'demandInfo'
-        }
-      },
-      {
-        $addFields: {
-          totalDemand: { $ifNull: [{ $arrayElemAt: ['$demandInfo.totalDemand', 0] }, 0] }
-        }
-      },
-      // Filter for low stock: currentStock <= threshold OR currentStock < totalDemand
-      {
-        $match: {
-          $or: [
-            { $expr: { $lte: ["$currentStock", "$threshold"] } },
-            { $expr: { $lt: ["$currentStock", "$totalDemand"] } }
-          ]
-        }
-      },
+      { $match: { isActive: true, $expr: { $lte: ["$currentStock", "$threshold"] } } },
       {
         $facet: {
           metadata: [{ $count: "total" }],
@@ -269,21 +281,17 @@ export const getLowStockMaterialsService = async ({ search = '', page = 1, limit
     const materials = result[0].data;
     const total = result[0].metadata[0]?.total || 0;
 
-    return {
-      success: true,
-      message: materials.length > 0 ? 'Low stock materials found.' : 'No low stock materials found.',
-      data: {
-        materials: standardlizeResponseDataHelper(materials),
-        pagination: {
-          total,
-          page: pageNum,
-          limit: limitNum,
-          pages: Math.ceil(total / limitNum)
-        }
+    return ServiceResponse(true, materials.length > 0 ? 'Low stock materials found.' : 'No low stock materials found.', {
+      materials: standardlizeResponseDataHelper(materials),
+      pagination: {
+        total,
+        page: pageNum,
+        limit: limitNum,
+        pages: Math.ceil(total / limitNum)
       }
-    };
+    });
   } catch (error) {
     console.log('[materialService] getLowStockMaterialsService error:', error);
-    return { success: false, message: error.message, data: null };
+    return ServiceResponse(false, error.message);
   }
 };

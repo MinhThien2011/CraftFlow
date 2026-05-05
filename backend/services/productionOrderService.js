@@ -7,6 +7,7 @@ import User from '../models/User.js';
 import ProductionOrderAssignment from '../models/ProductionOrderAssignment.js';
 import MaterialRequisition from '../models/MaterialRequisition.js';
 import InventoryImportExportSlip from '../models/InventoryImportExportSlip.js';
+import { createNotification } from './notificationService.js';
 import { ORDER_STATUS, ROLES, TRANSACTION_TYPE, REQUISITION_STATUS, INVENTORY_IMPORT_EXPORT_SLIP_TYPE, INVENTORY_IMPORT_EXPORT_SLIP_STATUS, PRIORITY } from '../utils/constants.js'; // Import TRANSACTION_TYPE
 import { generateSlipNumber } from '../utils/slipHelper.js';
 import mongoose from 'mongoose';
@@ -311,6 +312,23 @@ export const createProductionOrder = async (orderData, creatorId) => {
     });
 
     await newRequisition.save({ session });
+
+    // 8. Create Notification for Production Managers and Admins
+    // We notify relevant staff that a new order has been created
+    const notificationMessage = hasInsufficientStock
+      ? `Đơn hàng ${orderCode} đã được tạo nhưng đang thiếu vật tư.`
+      : `Đơn hàng ${orderCode} đã được tạo và sẵn sàng giao việc.`;
+
+    // In a real scenario, you would fetch all users with PM role. 
+    // For now, we notify the creator and log the notification intent.
+    await createNotification({
+      recipient: creatorId,
+      title: 'Đơn sản xuất mới',
+      message: notificationMessage,
+      type: 'ORDER',
+      priority: hasInsufficientStock ? 'HIGH' : 'MEDIUM',
+      metaData: { orderId: newOrder._id, orderCode }
+    });
 
     await session.commitTransaction();
     console.log(`[Production] Order ${orderCode} created successfully with ${validatedProducts.length} products.`);
