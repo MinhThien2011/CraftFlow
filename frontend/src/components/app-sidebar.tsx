@@ -24,6 +24,7 @@ import {
   FileSearch,
   ClipboardList,
   CircleOff,
+  ListTodo,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -58,6 +59,12 @@ const navigation = [
   { name: "Người dùng", href: "/users", icon: Users, roles: ["admin"] },
   { name: "Báo cáo", href: "/reports", icon: BarChart3, roles: ["admin"], badge: true },
   { name: "Báo cáo kho (N-X-T)", href: "/reports/inventory", icon: BarChart3, roles: ["kho_manager"], badge: true },
+  { name: "Tổng quan PM", href: "/production-management/dashboard", icon: LayoutDashboard, roles: ["production_manager"] },
+  { name: "Sản phẩm PM", href: "/production-management/products", icon: Boxes, roles: ["production_manager"] },
+  { name: "Đơn sản xuất PM", href: "/production-management/orders", icon: ClipboardList, roles: ["production_manager"] },
+  { name: "Công việc PM", href: "/production-management/tasks", icon: ListTodo, roles: ["production_manager"] },
+  { name: "Hao hụt PM", href: "/production-management/issues", icon: AlertTriangle, roles: ["production_manager"] },
+  { name: "Báo cáo PM", href: "/production-management/reports", icon: BarChart3, roles: ["production_manager"], badge: true },
 ]
 
 const warehouseGroupedNavigation = [
