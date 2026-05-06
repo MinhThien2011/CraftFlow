@@ -41,6 +41,7 @@ export const REQUISITION_STATUS = {
   RETURN_APPROVED: 'return_approved', // Return approved by Kho Manager, waiting for actual stock move
   RETURNED: 'returned',            // Return completed
   CANCELLED: 'cancelled',          // Cancelled by manager or timeout
+  REJECTED: 'rejected',            // Rejected by admin
 }
 
 export const REQUISITION_TYPE = {

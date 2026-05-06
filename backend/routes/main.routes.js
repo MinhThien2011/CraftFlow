@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { apiLimiter } from "../middleware/rateLimit.js";
+
+// Import all modular routes
 import authRouter from "./auth.routes.js";
 import userRouter from "./user.routes.js";
 import materialRouter from "./material.routes.js";
@@ -19,14 +21,18 @@ import notificationRouter from "./notification.routes.js";
 
 const mainRouter = Router();
 
+// Apply global API Rate Limiting
 mainRouter.use(apiLimiter);
 
+// Health check endpoint
 mainRouter.get('/health', (req, res) => {
     res.status(200).json({
         success: true,
-        message: "Welcome to the Crab Flow API",
-    })
-})
+        message: "Welcome to the CraftFlow API Service",
+    });
+});
+
+// Modular Route Mountings
 mainRouter.use('/auth', authRouter);
 mainRouter.use('/users', userRouter);
 mainRouter.use('/materials', materialRouter);

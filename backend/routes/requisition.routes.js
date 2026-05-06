@@ -16,38 +16,41 @@ import {
 
 const requisitionRouter = Router();
 
-requisitionRouter.get('/health', (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "Welcome to the Requisition API of Crafb Flow",
-  })
-})
-// --- Private Routes (Logged in users) ---
+// --- General Access (Authenticated) ---
 requisitionRouter.use(jwtAuth);
 
-// Common routes
-requisitionRouter.get('/', rolePermission([ROLES.PRODUCTION_MANAGER, ROLES.PRODUCT_MANAGER, ROLES.KHO_MANAGER, ROLES.ADMIN]), getRequisitions);
-requisitionRouter.get('/:id', rolePermission([ROLES.PRODUCTION_MANAGER, ROLES.PRODUCT_MANAGER, ROLES.KHO_MANAGER, ROLES.ADMIN]), getRequisitionById);
+// Viewing Requisitions
+requisitionRouter.get('/', 
+    rolePermission([ROLES.PRODUCTION_MANAGER, ROLES.PRODUCT_MANAGER, ROLES.KHO_MANAGER, ROLES.ADMIN]), 
+    getRequisitions
+);
 
-// Manager requests materials
+requisitionRouter.get('/:id', 
+    rolePermission([ROLES.PRODUCTION_MANAGER, ROLES.PRODUCT_MANAGER, ROLES.KHO_MANAGER, ROLES.ADMIN]), 
+    getRequisitionById
+);
+
+// --- Operations (Managers) ---
 requisitionRouter.post('/', rolePermission([ROLES.PRODUCTION_MANAGER, ROLES.PRODUCT_MANAGER]), requestMaterials);
-
-// Supplementary materials request
 requisitionRouter.post('/supplementary', rolePermission([ROLES.PRODUCTION_MANAGER, ROLES.PRODUCT_MANAGER]), requestSupplementaryMaterials);
-
-// Return materials request
 requisitionRouter.post('/return', rolePermission([ROLES.PRODUCTION_MANAGER, ROLES.PRODUCT_MANAGER]), requestReturnMaterials);
 
-// Admin/Kho Manager approves return requisition
-requisitionRouter.post('/:id/approve-return', rolePermission([ROLES.ADMIN, ROLES.KHO_MANAGER]), approveReturnRequisition);
+requisitionRouter.patch('/:id/details', 
+    rolePermission([ROLES.PRODUCTION_MANAGER, ROLES.PRODUCT_MANAGER]), 
+    updateRequisitionDetails
+);
 
-// Admin approves normal/supplementary requisition
+// --- Approvals & Status (Admin & Warehouse Manager) ---
 requisitionRouter.post('/:id/approve', rolePermission([ROLES.ADMIN]), approveRequisition);
 
-// Manager updates requisition details (notes)
-requisitionRouter.patch('/:id/details', rolePermission([ROLES.PRODUCTION_MANAGER, ROLES.PRODUCT_MANAGER]), updateRequisitionDetails);
+requisitionRouter.post('/:id/approve-return', 
+    rolePermission([ROLES.ADMIN, ROLES.KHO_MANAGER]), 
+    approveReturnRequisition
+);
 
-// Warehouse Manager updates requisition status (accept, prepare, complete, cancel)
-requisitionRouter.patch('/:id/status', rolePermission([ROLES.KHO_MANAGER, ROLES.ADMIN]), updateRequisitionStatus);
+requisitionRouter.patch('/:id/status', 
+    rolePermission([ROLES.KHO_MANAGER, ROLES.ADMIN]), 
+    updateRequisitionStatus
+);
 
 export default requisitionRouter;

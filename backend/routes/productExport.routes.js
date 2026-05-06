@@ -10,27 +10,18 @@ import { ROLES } from '../utils/constants.js';
 
 const productExportRouter = Router();
 
+// --- General Access (Authenticated) ---
 productExportRouter.use(jwtAuth);
 
-/**
- * @route   GET /api/product-exports
- * @desc    Get all product export requests
- * @access  Admin, Production Manager, Kho Manager
- */
-productExportRouter.get('/',rolePermission([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.KHO_MANAGER]),getAllExportRequests);
+productExportRouter.get('/', 
+    rolePermission([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.KHO_MANAGER]), 
+    getAllExportRequests
+);
 
-/**
- * @route   POST /api/product-exports
- * @desc    Create a new product export request
- * @access  Production Manager
- */
+// --- Operations (Managers) ---
 productExportRouter.post('/', rolePermission([ROLES.PRODUCTION_MANAGER]), createExportRequest);
 
-/**
- * @route   PATCH /api/product-exports/:id/status
- * @desc    Admin approve or reject request
- * @access  Admin
- */
+// --- Approvals (Admin) ---
 productExportRouter.patch('/:id/status', rolePermission([ROLES.ADMIN]), updateRequestStatus);
 
 export default productExportRouter;
