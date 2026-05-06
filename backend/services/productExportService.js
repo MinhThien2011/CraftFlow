@@ -38,7 +38,7 @@ export const createExportRequest = async (requestData, userId) => {
         });
 
         await newRequest.save();
-        return ServiceResponse(true, 'Yêu cầu xuất hàng đã được tạo và chờ Admin duyệt.', newRequest, 201);
+        return ServiceResponse(true, 'Yêu cầu xuất hàng đã được tạo và chờ Admin duyệt.', newRequest);
     } catch (error) {
         console.error('[ProductExportService] createExportRequest error:', error);
         return ServiceResponse(false, error.message);

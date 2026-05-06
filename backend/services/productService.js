@@ -265,32 +265,54 @@ export const getLowStockProductsService = async ({ search = '', page = 1, limit 
     const limitNum = Math.min(MAX_LIMIT, Math.max(1, parseInt(limit, 10) || 10));
     const skip = (pageNum - 1) * limitNum;
 
-    // Low stock: currentStock <= threshold
-    const conditions = {
-      isActive: true,
-      $expr: { $lte: ['$currentStock', '$threshold'] }
-    };
+    const pipeline = [
+      {
+        $match: {
+          isActive: true,
+          $expr: { $lte: ['$currentStock', '$threshold'] }
+        }
+      }
+    ];
 
     if (search) {
       const searchRegex = { $regex: search, $options: 'i' };
-      conditions.$or = [
-        { name: searchRegex },
-        { code: searchRegex }
-      ];
+      pipeline.push({
+        $match: {
+          $or: [
+            { name: searchRegex },
+            { code: searchRegex }
+          ]
+        }
+      });
     }
 
-    const [products, total] = await Promise.all([
-      Product.find(conditions)
-        .skip(skip)
-        .limit(limitNum)
-        .populate('estimateMaterialCost.material', 'name code unit currency')
-        .lean(),
-      Product.countDocuments(conditions)
-    ]);
+    pipeline.push({
+      $facet: {
+        metadata: [{ $count: "total" }],
+        data: [
+          { $sort: { currentStock: 1 } },
+          { $skip: skip },
+          { $limit: limitNum },
+          {
+            $lookup: {
+              from: 'shelves',
+              localField: 'shelf',
+              foreignField: '_id',
+              as: 'shelfInfo'
+            }
+          },
+          { $unwind: { path: '$shelfInfo', preserveNullAndEmptyArrays: true } }
+        ]
+      }
+    });
+
+    const result = await Product.aggregate(pipeline);
+    const products = result[0].data;
+    const total = result[0].metadata[0]?.total || 0;
 
     return {
       status: 'success',
-      message: 'Low stock products retrieved successfully.',
+      message: products.length > 0 ? 'Low stock products found.' : 'No low stock products found.',
       data: {
         products: transformProducts(products),
         pagination: {

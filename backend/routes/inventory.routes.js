@@ -14,10 +14,13 @@ inventoryRouter.get('/health', (req, res) => {
 })
 
 // --- Private Routes (Admin & Kho Manager only) ---
-inventoryRouter.use([jwtAuth, rolePermission([ROLES.ADMIN, ROLES.KHO_MANAGER])]);
+inventoryRouter.use([jwtAuth, rolePermission([ROLES.ADMIN, ROLES.KHO_MANAGER, ROLES.PRODUCTION_MANAGER])]);
 
 // GET /api/inventory/overview - Summary stats
 inventoryRouter.get('/overview', inventoryController.getOverview);
+
+// GET /api/inventory/alerts - Unified low stock alerts
+inventoryRouter.get('/alerts', inventoryController.getLowStockAlerts);
 
 // GET /api/inventory/materials - Material stock list with search/pagination
 inventoryRouter.get('/materials', inventoryController.getMaterialsStock);

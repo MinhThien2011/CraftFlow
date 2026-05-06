@@ -8,18 +8,20 @@ export const getDashboardStats = async (req, res) => {
   try {
     const days = parseInt(req.query.days) || 7;
 
-    const [overview, chartData, performance] = await Promise.all([
+    const [overview, chartData, performance, alerts] = await Promise.all([
       dashboardService.getOverviewStats(),
       dashboardService.getChartData(days),
-      dashboardService.getTopPerformanceStats()
+      dashboardService.getTopPerformanceStats(),
+      dashboardService.getRecentAlerts(5)
     ]);
 
-    if (!overview.success || !chartData.success || !performance.success) {
+    if (!overview.success || !chartData.success || !performance.success || !alerts.success) {
       // Log specific errors for debugging
       console.log('Dashboard stats retrieval errors:', {
         overviewError: overview.message,
         chartDataError: chartData.message,
-        performanceError: performance.message
+        performanceError: performance.message,
+        alertsError: alerts.message
       });
       return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
         success: false,
@@ -32,7 +34,8 @@ export const getDashboardStats = async (req, res) => {
       data: {
         overview: overview.data,
         charts: chartData.data,
-        performance: performance.data
+        performance: performance.data,
+        alerts: alerts.data
       }
     });
   } catch (error) {

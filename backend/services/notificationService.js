@@ -63,7 +63,7 @@ export const markAsRead = async (notificationId, userId) => {
         const notification = await Notification.findOneAndUpdate(
             { _id: notificationId, recipient: userId },
             { isRead: true, readAt: new Date() },
-            { new: true }
+            { returnDocument: 'after' }
         );
         return notification;
     } catch (error) {

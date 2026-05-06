@@ -1,143 +1,214 @@
 import mongoose from "mongoose";
-import fs from "fs";
+import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
 import { models_list } from "../models/models_list.js";
 
-// --- CẤU HÌNH ĐƯỜNG DẪN TUYỆT ĐỐI ---
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const OUTPUT_DIR = path.join(__dirname, "output");
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Lấy tên DB từ env để đặt tên file
-const DB_NAME = process.env.DB_NAME || "test";
-const mongoURI = process.env.MONGO_URI_ATLAS || `mongodb://localhost:27017/${DB_NAME}`;
+class ArchitectScanner {
+    constructor(models, dbName) {
+        this.models = Array.isArray(models)
+            ? models.reduce((acc, m) => ({ ...acc, [m.modelName]: m }), {})
+            : models;
 
-async function run() {
-    try {
-        console.log("🚀 Đang kết nối MongoDB...");
-        await mongoose.connect(mongoURI);
+        this.dbName = dbName;
+        this.registry = new Map();
+        this.tableNames = new Set(Object.values(this.models).map(m => m.modelName.toUpperCase()));
+        this.stats = { totalFields: 0, totalRefs: 0 };
+    }
 
-        if (!fs.existsSync(OUTPUT_DIR)) {
-            fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-        }
+    analyze() {
+        const incomingRefs = new Map();
+        for (const model of Object.values(this.models)) {
+            const tableName = model.modelName.toUpperCase();
+            const relations = [];
+            const fields = [];
 
-        const erdLines = ["erDiagram"];
-        const dbmlTables = [];
-        const dbmlRefs = [];
-        const processedRelations = new Set();
+            this._findRefs(model.schema.obj, tableName, relations);
 
-        // --- ĐỐI SOÁT MODEL ---
-        const scannedTableNames = new Set(
-            Object.values(models_list).map(m => m.modelName.toUpperCase())
-        );
-        const missingTables = new Set(); // Chứa các bảng được ref nhưng không có model
+            relations.forEach(rel => {
+                incomingRefs.set(rel.to, (incomingRefs.get(rel.to) || 0) + 1);
+            });
 
-        // Helper: Lấy tên Model an toàn
-        const getModelName = (ref) => {
-            if (typeof ref === "string") return ref.toUpperCase();
-            if (typeof ref === "function" && ref.modelName) return ref.modelName.toUpperCase();
-            return null;
-        };
-
-        // Helper: Trích xuất quan hệ (Ref) từ Schema
-        function extractRelations(schemaObj, modelName, prefix = "") {
-            for (const [key, val] of Object.entries(schemaObj)) {
-                if (!val) continue;
-                const fieldPath = prefix + key;
-                const cleanFieldPath = fieldPath.replace(/\./g, "_");
-                let targetModel = null;
-
-                if (Array.isArray(val) && val[0]?.ref) {
-                    targetModel = getModelName(val[0].ref);
-                } else if (val.ref) {
-                    targetModel = getModelName(val.ref);
-                } else if (val.type && val.type.ref) {
-                    targetModel = getModelName(val.type.ref);
-                } else if (typeof val === "object" && !val.type && !Array.isArray(val)) {
-                    extractRelations(val, modelName, fieldPath + ".");
-                    continue;
-                }
-
-                if (targetModel) {
-                    if (scannedTableNames.has(targetModel)) {
-                        const relKey = `${modelName}-${targetModel}-${cleanFieldPath}`;
-                        if (!processedRelations.has(relKey)) {
-                            erdLines.push(`${modelName} ||--o{ ${targetModel} : "${cleanFieldPath}"`);
-                            dbmlRefs.push(`Ref: ${modelName}.${cleanFieldPath} > ${targetModel}._id`);
-                            processedRelations.add(relKey);
-                        }
-                    } else {
-                        missingTables.add(targetModel);
-                    }
-                }
-            }
-        }
-
-        // --- XỬ LÝ DỮ LIỆU MODELS ---
-        for (const [name, model] of Object.entries(models_list)) {
-            const upperName = model.modelName.toUpperCase();
-            const schemaPaths = model.schema.paths;
-            const mermaidFields = [];
-            const dbmlFields = [];
-
-            for (const [pathName, pathType] of Object.entries(schemaPaths)) {
+            for (const [pathName, pathType] of Object.entries(model.schema.paths)) {
                 if (pathName === "__v") continue;
                 const cleanName = pathName.replace(/\./g, "_");
-                let type = pathType.instance ? pathType.instance.toLowerCase() : "mixed";
-
-                let dbmlType = "varchar";
-                if (type === "objectid") dbmlType = "uuid";
-                else if (type === "number") dbmlType = "number";
-                else if (type === "boolean") dbmlType = "boolean";
-                else if (type === "date") dbmlType = "datetime";
-                else if (["array", "map", "buffer", "mixed"].includes(type)) dbmlType = "json";
-
-                const pk = pathName === "_id" ? " [pk]" : "";
-                mermaidFields.push(`    ${type} ${cleanName}`);
-                dbmlFields.push(`  ${cleanName} ${dbmlType}${pk}`);
+                fields.push({
+                    name: cleanName,
+                    type: (pathType.instance || "mixed").toLowerCase(),
+                    isPK: pathName === "_id",
+                    isFK: relations.some(r => r.field === cleanName)
+                });
             }
 
-            erdLines.push(`${upperName} {\n${mermaidFields.join("\n")}\n}`);
-            dbmlTables.push(`Table ${upperName} {\n${dbmlFields.join("\n")}\n}`);
-            extractRelations(model.schema.obj, upperName);
+            this.registry.set(tableName, { fields, relations, weight: 0 });
+            this.stats.totalFields += fields.length;
         }
 
-        // --- XUẤT FILE ---
-        const mermaidPath = path.join(OUTPUT_DIR, `${DB_NAME}.mmd`);
-        const dbmlPath = path.join(OUTPUT_DIR, `${DB_NAME}.dbml`);
+        for (const [name, data] of this.registry) {
+            data.weight = (incomingRefs.get(name) || 0) * 2 + data.relations.length;
+            this.stats.totalRefs += data.relations.length;
+        }
+    }
 
-        fs.writeFileSync(mermaidPath, erdLines.join("\n"));
-        const finalDbml = [
-            `// Generated DBML for dbdiagram.io - Database: ${DB_NAME}`,
-            ...dbmlTables,
-            "",
-            "// Relationships",
-            ...dbmlRefs
-        ].join("\n");
-        fs.writeFileSync(dbmlPath, finalDbml);
+    _findRefs(obj, sourceTable, results, prefix = "") {
+        for (const [key, val] of Object.entries(obj)) {
+            if (!val) continue;
+            const currentPath = prefix + key;
+            let target = null;
 
-        // --- BÁO CÁO KẾT QUẢ ---
-        console.log(`\n✅ THÀNH CÔNG!`);
-        console.log(`📍 Mermaid: ${mermaidPath}`);
-        console.log(`📍 DBML:    ${dbmlPath}`);
+            if (Array.isArray(val) && val[0]?.ref) target = val[0].ref;
+            else if (val.ref) target = val.ref;
+            else if (val.type?.ref) target = val.type.ref;
+            else if (typeof val === "object" && !val.type && !Array.isArray(val)) {
+                this._findRefs(val, sourceTable, results, currentPath + ".");
+                continue;
+            }
 
-        if (missingTables.size > 0) {
-            console.log(`\n⚠️  CẢNH BÁO: Phát hiện tham chiếu tới các Model chưa được quét:`);
-            console.warn(`👉 [ ${Array.from(missingTables).join(", ")} ]`);
-            console.log(`💡 Cách sửa: Hãy import và thêm các Model này vào file 'models_list.js' để sơ đồ đầy đủ hơn.`);
-        } else {
-            console.log(`\n✨ Tuyệt vời: Tất cả các mối quan hệ đều khớp với danh sách Model!`);
+            if (target) {
+                const targetUpper = target.toUpperCase();
+                if (this.tableNames.has(targetUpper)) {
+                    results.push({ from: sourceTable, to: targetUpper, field: currentPath.replace(/\./g, "_") });
+                }
+            }
+        }
+    }
+
+    renderDBML() {
+        let dbml = `// PROJECT: ${this.dbName}\n// Generated: ${new Date().toLocaleString()}\n\n`;
+        const sortedTables = [...this.registry.entries()].sort((a, b) => b[1].weight - a[1].weight);
+
+        for (const [tableName, data] of sortedTables) {
+            const sortedFields = data.fields.sort((a, b) => {
+                if (a.isPK) return -1;
+                if (a.isFK) return -1;
+                return a.name.localeCompare(b.name);
+            });
+
+            dbml += `Table ${tableName} {\n`;
+            sortedFields.forEach(f => {
+                const type = f.type === "objectid" ? "uuid" : (f.type === "mixed" ? "json" : f.type);
+                dbml += `  ${f.name} ${type}${f.isPK ? " [pk]" : ""}${f.isFK ? " [note: '🔗 Link']" : ""}\n`;
+            });
+            dbml += `  Note: 'Weight: ${data.weight}'\n}\n\n`;
         }
 
-        console.log(`\n🚀 Copy nội dung file .dbml dán vào https://dbdiagram.io/ để xem kết quả.`);
+        const allRefs = [...new Set(
+            [...this.registry.values()].flatMap(d => d.relations.map(r => `Ref: ${r.from}.${r.field} > ${r.to}._id`))
+        )];
 
-    } catch (err) {
-        console.error("❌ Lỗi thực thi:", err);
-    } finally {
-        await mongoose.disconnect();
-        console.log("🔌 Đã ngắt kết nối database.");
+        return dbml + `// RELATIONSHIPS\n${allRefs.join("\n")}\n`;
+    }
+
+    renderMermaid() {
+        let mmd = "erDiagram\n";
+        for (const [tableName, data] of this.registry) {
+            mmd += `  ${tableName} {\n`;
+            data.fields.forEach(f => mmd += `    ${f.type} ${f.name}\n`);
+            mmd += `  }\n`;
+            data.relations.forEach(r => mmd += `  ${r.from} ||--o{ ${r.to} : "${r.field}"\n`);
+        }
+        return mmd;
+    }
+
+    // printFancyDashboard(generatedFiles) {
+    //     console.log("\n┌────────────────────────────────────────────────────────────┐");
+    //     console.log(`│   🚀 ARCHITECT SCHEMA SCANNER - EXPORT COMPLETE            │`);
+    //     console.log("├────────────────────────────────────────────────────────────┤");
+    //     console.log(`│  📂 Database : ${this.dbName.padEnd(43)} │`);
+    //     console.log(`│  📊 Models   : ${String(this.registry.size).padEnd(43)} │`);
+    //     console.log(`│  🔑 Fields   : ${String(this.stats.totalFields).padEnd(43)} │`);
+    //     console.log(`│  🔗 Links    : ${String(this.stats.totalRefs).padEnd(43)} │`);
+    //     console.log("├────────────────────────────────────────────────────────────┤");
+    //     console.log(`│  📁 Output đã tạo (ghi đè): ${String(generatedFiles.length + ' files').padEnd(30)} │`);
+
+    //     generatedFiles.forEach(file => {
+    //         const label = file.name.endsWith('.dbml') ? "📜 DBML File" : "🧜 Mermaid ";
+    //         console.log(`│  > ${label}: ${file.path} │`);
+    //     });
+
+    //     console.log("└────────────────────────────────────────────────────────────┘\n");
+    // }
+    printFancyDashboard(generatedFiles) {
+        const line = "────────────────────────────────────────────────────────────";
+        console.log(`\n┌${line}┐`);
+        console.log(`│   🚀 ARCHITECT SCHEMA SCANNER - EXPORT COMPLETE            │`);
+        console.log(`├${line}┤`);
+        console.log(`│  📂 Database : ${this.dbName.padEnd(43)} │`);
+        console.log(`│  📊 Models   : ${String(this.registry.size).padEnd(43)} │`);
+        console.log(`│  🔑 Fields   : ${String(this.stats.totalFields).padEnd(43)} │`);
+        console.log(`│  🔗 Links    : ${String(this.stats.totalRefs).padEnd(43)} │`);
+        console.log(`├${line}┤`);
+        console.log(`│  📁 Output đã tạo (ghi đè): ${String(generatedFiles.length + ' files').padEnd(30)} │`);
+
+        generatedFiles.forEach(file => {
+            const label = file.name.endsWith('.dbml') ? "📜 DBML File" : "🧜 Mermaid  ";
+            console.log(`│                                                            │`);
+            console.log(`│  ${label}: ${file.name.padEnd(43)} │`);
+            console.log(`│  🔗 Path: ${file.path.padEnd(48)} │`);
+        });
+
+        console.log(`└${line}┘\n`);
     }
 }
 
-run();
+async function runScanner({
+    models,
+    connectionString,
+    dbName,
+    outputDir = path.join(__dirname, "output"),
+    logType = "simple"
+}) {
+    if (!models) throw new Error("Missing models!");
+    if (!connectionString) throw new Error("Missing connectionString!");
+    if (!dbName) throw new Error("Missing dbName!");
+    if (!outputDir) console.log("outputDir is not set, default to './output'");
+    if (!logType) console.log("logType is not set, default to 'simple'");
+    if (logType && logType !== "fancy" && logType !== "simple") throw new Error("Invalid logType!");
+
+    try {
+        await mongoose.connect(connectionString, { dbName });
+
+        const architect = new ArchitectScanner(models, dbName);
+        architect.analyze();
+
+        await fs.mkdir(outputDir, { recursive: true });
+
+        const fileData = [
+            { name: `${dbName}.dbml`, content: architect.renderDBML() },
+            { name: `${dbName}.mmd`, content: architect.renderMermaid() }
+        ];
+
+        const generatedFiles = [];
+
+        for (const file of fileData) {
+            const fullPath = path.join(outputDir, file.name);
+            await fs.writeFile(fullPath, file.content);
+            generatedFiles.push({ name: file.name, path: fullPath });
+
+            if (logType === "simple") {
+                console.log(`✅ Generated: ${file.name} -> ${fullPath}`);
+            }
+        }
+
+        if (logType === "fancy") {
+            architect.printFancyDashboard(generatedFiles);
+        }
+
+    } catch (err) {
+        console.error("❌ [ARCHITECT ERROR]:", err.message);
+    } finally {
+        await mongoose.disconnect();
+    }
+}
+
+runScanner({
+    models: models_list,
+    connectionString: process.env.MONGO_URI_ATLAS,
+    dbName: process.env.DB_NAME,
+    logType: "fancy",
+    // outputDir: path.join(__dirname, "output"),
+});
+
+// export default runScanner;

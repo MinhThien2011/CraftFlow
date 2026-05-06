@@ -6,7 +6,7 @@ import Counter from '../models/Counter.js';
  */
 export const getNextSequence = async (key, resetDaily = false) => {
     const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    
+
     let query = { id: key };
     if (resetDaily) {
         // If daily reset is needed, we check the date
@@ -17,9 +17,9 @@ export const getNextSequence = async (key, resetDaily = false) => {
     }
 
     const counter = await Counter.findOneAndUpdate(
-        { id: key },
+        query,
         { $inc: { seq: 1 }, $set: { date: today } },
-        { new: true, upsert: true }
+        { returnDocument: 'after' }
     );
 
     return counter.seq;

@@ -148,16 +148,70 @@ export const getProductInventory = async ({ search = '', page = 1, limit = 10 })
   });
 
   return {
-    success: true,
-    message: 'Product inventory retrieved.',
-    data: {
-      items: standardlizeResponseDataHelper(enrichedProducts),
-      pagination: {
-        total,
-        page: pageNum,
-        limit: limitNum,
-        pages: Math.ceil(total / limitNum)
+      success: true,
+      message: 'Product inventory retrieved.',
+      data: {
+        items: standardlizeResponseDataHelper(enrichedProducts),
+        pagination: {
+          total,
+          page: pageNum,
+          limit: limitNum,
+          pages: Math.ceil(total / limitNum)
+        }
       }
-    }
+    };
   };
+
+/**};
+
+/**
+ * Get unified low stock alerts for both materials and products.
+ */
+export const getUnifiedLowStockAlerts = async () => {
+  try {
+    const [materials, products] = await Promise.all([
+      Material.find({
+        isActive: true,
+        $expr: { $lte: ['$currentStock', '$threshold'] }
+      })
+      .select('name code unit currentStock threshold shelf')
+      .populate('shelf', 'shelfCode')
+      .lean(),
+      Product.find({
+        isActive: true,
+        $expr: { $lte: ['$currentStock', '$threshold'] }
+      })
+      .select('name code unit currentStock threshold shelf category')
+      .populate('shelf', 'shelfCode')
+      .lean()
+    ]);
+
+    const materialAlerts = materials.map(m => ({
+      ...m,
+      itemType: 'material',
+      stockLevel: determineStockLevel(m.currentStock, m.threshold)
+    }));
+
+    const productAlerts = products.map(p => ({
+      ...p,
+      itemType: 'product',
+      stockLevel: determineStockLevel(p.currentStock, p.threshold)
+    }));
+
+    const allAlerts = [...materialAlerts, ...productAlerts].sort((a, b) => {
+      // Sort by stock percentage of threshold (lowest first)
+      const aPct = a.threshold > 0 ? a.currentStock / a.threshold : 0;
+      const bPct = b.threshold > 0 ? b.currentStock / b.threshold : 0;
+      return aPct - bPct;
+    });
+
+    return {
+      success: true,
+      message: 'Unified low stock alerts retrieved successfully.',
+      data: standardlizeResponseDataHelper(allAlerts)
+    };
+  } catch (error) {
+    console.log('[InventoryService] getUnifiedLowStockAlerts error:', error);
+    return { success: false, message: error.message, data: [] };
+  }
 };

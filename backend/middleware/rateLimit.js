@@ -24,7 +24,6 @@ const CONFIG = {
 };
 
 /**
- * Senior Utility: Safe Redis Command Executor
  * Waits for the Redis client to be ready before executing commands.
  * This prevents 'ClientClosedError' during server startup.
  */
@@ -44,7 +43,6 @@ const safeSendCommand = async (...args) => {
 
         return await client.sendCommand(args);
     } catch (error) {
-        // Fallback or rethrow based on strategy
         throw error;
     }
 };
@@ -69,7 +67,7 @@ const getUserId = (req) => {
 const commonOptions = {
     standardHeaders: true,
     legacyHeaders: false,
-    validate: { default: false }, // Suppress IPv6 warning as we handle key generation safely
+    validate: { default: false },
 };
 
 /**
