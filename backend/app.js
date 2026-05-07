@@ -4,17 +4,16 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import express from 'express';
 import mainRouter from './routes/main.routes.js';
-import { connectToDatabase } from './config/mongoDB.js';
 import cookieParser from 'cookie-parser';
 import { redisConnect } from './config/redisClient.js';
 import superLogger from './middleware/colorfulLogger.js';
 import { setupGracefulShutdown } from './utils/processHandler.js';
+import { connectToDatabase } from './config/db/mongoDB.js';
 
 const app = express();
 redisConnect();
-connectToDatabase()
+connectToDatabase();
 setupGracefulShutdown();
-
 // logger.init('PET RESCUE').batch([
 //     { cmd: 'step', args: [1, 5, 'Connect DB'] },
 //     { cmd: 'step', args: [3, 5, 'Load Models'] },

@@ -97,6 +97,57 @@ export const getOverviewStats = async () => {
 };
 
 /**
+ * Service to get recent alerts for dashboard.
+ */
+export const getRecentAlerts = async (limit = 5) => {
+    try {
+        const [materials, products] = await Promise.all([
+            Material.find({
+                isActive: true,
+                $expr: { $lte: ['$currentStock', '$threshold'] }
+            })
+            .sort({ currentStock: 1 })
+            .limit(limit)
+            .select('name currentStock threshold unit')
+            .lean(),
+            Product.find({
+                isActive: true,
+                $expr: { $lte: ['$currentStock', '$threshold'] }
+            })
+            .sort({ currentStock: 1 })
+            .limit(limit)
+            .select('name currentStock threshold unit category')
+            .lean()
+        ]);
+
+        const alerts = [
+            ...materials.map(m => ({ ...m, type: 'material' })),
+            ...products.map(p => ({ ...p, type: 'product' }))
+        ].sort((a, b) => {
+            const aPct = a.threshold > 0 ? a.currentStock / a.threshold : 0;
+            const bPct = b.threshold > 0 ? b.currentStock / b.threshold : 0;
+            return aPct - bPct;
+        }).slice(0, limit);
+
+        return {
+            success: true,
+            data: alerts.map(a => ({
+                id: a._id,
+                name: a.name,
+                currentStock: a.currentStock,
+                minStock: a.threshold,
+                unit: a.unit,
+                type: a.type,
+                status: a.currentStock === 0 ? 'Nguy cấp' : 'Sắp hết'
+            }))
+        };
+    } catch (error) {
+        console.log('[DashboardService] getRecentAlerts error:', error);
+        return { success: false, message: error.message, data: [] };
+    }
+};
+
+/**
  * Service to get data for charts (Inventory movement & Production trends).
  */
 export const getChartData = async (days = 7) => {

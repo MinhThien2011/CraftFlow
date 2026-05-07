@@ -6,19 +6,21 @@ import { ROLES } from '../utils/constants.js';
 
 const shelfRouter = Router();
 
-shelfRouter.get('/health', (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "Welcome to the Shelf API of Crafb Flow",
-  })
-})
+// --- General Access (Authenticated) ---
 shelfRouter.use(jwtAuth);
 
-// All roles (Admin, Kho Manager, Production Manager) can view shelves
-shelfRouter.get('/', rolePermission([ROLES.ADMIN, ROLES.KHO_MANAGER, ROLES.PRODUCTION_MANAGER]), shelfController.getAllShelves);
-shelfRouter.get('/:id', rolePermission([ROLES.ADMIN, ROLES.KHO_MANAGER, ROLES.PRODUCTION_MANAGER]), shelfController.getShelfById);
+// Viewing Shelves
+shelfRouter.get('/', 
+    rolePermission([ROLES.ADMIN, ROLES.KHO_MANAGER, ROLES.PRODUCTION_MANAGER]), 
+    shelfController.getAllShelves
+);
 
-// Only Kho Manager can create, update, or delete shelves
+shelfRouter.get('/:id', 
+    rolePermission([ROLES.ADMIN, ROLES.KHO_MANAGER, ROLES.PRODUCTION_MANAGER]), 
+    shelfController.getShelfById
+);
+
+// --- Management (Warehouse Manager Only) ---
 shelfRouter.post('/', rolePermission([ROLES.KHO_MANAGER]), shelfController.createShelf);
 shelfRouter.put('/:id', rolePermission([ROLES.KHO_MANAGER]), shelfController.updateShelf);
 shelfRouter.delete('/:id', rolePermission([ROLES.KHO_MANAGER]), shelfController.deleteShelf);

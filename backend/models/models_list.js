@@ -9,8 +9,13 @@ import MaterialRequisition from './MaterialRequisition.js';
 import Product from './Product.js';
 import ProductionOrder from './ProductionOrder.js';
 import ProductionOrderAssignment from './ProductionOrderAssignment.js';
+import PurchaseOrder from './PurchaseOrder.js';
 import Role from './Roles.js';
+import Shelf from './Shelf.js';
 import User from './User.js';
+import Notification from './Notification.js';
+import SystemLog from './SystemLog.js';
+import ProductExportRequest from './ProductExportRequest.js';
 
 export const models_list = {
     BOM,
@@ -24,6 +29,13 @@ export const models_list = {
     Product,
     ProductionOrder,
     ProductionOrderAssignment,
+    ProductExportRequest,
     Role,
-    User
+    User,
+    Shelf,
+    PurchaseOrder,
+    Notification,
+    SystemLog,
+
+
 };

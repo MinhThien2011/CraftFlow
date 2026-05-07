@@ -14,19 +14,13 @@ import { imageUploader } from '../middleware/cloudinary_uploader.js';
 
 const userRouter = Router();
 
-// --- Private Routes (Logged in users) ---
-userRouter.get('/health', (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "Welcome to the User API of Crafb Flow",
-  })
-})
+// --- General Access (Authenticated) ---
 userRouter.use(jwtAuth);
 
 // Profile management
 userRouter.patch('/profile', imageUploader('avatars'), updateUser);
 
-// --- Admin Only Routes ---
+// --- Administrative Access (Admin Only) ---
 userRouter.use(rolePermission([ROLES.ADMIN]));
 
 userRouter.get('/', getAllUsers);

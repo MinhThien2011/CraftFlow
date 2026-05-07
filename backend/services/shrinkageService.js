@@ -4,21 +4,8 @@ import InventoryBatch from '../models/InventoryBatch.js';
 import Material from '../models/Material.js';
 import InventoryTransaction from '../models/InventoryTransaction.js';
 import { SHRINKAGE_STATUS, TRANSACTION_TYPE } from '../utils/constants.js';
-
-/**
- * Generate a unique report code for shrinkage
- */
-const generateShrinkageCode = async () => {
-    const date = new Date();
-    const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
-    const prefix = `SHR-${dateStr}-`;
-    
-    const count = await InventoryShrinkageReport.countDocuments({
-        reportCode: { $regex: `^${prefix}` }
-    });
-    
-    return `${prefix}${(count + 1).toString().padStart(3, '0')}`;
-};
+import { generateAtomicCode } from '../utils/codeGenerator.js';
+import { ServiceResponse } from '../utils/serviceHelper.js';
 
 /**
  * Create a new shrinkage report (Kho Manager)
@@ -41,7 +28,7 @@ export const createShrinkageReport = async (reportData, userId) => {
             throw new Error(`Reported shrinkage (${shrinkageAmount}) exceeds remaining stock in batch (${batch.quantityRemaining}).`);
         }
 
-        const reportCode = await generateShrinkageCode();
+        const reportCode = await generateAtomicCode('SHR', 'shrinkage_code');
         const report = new InventoryShrinkageReport({
             reportCode,
             batch: batchId,
@@ -56,15 +43,11 @@ export const createShrinkageReport = async (reportData, userId) => {
         await report.save({ session });
         await session.commitTransaction();
 
-        return {
-            status: 'success',
-            message: 'Shrinkage report created successfully and is pending review.',
-            data: report
-        };
+        return ServiceResponse(true, 'Shrinkage report created successfully and is pending review.', report);
     } catch (error) {
         await session.abortTransaction();
         console.error('[ShrinkageService] createShrinkageReport error:', error);
-        return { status: 'error', message: error.message, data: null };
+        return ServiceResponse(false, error.message);
     } finally {
         session.endSession();
     }
@@ -138,7 +121,7 @@ export const updateShrinkageStatus = async (reportId, updateData, userId) => {
                     receiver: 'System (Shrinkage)',
                     note: `Shrinkage Adjustment: ${report.reportCode} - Reason: ${report.shrinkageReason}`,
                     relatedBatch: report.batch,
-                    createdBy: userId
+                    performedBy: userId
                 });
                 await transaction.save({ session });
             }
@@ -147,15 +130,11 @@ export const updateShrinkageStatus = async (reportId, updateData, userId) => {
         await report.save({ session });
         await session.commitTransaction();
 
-        return {
-            status: 'success',
-            message: `Shrinkage report status updated to ${status}.`,
-            data: report
-        };
+        return ServiceResponse(true, `Shrinkage report status updated to ${status}.`, report);
     } catch (error) {
         await session.abortTransaction();
         console.error('[ShrinkageService] updateShrinkageStatus error:', error);
-        return { status: 'error', message: error.message, data: null };
+        return ServiceResponse(false, error.message);
     } finally {
         session.endSession();
     }
@@ -173,9 +152,9 @@ export const getShrinkageReports = async (filters = {}) => {
             .populate('decisionBy', 'fullName')
             .sort({ createdAt: -1 });
         
-        return { status: 'success', data: reports };
+        return ServiceResponse(true, 'Shrinkage reports retrieved successfully.', reports);
     } catch (error) {
         console.error('[ShrinkageService] getShrinkageReports error:', error);
-        return { status: 'error', message: error.message, data: null };
+        return ServiceResponse(false, error.message);
     }
 };

@@ -7,7 +7,9 @@
   "scripts": {
     "test": "node --env-file=.env --watch --trace-deprecation index.js",
     "start": "node --env-file=.env --watch index.js",
-    "dev": "node --watch index.js"
+    "dev": "node --watch index.js",
+    "docs": "node --env-file=.env ./tools/scanDB.js",
+    "rate-limit-test": "node --env-file=.env ./tools/rateLimitTest.js"
   },
   "keywords": [],
   "author": "",
@@ -30,8 +32,10 @@
     "mongoose": "^9.5.0",
     "morgan": "^1.10.1",
     "multer": "^2.1.1",
+    "rate-limit-redis": "^4.3.1",
     "redis": "^5.12.1",
     "sharp": "^0.34.5",
+    "socket.io": "^4.8.3",
     "streamifier": "^0.1.1"
   }
 }

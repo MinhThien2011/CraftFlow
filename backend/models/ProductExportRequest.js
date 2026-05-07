@@ -57,7 +57,8 @@ const productExportRequestSchema = new mongoose.Schema({
   toObject: { versionKey: false }
 });
 
-productExportRequestSchema.index({ requestCode: 1 });
-productExportRequestSchema.index({ status: 1 });
+productExportRequestSchema.index({ createdBy: 1 });
+productExportRequestSchema.index({ relatedSlip: 1 });
+productExportRequestSchema.index({ adminApprovedBy: 1 });
 
 export default mongoose.model('ProductExportRequest', productExportRequestSchema);

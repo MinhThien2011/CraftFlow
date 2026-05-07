@@ -1,14 +1,49 @@
 import mongoose from 'mongoose';
 
 const notificationSchema = new mongoose.Schema({
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    metaData: { type: Object, required: true },
-    isRead: { type: Boolean, default: false }
+    recipient: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true,
+        index: true
+    },
+    title: {
+        type: String,
+        required: true,
+        trim: true
+    },
+    message: {
+        type: String,
+        required: true
+    },
+    type: {
+        type: String,
+        enum: ['SYSTEM', 'ORDER', 'INVENTORY', 'APPROVAL', 'ALERT'],
+        default: 'SYSTEM'
+    },
+    priority: {
+        type: String,
+        enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'],
+        default: 'MEDIUM'
+    },
+    metaData: {
+        type: mongoose.Schema.Types.Mixed
+    },
+    isRead: {
+        type: Boolean,
+        default: false,
+        index: true
+    },
+    readAt: {
+        type: Date
+    }
 }, {
-    timestamps: true
-})
-notificationSchema.index({ userId: 1 })
-notificationSchema.index({ isRead: 1 })
-notificationSchema.index({ createdAt: 1 }, { expireAfterSeconds: 7 * 24 * 60 * 60 }); // expire after 7 days
+    timestamps: true,
+    toJSON: { versionKey: false },
+    toObject: { versionKey: false }
+});
 
-export default mongoose.model('Notification', notificationSchema)
+// TTL Index: Tự động xóa thông báo sau 30 ngày để tối ưu dung lượng DB
+notificationSchema.index({ createdAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
+
+export default mongoose.model('Notification', notificationSchema);

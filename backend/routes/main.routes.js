@@ -1,4 +1,7 @@
 import { Router } from "express";
+import { apiLimiter } from "../middleware/rateLimit.js";
+
+// Import all modular routes
 import authRouter from "./auth.routes.js";
 import userRouter from "./user.routes.js";
 import materialRouter from "./material.routes.js";
@@ -13,17 +16,23 @@ import slipRouter from "./slip.routes.js";
 import purchaseOrderRouter from "./purchaseOrder.routes.js";
 import batchRouter from "./batch.routes.js";
 import shrinkageRouter from "./shrinkage.routes.js";
-import agentRouter from "../agent/routes.js";
 import productExportRouter from "./productExport.routes.js";
+import notificationRouter from "./notification.routes.js";
 
 const mainRouter = Router();
 
+// Apply global API Rate Limiting
+mainRouter.use(apiLimiter);
+
+// Health check endpoint
 mainRouter.get('/health', (req, res) => {
     res.status(200).json({
         success: true,
-        message: "Welcome to the Crab Flow API",
-    })
-})
+        message: "Welcome to the CraftFlow API Service",
+    });
+});
+
+// Modular Route Mountings
 mainRouter.use('/auth', authRouter);
 mainRouter.use('/users', userRouter);
 mainRouter.use('/materials', materialRouter);
@@ -38,7 +47,7 @@ mainRouter.use('/slips', slipRouter);
 mainRouter.use('/purchaseOrders', purchaseOrderRouter);
 mainRouter.use('/batches', batchRouter);
 mainRouter.use('/shrinkage', shrinkageRouter);
-mainRouter.use('/agent', agentRouter);
 mainRouter.use('/product-exports', productExportRouter);
+mainRouter.use('/notifications', notificationRouter);
 
 export default mainRouter;

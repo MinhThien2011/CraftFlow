@@ -1,20 +1,25 @@
 import { Router } from "express";
-import { changePassword, getUserInfo, login, logout, refreshPassword } from "../controllers/authController.js";
+import { 
+    changePassword, 
+    getUserInfo, 
+    login, 
+    logout, 
+    refreshPassword 
+} from "../controllers/authController.js";
 import { jwtAuth } from "../middleware/jwtAuth.js";
+import { loginLimiter, strictLimiter } from "../middleware/rateLimit.js";
 
 const authRouter = Router();
 
-authRouter.get('/health', (req, res) => {
-    res.status(200).json({
-        success: true,
-        message: "Welcome to the Crab Flow Auth API",
-    })
-})
+// Public Authentication
+authRouter.post('/login', loginLimiter, login);
+authRouter.post('/refresh-password', strictLimiter, refreshPassword);
 
-authRouter.post('/login', login);
-authRouter.get('/user', jwtAuth, getUserInfo);
-authRouter.post('/refresh-password', refreshPassword);
-authRouter.post('/change-password', jwtAuth, changePassword);
-authRouter.post('/logout', jwtAuth, logout);
+// Authenticated Routes
+authRouter.use(jwtAuth);
+
+authRouter.get('/user', getUserInfo);
+authRouter.post('/logout', logout);
+authRouter.post('/change-password', strictLimiter, changePassword);
 
 export default authRouter;

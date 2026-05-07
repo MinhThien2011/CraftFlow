@@ -2,7 +2,17 @@ import MaterialRequisition from '../models/MaterialRequisition.js';
 import Material from '../models/Material.js';
 import ProductionOrder from '../models/ProductionOrder.js';
 import InventoryTransaction from '../models/InventoryTransaction.js';
-import { REQUISITION_STATUS, TRANSACTION_TYPE, INVENTORY_IMPORT_EXPORT_SLIP_TYPE, INVENTORY_IMPORT_EXPORT_SLIP_STATUS, REQUISITION_TYPE } from '../utils/constants.js';
+import {
+  REQUISITION_STATUS,
+  TRANSACTION_TYPE,
+  INVENTORY_IMPORT_EXPORT_SLIP_TYPE,
+  INVENTORY_IMPORT_EXPORT_SLIP_STATUS,
+  REQUISITION_TYPE,
+  ORDER_STATUS,
+  ROLES
+} from '../utils/constants.js';
+import { ServiceResponse } from '../utils/serviceHelper.js';
+import { generateAtomicCode } from '../utils/codeGenerator.js';
 import { updateShelfLoad } from './shelfService.js';
 import { allocateBatchesForMaterial, createBatch } from './fifoService.js';
 import { createSlipService } from './importExportSlipService.js';
@@ -86,15 +96,13 @@ export const approveRequisition = async (requisitionId, adminId) => {
  * Production Manager requests materials for a production order.
  */
 export const requestMaterials = async (productionOrderId, managerId, items) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
-    const order = await ProductionOrder.findById(productionOrderId);
+    const order = await ProductionOrder.findById(productionOrderId).session(session);
     if (!order) throw new Error('Production order not found.');
 
-    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const count = await MaterialRequisition.countDocuments({
-      createdAt: { $gte: new Date().setHours(0, 0, 0, 0) }
-    });
-    const requisitionCode = `REQ-${dateStr}-${(count + 1).toString().padStart(3, '0')}`;
+    const requisitionCode = await generateAtomicCode('REQ', 'requisition_code');
 
     const newRequisition = new MaterialRequisition({
       requisitionCode,
@@ -107,15 +115,16 @@ export const requestMaterials = async (productionOrderId, managerId, items) => {
       status: REQUISITION_STATUS.PENDING
     });
 
-    await newRequisition.save();
-    return {
-      status: 'success',
-      message: 'Material requisition submitted.',
-      data: { requisition: newRequisition }
-    };
+    await newRequisition.save({ session });
+    await session.commitTransaction();
+
+    return ServiceResponse(true, 'Material requisition submitted.', newRequisition, 201);
   } catch (error) {
+    await session.abortTransaction();
     console.log('[MaterialRequisitionService] requestMaterials error:', error);
-    return { status: 'error', message: error.message, data: null };
+    return ServiceResponse(false, error.message);
+  } finally {
+    session.endSession();
   }
 };
 
@@ -547,8 +556,8 @@ export const updateRequisitionStatus = async (requisitionId, managerId, status, 
           }
 
           // Update status if it was waiting for materials
-          if (productionOrder.status === 'insufficient_materials' || productionOrder.status === 'pending') {
-            productionOrder.status = 'ready_to_assign';
+          if (productionOrder.status === ORDER_STATUS.INSUFFICIENT_MATERIALS || productionOrder.status === ORDER_STATUS.PENDING) {
+            productionOrder.status = ORDER_STATUS.READY_TO_ASSIGN;
           }
           await productionOrder.save({ session });
         }
@@ -556,16 +565,12 @@ export const updateRequisitionStatus = async (requisitionId, managerId, status, 
 
       await requisition.save({ session });
       await session.commitTransaction();
-      return {
-        status: 'success',
-        message: `Requisition status updated to ${status}.`,
-        data: { requisition }
-      };
+      return ServiceResponse(true, `Requisition status updated to ${status}.`, requisition);
     }
   } catch (error) {
     await session.abortTransaction();
     console.log('[MaterialRequisitionService] updateRequisitionStatus error:', error);
-    return { status: 'error', message: error.message, data: null };
+    return ServiceResponse(false, error.message);
   } finally {
     session.endSession();
   }

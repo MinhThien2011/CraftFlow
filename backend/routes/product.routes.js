@@ -7,58 +7,36 @@ import { imageUploader } from '../middleware/cloudinary_uploader.js';
 
 const productRouter = Router();
 
-productRouter.get('/health', (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "Welcome to the Product API of Crafb Flow",
-  })
-})
-
-// --- Public Routes (Optional, adjust as needed) ---
-// @route   GET /api/products
-// @desc    Get all products with search, filter, sort, and pagination
+// --- Public / General Access ---
 productRouter.get('/', productController.getAllProducts);
-
-// @route   GET /api/products/low-stock
-// @desc    Get products with low stock
 productRouter.get('/low-stock', productController.getLowStockProducts);
-
-// @route   GET /api/products/history
-// @desc    Get all product transaction history
 productRouter.get('/history', productController.getProductHistory);
-
-// @route   GET /api/products/:id/history
-// @desc    Get transaction history for a specific product
+productRouter.get('/:id', productController.getProductById);
 productRouter.get('/:id/history', productController.getProductHistory);
 
-// @route   GET /api/products/:id
-// @desc    Get a single product by ID
-productRouter.get('/:id', productController.getProductById);
+// --- Authenticated & Authorized Access ---
+productRouter.use(jwtAuth);
 
-
-// --- Private Routes (Requires Authentication) ---
-productRouter.use(jwtAuth)
-
-// @route   POST /api/products
-// @desc    Create a new product with image upload
-productRouter.post(
-  '/',
-  rolePermission([ROLES.PRODUCTION_MANAGER]),
-  imageUploader('products'),
-  productController.createProduct
+// Production Manager: CRUD Products
+productRouter.post('/', 
+    rolePermission([ROLES.PRODUCTION_MANAGER]), 
+    imageUploader('products'), 
+    productController.createProduct
 );
 
-// @route   PUT /api/products/:id
-// @desc    Update an existing product with image upload
-productRouter.put('/:id', rolePermission([ROLES.PRODUCTION_MANAGER]), imageUploader('products'), productController.updateProduct
+productRouter.put('/:id', 
+    rolePermission([ROLES.PRODUCTION_MANAGER]), 
+    imageUploader('products'), 
+    productController.updateProduct
 );
 
-// @route   DELETE /api/products/:id
-// @desc    Deactivate a product (soft delete)
-productRouter.delete('/:id', rolePermission([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER]), productController.deleteProduct);
+productRouter.delete('/:id', 
+    rolePermission([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER]), 
+    productController.deleteProduct
+);
 
+// Admin: Inventory Operations
 productRouter.post('/incoming', rolePermission([ROLES.ADMIN]), productController.incomingProduct);
-
 productRouter.post('/outgoing', rolePermission([ROLES.ADMIN]), productController.outgoingProduct);
 
 export default productRouter;

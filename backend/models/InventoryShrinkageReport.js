@@ -73,5 +73,8 @@ const InventoryShrinkageReportSchema = new mongoose.Schema({
 
 InventoryShrinkageReportSchema.index({ status: 1 });
 InventoryShrinkageReportSchema.index({ material: 1 });
+InventoryShrinkageReportSchema.index({ batch: 1 });
+InventoryShrinkageReportSchema.index({ createdBy: 1 });
+InventoryShrinkageReportSchema.index({ checkedBy: 1 });
 
 export default mongoose.model('InventoryShrinkageReport', InventoryShrinkageReportSchema);

@@ -176,4 +176,11 @@ InventoryImportExportSlipSchema.pre('save', function () {
     return this;
 });
 
+InventoryImportExportSlipSchema.index({ type: 1, status: 1 });
+InventoryImportExportSlipSchema.index({ relatedProductionOrder: 1 });
+InventoryImportExportSlipSchema.index({ relatedPurchaseOrder: 1 });
+InventoryImportExportSlipSchema.index({ relatedRequisition: 1 });
+InventoryImportExportSlipSchema.index({ 'signatures.creator': 1 });
+InventoryImportExportSlipSchema.index({ 'signatures.storekeeper': 1 });
+
 export default mongoose.model('InventoryImportExportSlip', InventoryImportExportSlipSchema);

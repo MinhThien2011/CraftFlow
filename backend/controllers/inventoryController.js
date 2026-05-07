@@ -23,6 +23,27 @@ export const getOverview = async (req, res) => {
 };
 
 /**
+ * Controller to get unified low stock alerts.
+ */
+export const getLowStockAlerts = async (req, res) => {
+  const result = await inventoryService.getUnifiedLowStockAlerts();
+
+  if (!result.success) {
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: result.message,
+      data: null
+    });
+  }
+
+  return res.status(StatusCodes.OK).json({
+    success: true,
+    message: result.message,
+    data: result.data
+  });
+};
+
+/**
  * Controller to get material inventory list with search and pagination.
  */
 export const getMaterialsStock = async (req, res) => {

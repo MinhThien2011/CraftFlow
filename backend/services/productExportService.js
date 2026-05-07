@@ -7,21 +7,8 @@ import {
     INVENTORY_IMPORT_EXPORT_SLIP_STATUS 
 } from '../utils/constants.js';
 import mongoose from 'mongoose';
-
-/**
- * Generate a unique request code for product export
- */
-const generateRequestCode = async () => {
-    const date = new Date();
-    const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
-    const prefix = `PEX-${dateStr}-`;
-    
-    const count = await ProductExportRequest.countDocuments({
-        requestCode: { $regex: `^${prefix}` }
-    });
-    
-    return `${prefix}${(count + 1).toString().padStart(3, '0')}`;
-};
+import { generateAtomicCode } from '../utils/codeGenerator.js';
+import { ServiceResponse } from '../utils/serviceHelper.js';
 
 /**
  * Production Manager creates a product export request
@@ -40,7 +27,7 @@ export const createExportRequest = async (requestData, userId) => {
             }
         }
 
-        const requestCode = await generateRequestCode();
+        const requestCode = await generateAtomicCode('PEX', 'product_export_code');
         const newRequest = new ProductExportRequest({
             requestCode,
             createdBy: userId,
@@ -51,10 +38,10 @@ export const createExportRequest = async (requestData, userId) => {
         });
 
         await newRequest.save();
-        return { status: 'success', message: 'Export request created and waiting for Admin approval.', data: newRequest };
+        return ServiceResponse(true, 'Yêu cầu xuất hàng đã được tạo và chờ Admin duyệt.', newRequest);
     } catch (error) {
         console.error('[ProductExportService] createExportRequest error:', error);
-        return { status: 'error', message: error.message, data: null };
+        return ServiceResponse(false, error.message);
     }
 };
 
@@ -66,10 +53,10 @@ export const updateRequestStatus = async (requestId, status, adminId) => {
     session.startTransaction();
     try {
         const request = await ProductExportRequest.findById(requestId).populate('items.product').session(session);
-        if (!request) throw new Error('Export request not found.');
+        if (!request) throw new Error('Yêu cầu xuất hàng không tồn tại.');
 
         if (request.status !== REQUISITION_STATUS.PENDING) {
-            throw new Error(`Cannot update request status ${request.status}.`);
+            throw new Error(`Không thể cập nhật yêu cầu ở trạng thái ${request.status}.`);
         }
 
         request.status = status;
@@ -101,7 +88,8 @@ export const updateRequestStatus = async (requestId, status, adminId) => {
                 status: INVENTORY_IMPORT_EXPORT_SLIP_STATUS.PENDING
             };
 
-            const slipResult = await createSlipService(slipData, adminId);
+            // FIX ISSUE 1: Pass session to createSlipService
+            const slipResult = await createSlipService(slipData, adminId, session);
             if (!slipResult.success) {
                 throw new Error(`Lỗi khi tạo phiếu xuất kho: ${slipResult.message}`);
             }
@@ -112,15 +100,11 @@ export const updateRequestStatus = async (requestId, status, adminId) => {
         await request.save({ session });
         await session.commitTransaction();
 
-        return { 
-            status: 'success', 
-            message: status === REQUISITION_STATUS.APPROVED ? 'Export request approved and export slip created.' : 'Export request rejected.',
-            data: request 
-        };
+        return ServiceResponse(true, status === REQUISITION_STATUS.APPROVED ? 'Yêu cầu đã được duyệt và phiếu xuất kho đã được tạo.' : 'Yêu cầu đã bị từ chối.', request);
     } catch (error) {
         await session.abortTransaction();
         console.error('[ProductExportService] updateRequestStatus error:', error);
-        return { status: 'error', message: error.message, data: null };
+        return ServiceResponse(false, error.message);
     } finally {
         session.endSession();
     }
@@ -137,9 +121,9 @@ export const getExportRequests = async (filters = {}) => {
             .populate('adminApprovedBy', 'fullName')
             .sort({ createdAt: -1 });
         
-        return { status: 'success', data: requests };
+        return ServiceResponse(true, 'Danh sách yêu cầu xuất hàng.', requests);
     } catch (error) {
         console.error('[ProductExportService] getExportRequests error:', error);
-        return { status: 'error', message: error.message, data: null };
+        return ServiceResponse(false, error.message);
     }
 };

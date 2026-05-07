@@ -36,7 +36,11 @@ export const createExportRequest = async (req, res) => {
             targetId: result.data._id
         }, req);
 
-        return res.status(StatusCodes.CREATED).json(result);
+        return res.status(StatusCodes.CREATED).json({
+            status: 'success',
+            message: 'Yêu cầu xuất hàng đã được tạo.',
+            data: result.data
+        });
     } catch (error) {
         console.error('[ProductExportController] createExportRequest error:', error);
         return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
