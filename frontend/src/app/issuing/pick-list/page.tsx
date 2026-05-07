@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { Search, Printer, CheckCircle2, MapPin, Package, ArrowRight, QrCode } from 'lucide-react'
+import { Search, Printer, CheckCircle2, MapPin, Package, ArrowRight, QrCode, Boxes, Clock3, Truck } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -302,11 +302,31 @@ export default function PickListPage() {
         </div>
 
         {/* ── Stats summary ── */}
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <StatCard label="Tổng items" value={totalItems} className="text-blue-700" bgClassName="bg-blue-50 border-blue-100" />
-          <StatCard label="Đã pick" value={pickedItems} className="text-emerald-700" bgClassName="bg-emerald-50 border-emerald-100" />
-          <StatCard label="Còn lại" value={remainingItems} className="text-amber-700" bgClassName="bg-amber-50 border-amber-100" />
-          <StatCard label="Hoàn thành" value={`${completedLists}/${pickLists.length} PL`} className="text-slate-700" bgClassName="bg-slate-100 border-slate-200" />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Tổng items"
+            value={totalItems}
+            icon={Boxes}
+            iconClassName="bg-amber-50 text-amber-700"
+          />
+          <StatCard
+            label="Đã pick"
+            value={pickedItems}
+            icon={Truck}
+            iconClassName="bg-blue-50 text-blue-700"
+          />
+          <StatCard
+            label="Còn lại"
+            value={remainingItems}
+            icon={Clock3}
+            iconClassName="bg-amber-50 text-amber-700"
+          />
+          <StatCard
+            label="Hoàn thành"
+            value={`${completedLists}/${pickLists.length} PL`}
+            icon={CheckCircle2}
+            iconClassName="bg-emerald-50 text-emerald-700"
+          />
         </div>
 
         {/* ── Main grid ── */}
@@ -673,18 +693,25 @@ export default function PickListPage() {
 function StatCard({
   label,
   value,
-  className,
-  bgClassName
+  icon: Icon,
+  iconClassName
 }: {
   label: string
   value: string | number
-  className?: string
-  bgClassName?: string
+  icon: React.ComponentType<{ className?: string }>
+  iconClassName?: string
 }) {
   return (
-    <div className={`rounded-lg p-4 border border-transparent ${bgClassName ?? 'bg-muted/40'}`}>
-      <p className="text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wide">{label}</p>
-      <p className={`text-3xl font-bold tracking-tight ${className}`}>{value}</p>
+    <div className="rounded-xl border bg-card p-4 shadow-sm">
+      <div className="flex items-center gap-3">
+        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${iconClassName ?? 'bg-muted text-muted-foreground'}`}>
+          <Icon className="h-4 w-4" />
+        </div>
+        <div>
+          <p className="text-sm text-muted-foreground">{label}</p>
+          <p className="text-2xl font-bold leading-tight text-foreground">{value}</p>
+        </div>
+      </div>
     </div>
   )
 }

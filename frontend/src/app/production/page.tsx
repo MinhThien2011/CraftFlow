@@ -125,7 +125,7 @@ export default function ProductionPage() {
                     </SelectTrigger>
                     <SelectContent>
                       {products.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
+                        <SelectItem key={p.id ?? p._id} value={p.id ?? p._id}>
                           {p.name}
                         </SelectItem>
                       ))}

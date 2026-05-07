@@ -249,11 +249,31 @@ export default function DualConfirmPage() {
       <div className="flex flex-col gap-6 p-6">
 
         {/* ── Stats ── */}
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <StatCard label="Tổng phiếu" value={total} className="text-slate-700" bg="bg-slate-100 border-slate-200" />
-          <StatCard label="Chờ xác nhận" value={pending} className="text-amber-700" bg="bg-amber-50 border-amber-100" />
-          <StatCard label="Xác nhận 1 bên" value={partial} className="text-blue-700" bg="bg-blue-50 border-blue-100" />
-          <StatCard label="Hoàn thành" value={completed} className="text-emerald-700" bg="bg-emerald-50 border-emerald-100" />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Tổng phiếu"
+            value={total}
+            icon={Package}
+            iconClassName="bg-amber-50 text-amber-700"
+          />
+          <StatCard
+            label="Chờ xác nhận"
+            value={pending}
+            icon={AlertTriangle}
+            iconClassName="bg-amber-50 text-amber-700"
+          />
+          <StatCard
+            label="Xác nhận 1 bên"
+            value={partial}
+            icon={UserCheck}
+            iconClassName="bg-blue-50 text-blue-700"
+          />
+          <StatCard
+            label="Hoàn thành"
+            value={completed}
+            icon={CheckCircle2}
+            iconClassName="bg-emerald-50 text-emerald-700"
+          />
         </div>
 
         {/* ── Info Banner ── */}
@@ -530,17 +550,24 @@ function ConfirmSideCard({
 // ─── StatCard ─────────────────────────────────────────────────────────────────
 
 function StatCard({
-  label, value, className, bg
+  label, value, icon: Icon, iconClassName
 }: {
   label: string
   value: number
-  className?: string
-  bg?: string
+  icon: React.ComponentType<{ className?: string }>
+  iconClassName?: string
 }) {
   return (
-    <div className={`rounded-lg p-4 border border-transparent ${bg ?? 'bg-muted/40'}`}>
-      <p className="text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wide">{label}</p>
-      <p className={`text-3xl font-bold tracking-tight ${className}`}>{value}</p>
+    <div className="rounded-xl border bg-card p-4 shadow-sm">
+      <div className="flex items-center gap-3">
+        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${iconClassName ?? 'bg-muted text-muted-foreground'}`}>
+          <Icon className="h-4 w-4" />
+        </div>
+        <div>
+          <p className="text-sm text-muted-foreground">{label}</p>
+          <p className="text-2xl font-bold leading-tight text-foreground">{value}</p>
+        </div>
+      </div>
     </div>
   )
 }
