@@ -1,10 +1,10 @@
 "use client"
 
-import { DashboardLayout } from "@/components/production-management/dashboard-layout"
-import { StatCard } from "@/components/production-management/stat-card"
-import { PerformanceChart } from "@/components/production-management/performance-chart"
-import { StatusChart } from "@/components/production-management/status-chart"
-import { RecentOrders } from "@/components/production-management/recent-orders"
+import { DashboardLayout } from "@/features/production/components/dashboard-layout"
+import { StatCard } from "@/features/production/components/stat-card"
+import { PerformanceChart } from "@/features/production/components/performance-chart"
+import { StatusChart } from "@/features/production/components/status-chart"
+import { RecentOrders } from "@/features/production/components/recent-orders"
 import {
   Package,
   ClipboardList,

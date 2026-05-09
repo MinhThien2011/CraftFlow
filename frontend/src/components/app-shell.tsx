@@ -4,8 +4,9 @@ import { useState, useEffect } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { AppSidebar } from "./app-sidebar"
 import { AppHeader } from "./app-header"
-import { useAuth } from "@/hooks/user"
+import { useAuth } from "@/features/auth/hooks/use-auth"
 import { Spinner } from "@/components/ui/spinner"
+import { useUIStore } from "@/hooks/use-ui-store"
 
 interface AppShellProps {
   children: React.ReactNode
@@ -14,7 +15,7 @@ interface AppShellProps {
 }
 
 export function AppShell({ children, title, subtitle }: AppShellProps) {
-  const [collapsed, setCollapsed] = useState(false)
+  const { sidebarCollapsed, toggleSidebar } = useUIStore()
   const { isAuthenticated, loading, role } = useAuth()
   const router = useRouter()
   const pathname = usePathname()
@@ -130,7 +131,7 @@ export function AppShell({ children, title, subtitle }: AppShellProps) {
 
   return (
     <div className="flex h-screen bg-background">
-      <AppSidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
+      <AppSidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
       <div className="flex flex-1 flex-col overflow-hidden">
         <AppHeader title={title} subtitle={subtitle} />
         <main className="flex-1 overflow-auto p-6">

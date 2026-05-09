@@ -7,7 +7,7 @@ import { Factory, User, Lock, Eye, EyeOff, HelpCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useAuth } from "@/hooks/user"
+import { useAuth } from "@/features/auth/hooks/use-auth"
 import { toast } from "sonner"
 
 export default function LoginPage() {

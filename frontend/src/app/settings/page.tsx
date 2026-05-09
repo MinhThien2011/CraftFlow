@@ -26,7 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useAuth } from "@/hooks/user"
+import { useAuth } from "@/features/auth/hooks/use-auth"
 import { getAvatarUrl } from "@/lib/utils"
 
 export default function SettingsPage() {
@@ -120,7 +120,7 @@ export default function SettingsPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="role">Vai trò</Label>
-                    <Input id="role" defaultValue={user?.role || ""} disabled className="uppercase" />
+                    <Input id="role" defaultValue={typeof user?.role === 'object' && user?.role !== null ? user.role.roleName : user?.role || ""} disabled className="uppercase" />
                   </div>
                 </div>
               </CardContent>

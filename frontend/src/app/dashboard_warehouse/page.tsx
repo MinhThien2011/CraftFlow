@@ -1,14 +1,14 @@
 'use client'
 
 import { AppShell } from '@/components/app-shell'
-import { WarehouseStats } from '@/components/dashboard/warehouse-stats'
-import { TopAlerts } from '@/components/dashboard/top-alerts'
-import { RecentActivity } from '@/components/dashboard/recent-activity'
+import { WarehouseStats } from '@/features/dashboard/components/warehouse-stats'
+import { TopAlerts } from '@/features/dashboard/components/top-alerts'
+import { RecentActivity } from '@/features/dashboard/components/recent-activity'
 
 export default function WarehouseDashboardPage() {
   return (
-    <AppShell 
-      title="Tổng quan Kho" 
+    <AppShell
+      title="Tổng quan Kho"
       subtitle="Dashboard Quản lý Kho - Warehouse Manager"
     >
       <div className="space-y-6">

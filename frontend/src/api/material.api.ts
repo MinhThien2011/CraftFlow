@@ -1,34 +1,5 @@
-import { MaterialListResponse, MaterialCreateResponse, Material } from "@/lib/types";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
-
-/**
- * Base fetcher function with common logic
- */
-async function fetcher<T>(
-    endpoint: string,
-    options: RequestInit = {}
-): Promise<T> {
-    const headers = {
-        "Content-Type": "application/json",
-        ...options.headers,
-    };
-
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        ...options,
-        headers,
-        credentials: 'include', // Important for cookies
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-        const errorMessage = data.message || data.data?.message || "Something went wrong";
-        throw new Error(errorMessage);
-    }
-
-    return data;
-}
+import axiosInstance from "@/lib/axios";
+import { MaterialListResponse, MaterialCreateResponse, Material, ApiResponse } from "@/lib/types";
 
 export const materialApi = {
     /**
@@ -38,18 +9,10 @@ export const materialApi = {
         limit?: number;
         page?: number;
         search?: string;
+        category?: string;
+        isActive?: boolean;
     } = {}): Promise<MaterialListResponse> => {
-        const queryParams = new URLSearchParams();
-        if (params.limit) queryParams.append("limit", params.limit.toString());
-        if (params.page) queryParams.append("page", params.page.toString());
-        if (params.search) queryParams.append("search", params.search);
-
-        const queryString = queryParams.toString();
-        const endpoint = `/materials/${queryString ? `?${queryString}` : ""}`;
-
-        return fetcher<MaterialListResponse>(endpoint, {
-            method: "GET",
-        });
+        return axiosInstance.get("/materials", { params });
     },
 
     /**
@@ -60,26 +23,34 @@ export const materialApi = {
         page?: number;
         search?: string;
     } = {}): Promise<MaterialListResponse> => {
-        const queryParams = new URLSearchParams();
-        if (params.limit) queryParams.append("limit", params.limit.toString());
-        if (params.page) queryParams.append("page", params.page.toString());
-        if (params.search) queryParams.append("search", params.search);
+        return axiosInstance.get("/materials/low-stock", { params });
+    },
 
-        const queryString = queryParams.toString();
-        const endpoint = `/materials/low-stock${queryString ? `?${queryString}` : ""}`;
-
-        return fetcher<MaterialListResponse>(endpoint, {
-            method: "GET",
-        });
+    /**
+     * Get a single material by ID
+     */
+    getMaterialById: async (id: string): Promise<ApiResponse<Material>> => {
+        return axiosInstance.get(`/materials/${id}`);
     },
 
     /**
      * Create a new material
      */
     createMaterial: async (materialData: Partial<Material>): Promise<MaterialCreateResponse> => {
-        return fetcher<MaterialCreateResponse>("/materials", {
-            method: "POST",
-            body: JSON.stringify(materialData),
-        });
+        return axiosInstance.post("/materials", materialData);
+    },
+
+    /**
+     * Update an existing material
+     */
+    updateMaterial: async (id: string, materialData: Partial<Material>): Promise<ApiResponse<Material>> => {
+        return axiosInstance.patch(`/materials/${id}`, materialData);
+    },
+
+    /**
+     * Delete a material
+     */
+    deleteMaterial: async (id: string): Promise<ApiResponse<null>> => {
+        return axiosInstance.delete(`/materials/${id}`);
     }
 };

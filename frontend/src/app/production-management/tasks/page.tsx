@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { DashboardLayout } from "@/components/production-management/dashboard-layout"
+import { DashboardLayout } from "@/features/production/components/dashboard-layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -268,11 +268,10 @@ export default function TasksPage() {
             <button
               key={filter.id}
               onClick={() => setActiveFilter(filter.id)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeFilter === filter.id
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-card text-muted-foreground hover:bg-muted"
-              }`}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeFilter === filter.id
+                ? "bg-primary text-primary-foreground"
+                : "bg-card text-muted-foreground hover:bg-muted"
+                }`}
             >
               {filter.label}
               <span className="ml-2 opacity-70">({getFilterCount(filter.id)})</span>
@@ -338,9 +337,8 @@ export default function TasksPage() {
                       <div className="flex items-center gap-3">
                         <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden max-w-[100px]">
                           <div
-                            className={`h-full rounded-full transition-all ${
-                              task.isDelayed ? "bg-[#E04E4E]" : "bg-[#4A9C6B]"
-                            }`}
+                            className={`h-full rounded-full transition-all ${task.isDelayed ? "bg-[#E04E4E]" : "bg-[#4A9C6B]"
+                              }`}
                             style={{ width: `${task.progress}%` }}
                           />
                         </div>
@@ -361,8 +359,8 @@ export default function TasksPage() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       {(task.status !== "complete" && task.isDelayed) && (
-                        <Button 
-                          variant="outline" 
+                        <Button
+                          variant="outline"
                           size="sm"
                           className="border-secondary text-secondary hover:bg-secondary/10"
                           onClick={() => openReminderDialog(task)}

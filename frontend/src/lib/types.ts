@@ -74,6 +74,8 @@ export interface Material {
   currency?: string
   currentStock: number
   threshold: number
+  minStock?: number
+  maxStock?: number
   location?: string
   supplier: Supplier
   description?: string
@@ -105,6 +107,7 @@ export interface MaterialListResponse {
   success: boolean
   message: string
   data: {
+    category: MaterialCategory[]
     materials: Material[]
     pagination: PaginationData
   }
@@ -302,16 +305,38 @@ export interface BOM {
   updatedAt: string
 }
 
-export interface InventoryStats {
-  totalItems: number
-  totalValue: number
-  lowStockCount: number
-  criticalCount?: number
+export interface InventoryOverview {
+  materials: {
+    totalItems: number
+    totalValue: number
+    totalCurrentStock: number
+    totalThreshold: number
+    lowStockItems: number
+    stockPercentage: number
+  }
+  products: {
+    totalItems: number
+    totalValue: number
+    totalCurrentStock: number
+    totalThreshold: number
+    lowStockItems: number
+    stockPercentage: number
+  }
+  orders: Record<string, number>
 }
 
-export interface InventoryOverview {
-  materials: InventoryStats
-  products: InventoryStats
+export interface DashboardStatsResponse {
+  success: boolean
+  data: {
+    overview: InventoryOverview
+    charts: {
+      inventoryTrends: any[]
+      productionTrends: any[]
+      materialConsumptionTrends: any[]
+    }
+    performance: any
+    alerts: any[]
+  }
 }
 
 

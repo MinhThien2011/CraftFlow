@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
-import { AuthProvider } from '@/hooks/user'
+import { Providers } from '@/components/providers'
 import { Toaster } from '@/components/ui/toaster'
 import './globals.css'
 
@@ -37,12 +37,12 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className="font-sans antialiased">
-        <AuthProvider>
+        <Providers>
           {children}
-        </AuthProvider>
-        <Toaster />
+          <Toaster />
+        </Providers>
         <Analytics />
       </body>
     </html>

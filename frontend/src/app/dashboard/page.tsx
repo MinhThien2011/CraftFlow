@@ -1,119 +1,142 @@
 "use client"
 
+import dynamic from "next/dynamic"
+import { useMemo } from "react"
 import {
   Package,
   Factory,
   CheckCircle,
   AlertTriangle,
-  TrendingUp,
-  TrendingDown,
 } from "lucide-react"
-import {
-  Bar,
-  BarChart,
-  Cell,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  XAxis,
-  YAxis,
-  Tooltip,
-  Legend,
-} from "recharts"
 
 import { AppShell } from "@/components/app-shell"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import {
-  dashboardStats,
-  monthlyProduction,
-  materialConsumption,
-  stockAlerts,
-  recentActivities,
-} from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
+import { Skeleton } from "@/components/ui/skeleton"
+import { useDashboardStats } from "@/features/dashboard/hooks/use-dashboard"
 
-const statCards = [
-  {
-    title: "Nguyên liệu trong kho",
-    value: dashboardStats.totalMaterials,
-    change: dashboardStats.materialsChange,
-    changePrefix: "+",
-    icon: Package,
-    iconBg: "bg-[#F5F0EB]",
-    iconColor: "text-[#8B7355]",
-  },
-  {
-    title: "Sản phẩm đang sản xuất",
-    value: dashboardStats.inProduction,
-    change: dashboardStats.productionChange,
-    changePrefix: "+",
-    icon: Factory,
-    iconBg: "bg-[#E8F5E9]",
-    iconColor: "text-[#4A7C23]",
-  },
-  {
-    title: "Sản phẩm hoàn thành",
-    value: dashboardStats.completedProducts,
-    change: dashboardStats.completedChange,
-    changePrefix: "+",
-    icon: CheckCircle,
-    iconBg: "bg-[#FFF3E0]",
-    iconColor: "text-[#D4A574]",
-  },
-  {
-    title: "Cảnh báo tồn kho",
-    value: dashboardStats.stockAlerts,
-    change: dashboardStats.alertsChange,
-    changePrefix: "",
-    icon: AlertTriangle,
-    iconBg: "bg-[#FFEBEE]",
-    iconColor: "text-[#DC3545]",
-  },
-]
+// Lazy load charts for performance
+const ProductionTrendChart = dynamic(() => import("@/features/dashboard/components/production-trend-chart"), {
+  ssr: false,
+  loading: () => <Skeleton className="h-[280px] w-full" />
+})
+
+const MaterialConsumptionChart = dynamic(() => import("@/features/dashboard/components/material-consumption-chart"), {
+  ssr: false,
+  loading: () => <Skeleton className="h-[280px] w-full" />
+})
 
 export default function DashboardPage() {
+  const { data: response, isLoading, isError } = useDashboardStats(7);
+
+  const stats = useMemo(() => response?.data?.overview, [response]);
+  const charts = useMemo(() => response?.data?.charts, [response]);
+  const alerts = useMemo(() => response?.data?.alerts || [], [response]);
+
+  const statCards = useMemo(() => [
+    {
+      title: "Nguyên liệu trong kho",
+      value: stats?.materials?.totalItems || 0,
+      change: stats?.materials?.stockPercentage ? Math.round(stats.materials.stockPercentage) : 0,
+      changeLabel: "Mức tồn kho",
+      icon: Package,
+      iconBg: "bg-blue-50",
+      iconColor: "text-blue-600",
+    },
+    {
+      title: "Đang sản xuất",
+      value: stats?.orders?.in_production || 0,
+      change: stats?.orders?.pending || 0,
+      changeLabel: "Đơn chờ",
+      icon: Factory,
+      iconBg: "bg-emerald-50",
+      iconColor: "text-emerald-600",
+    },
+    {
+      title: "Đã hoàn thành",
+      value: stats?.orders?.completed || 0,
+      change: 0,
+      changeLabel: "Tổng cộng",
+      icon: CheckCircle,
+      iconBg: "bg-amber-50",
+      iconColor: "text-amber-600",
+    },
+    {
+      title: "Cảnh báo tồn kho",
+      value: (stats?.materials?.lowStockItems || 0) + (stats?.products?.lowStockItems || 0),
+      change: stats?.products?.lowStockItems || 0,
+      changeLabel: "Sản phẩm",
+      icon: AlertTriangle,
+      iconBg: "bg-red-50",
+      iconColor: "text-red-600",
+    },
+  ], [stats]);
+
+  if (isError) {
+    return (
+      <AppShell title="Tổng quan">
+        <div className="flex flex-col items-center justify-center h-64 text-destructive gap-4">
+          <AlertTriangle className="size-12" />
+          <p>Đã xảy ra lỗi khi tải dữ liệu dashboard. Vui lòng kiểm tra kết nối server.</p>
+          <Button variant="outline" onClick={() => window.location.reload()}>Thử lại</Button>
+        </div>
+      </AppShell>
+    )
+  }
+
+  const productionData = useMemo(() => charts?.productionTrends?.map((item: any) => ({
+    name: item._id,
+    produced: item.totalProduced,
+    count: item.completedCount,
+  })) || [], [charts]);
+
+  const consumptionData = useMemo(() => charts?.materialConsumptionTrends?.map((item: any, idx: number) => ({
+    name: item.materialName,
+    value: item.totalQuantity,
+    color: ['#2D5016', '#D4A574', '#8B7355', '#4A7C23', '#DC3545'][idx % 5]
+  })) || [], [charts]);
+
   return (
     <AppShell title="Tổng quan" subtitle="Chào mừng đến với CRAFTFLOW">
       <div className="space-y-6">
         {/* Stats Cards */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {statCards.map((stat) => (
-            <Card key={stat.title}>
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">{stat.title}</p>
-                    <p className="mt-1 text-3xl font-bold text-foreground">
-                      {stat.value}
-                    </p>
-                    <p
+          {isLoading ? (
+            [1, 2, 3, 4].map(i => <Skeleton key={i} className="h-32 w-full" />)
+          ) : (
+            statCards.map((stat) => (
+              <Card key={stat.title}>
+                <CardContent className="p-5">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">{stat.title}</p>
+                      <p className="mt-1 text-3xl font-bold text-foreground">
+                        {stat.value}
+                      </p>
+                      <div className="mt-2 flex items-center text-xs font-medium text-muted-foreground">
+                        <span className="mr-1">{stat.changeLabel}:</span>
+                        <span className={cn(
+                          "font-bold",
+                          stat.title === "Cảnh báo tồn kho" ? "text-red-600" : "text-emerald-600"
+                        )}>
+                          {stat.change}{stat.title === "Nguyên liệu trong kho" ? "%" : ""}
+                        </span>
+                      </div>
+                    </div>
+                    <div
                       className={cn(
-                        "mt-1 flex items-center text-sm font-medium",
-                        stat.change >= 0 ? "text-[#4A7C23]" : "text-[#DC3545]"
+                        "flex h-12 w-12 items-center justify-center rounded-lg",
+                        stat.iconBg
                       )}
                     >
-                      {stat.change >= 0 ? (
-                        <TrendingUp className="mr-1 h-4 w-4" />
-                      ) : (
-                        <TrendingDown className="mr-1 h-4 w-4" />
-                      )}
-                      {stat.changePrefix}
-                      {Math.abs(stat.change)}%
-                    </p>
+                      <stat.icon className={cn("h-6 w-6", stat.iconColor)} />
+                    </div>
                   </div>
-                  <div
-                    className={cn(
-                      "flex h-12 w-12 items-center justify-center rounded-lg",
-                      stat.iconBg
-                    )}
-                  >
-                    <stat.icon className={cn("h-6 w-6", stat.iconColor)} />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            ))
+          )}
         </div>
 
         {/* Charts Row */}
@@ -122,44 +145,15 @@ export default function DashboardPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base font-semibold">
-                Tổng quan sản xuất
+                Sản lượng sản xuất (7 ngày qua)
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={monthlyProduction} barGap={8}>
-                  <XAxis
-                    dataKey="month"
-                    tickLine={false}
-                    axisLine={false}
-                    tick={{ fill: "#7A7A7A", fontSize: 12 }}
-                  />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    tick={{ fill: "#7A7A7A", fontSize: 12 }}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#fff",
-                      border: "1px solid #E5DDD3",
-                      borderRadius: "8px",
-                    }}
-                  />
-                  <Bar
-                    dataKey="produced"
-                    fill="#2D5016"
-                    radius={[4, 4, 0, 0]}
-                    name="Sản xuất"
-                  />
-                  <Bar
-                    dataKey="target"
-                    fill="#D4A574"
-                    radius={[4, 4, 0, 0]}
-                    name="Mục tiêu"
-                  />
-                </BarChart>
-              </ResponsiveContainer>
+              {isLoading ? (
+                <Skeleton className="h-[280px] w-full" />
+              ) : (
+                <ProductionTrendChart data={productionData} />
+              )}
             </CardContent>
           </Card>
 
@@ -167,120 +161,79 @@ export default function DashboardPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base font-semibold">
-                Tiêu hao nguyên liệu
+                Tiêu hao nguyên liệu chính
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={280}>
-                <PieChart>
-                  <Pie
-                    data={materialConsumption}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
-                    paddingAngle={2}
-                    dataKey="value"
-                    nameKey="name"
-                    label={({ name, value }) => `${name} ${value}%`}
-                    labelLine={true}
-                  >
-                    {materialConsumption.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(value) => [value ? `${value}%` : "0%", "Tỷ lệ"]}
-                    contentStyle={{
-                      backgroundColor: "#fff",
-                      border: "1px solid #E5DDD3",
-                      borderRadius: "8px",
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
+              {isLoading ? (
+                <Skeleton className="h-[280px] w-full" />
+              ) : (
+                <MaterialConsumptionChart data={consumptionData} />
+              )}
             </CardContent>
           </Card>
         </div>
 
-        {/* Bottom Row */}
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Stock Alerts */}
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-[#FFA500]" />
-                <CardTitle className="text-base font-semibold">
-                  Cảnh báo sắp hết hàng
-                </CardTitle>
-              </div>
+        {/* Alerts & Activity Row */}
+        <div className="grid gap-6 lg:grid-cols-3">
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-base font-semibold">Cảnh báo tồn kho thấp</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {stockAlerts.slice(0, 3).map((alert) => (
-                <div
-                  key={alert.id}
-                  className="flex items-center justify-between rounded-lg bg-muted/50 p-3"
-                >
-                  <div>
-                    <p className="font-medium text-foreground">
-                      {alert.materialName}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      Hiện có: {alert.currentStock} {alert.unit} / Tối thiểu:{" "}
-                      {alert.minStock} {alert.unit}
-                    </p>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={cn(
-                      "text-xs",
-                      alert.status === "Nguy cấp"
-                        ? "border-[#DC3545] text-[#DC3545] hover:bg-[#DC3545]/10"
-                        : "border-[#FFA500] text-[#FFA500] hover:bg-[#FFA500]/10"
-                    )}
-                  >
-                    {alert.status === "Nguy cấp" ? "Cấp bách" : "Cảnh báo"}
-                  </Button>
+            <CardContent>
+              {isLoading ? (
+                <div className="space-y-2">
+                  {[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
                 </div>
-              ))}
+              ) : alerts.length > 0 ? (
+                <div className="divide-y">
+                  {alerts.map((alert: any) => (
+                    <div key={alert.id} className="flex items-center justify-between py-3">
+                      <div className="flex items-center gap-3">
+                        <div className={cn(
+                          "p-2 rounded-full",
+                          alert.status === "Nguy cấp" ? "bg-red-50 text-red-600" : "bg-amber-50 text-amber-600"
+                        )}>
+                          <AlertTriangle className="size-4" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">{alert.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Hiện có: {alert.currentStock} {alert.unit} / Định mức: {alert.minStock} {alert.unit}
+                          </p>
+                        </div>
+                      </div>
+                      <span className={cn(
+                        "text-xs font-bold px-2 py-1 rounded-full",
+                        alert.status === "Nguy cấp" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"
+                      )}>
+                        {alert.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-8 text-center text-muted-foreground">
+                  Hiện không có cảnh báo tồn kho nào.
+                </div>
+              )}
             </CardContent>
           </Card>
 
-          {/* Recent Activity */}
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold">
-                Hoạt động gần đây
-              </CardTitle>
+            <CardHeader>
+              <CardTitle className="text-base font-semibold">Hành động nhanh</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {recentActivities.slice(0, 5).map((activity) => (
-                  <div key={activity.id} className="flex items-start gap-3">
-                    <div
-                      className={cn(
-                        "mt-1 h-2 w-2 rounded-full",
-                        activity.type === "production" && "bg-[#4A7C23]",
-                        activity.type === "import" && "bg-[#8B7355]",
-                        activity.type === "alert" && "bg-[#FFA500]",
-                        activity.type === "product" && "bg-[#17A2B8]"
-                      )}
-                    />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-foreground">
-                        {activity.title}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {activity.description}
-                      </p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        {activity.timestamp}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+            <CardContent className="grid gap-3">
+              <Button className="w-full justify-start" variant="outline">
+                <Package className="mr-2 size-4" /> Nhập kho nguyên liệu
+              </Button>
+              <Button className="w-full justify-start" variant="outline">
+                <Factory className="mr-2 size-4" /> Tạo lệnh sản xuất
+              </Button>
+              <Button className="w-full justify-start" variant="outline">
+                <CheckCircle className="mr-2 size-4" /> Kiểm kê kho
+              </Button>
             </CardContent>
           </Card>
         </div>

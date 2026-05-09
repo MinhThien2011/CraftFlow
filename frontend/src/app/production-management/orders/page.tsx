@@ -1,67 +1,59 @@
-"use client"
+'use client'
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import { DashboardLayout } from "@/components/production-management/dashboard-layout"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Card } from "@/components/ui/card"
-import { Textarea } from "@/components/ui/textarea"
-import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import {
-  Plus,
-  Search,
-} from "lucide-react"
-import Link from "next/link"
-import { productionOrders } from "@/lib/production-management/orders-data"
+import { DashboardLayout } from '@/features/production/components/dashboard-layout'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Card } from '@/components/ui/card'
+import { Plus, Search, AlertTriangle } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { useProductionOrdersModule } from '@/features/production/hooks/use-production-orders'
+import { OrdersTable } from '@/features/production/components/orders-table'
+import { CreateOrderModal } from '@/features/production/components/create-order-modal'
 
 const filters = [
-  { id: "all", label: "Tất cả", count: 85 },
-  { id: "in-progress", label: "Đang thực hiện", count: 25 },
-  { id: "complete", label: "Hoàn thành", count: 45 },
-  { id: "cancelled", label: "Đã hủy", count: 3 },
+  { id: "all", label: "Tất cả" },
+  { id: "pending", label: "Chờ xử lý" },
+  { id: "in_production", label: "Đang thực hiện" },
+  { id: "completed", label: "Hoàn thành" },
+  { id: "cancelled", label: "Đã hủy" },
 ]
-
-const statusConfig = {
-  "in-progress": { label: "Đang thực hiện", color: "bg-[#2B8BE8] text-white" },
-  complete: { label: "Hoàn thành", color: "bg-[#4A9C6B] text-white" },
-  cancelled: { label: "Đã hủy", color: "bg-[#E04E4E] text-white" },
-}
 
 export default function OrdersPage() {
   const router = useRouter()
-  const [activeFilter, setActiveFilter] = useState("all")
-  const [searchQuery, setSearchQuery] = useState("")
-  const [isCreateOpen, setIsCreateOpen] = useState(false)
-  const [selectedProduct, setSelectedProduct] = useState("")
-  const [quantity, setQuantity] = useState("")
-  const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0,10))
-  const [deadline, setDeadline] = useState("")
-  const [note, setNote] = useState("")
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const orders = productionOrders
+  const {
+    activeFilter,
+    setActiveFilter,
+    searchQuery,
+    setSearchQuery,
+    isCreateOpen,
+    setIsCreateOpen,
+    selectedProduct,
+    setSelectedProduct,
+    quantity,
+    setQuantity,
+    deadline,
+    setDeadline,
+    note,
+    setNote,
+    isLoading,
+    isError,
+    orders,
+    products,
+    createMutation,
+    handleCreateOrder,
+    refetch
+  } = useProductionOrdersModule()
 
-  const filteredOrders = orders.filter((order) => {
-    const matchesFilter = activeFilter === "all" || order.status === activeFilter
-    const matchesSearch =
-      order.product.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.id.toLowerCase().includes(searchQuery.toLowerCase())
-    return matchesFilter && matchesSearch
-  })
-
-  // Calculate dynamic counts based on actual data
-  const getFilterCount = (filterId: string) => {
-    if (filterId === "all") return orders.length
-    return productionOrders.filter(o => o.status === filterId).length
+  if (isError) {
+    return (
+      <DashboardLayout title="Đơn sản xuất">
+        <div className="flex flex-col items-center justify-center h-64 text-destructive gap-4">
+          <AlertTriangle className="size-12" />
+          <p>Đã xảy ra lỗi khi tải danh sách đơn hàng.</p>
+          <Button variant="outline" onClick={() => refetch()}>Thử lại</Button>
+        </div>
+      </DashboardLayout>
+    )
   }
 
   return (
@@ -90,141 +82,41 @@ export default function OrdersPage() {
             <button
               key={filter.id}
               onClick={() => setActiveFilter(filter.id)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeFilter === filter.id
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeFilter === filter.id
                   ? "bg-primary text-primary-foreground"
                   : "bg-card text-muted-foreground hover:bg-muted"
-              }`}
+                }`}
             >
               {filter.label}
-              <span className="ml-2 opacity-70">({getFilterCount(filter.id)})</span>
             </button>
           ))}
         </div>
 
         {/* Orders Table */}
         <Card className="bg-card border-border overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border bg-muted/50">
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase text-muted-foreground">
-                    Mã đơn
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase text-muted-foreground">
-                    Sản phẩm
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase text-muted-foreground">
-                    Số lượng
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase text-muted-foreground">
-                    Tiến độ
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase text-muted-foreground">
-                    Trạng thái
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase text-muted-foreground">
-                    Hạn hoàn thành
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredOrders.map((order) => (
-                  <tr
-                    key={order.id}
-                    onClick={() => router.push(`/production-management/orders/${order.id}`)}
-                    className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
-                  >
-                    <td className="px-6 py-4">
-                      <span className="font-medium text-primary">
-                        {order.id}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-card-foreground">{order.product}</td>
-                    <td className="px-6 py-4 text-card-foreground">{order.quantity}</td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden max-w-[100px]">
-                          <div
-                            className="h-full bg-[#4A9C6B] rounded-full transition-all"
-                            style={{ width: `${order.progress}%` }}
-                          />
-                        </div>
-                        <span className="text-sm text-muted-foreground w-10">
-                          {order.progress}%
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <Badge
-                        className={`${statusConfig[order.status as keyof typeof statusConfig].color} border-0`}
-                      >
-                        {statusConfig[order.status as keyof typeof statusConfig].label}
-                      </Badge>
-                    </td>
-                    <td className="px-6 py-4 text-card-foreground">{order.deadline}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <OrdersTable
+            orders={orders}
+            isLoading={isLoading}
+            onOrderClick={(id) => router.push(`/production-management/orders/${id}`)}
+          />
         </Card>
       </div>
-      {/* Create Order Modal */}
-      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold">Tạo đơn sản xuất mới</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="product">Chọn sản phẩm</Label>
-              <Select value={selectedProduct} onValueChange={setSelectedProduct}>
-                <SelectTrigger id="product">
-                  <SelectValue placeholder="Chọn sản phẩm..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="SP001">Giỏ tre đan tay</SelectItem>
-                  <SelectItem value="SP002">Đèn mây thủ công</SelectItem>
-                  <SelectItem value="SP003">Túi cói thêu hoa</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="qty">Số lượng</Label>
-              <Input id="qty" type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="start">Ngày bắt đầu</Label>
-                <Input id="start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="deadline">Hạn hoàn thành</Label>
-                <Input id="deadline" type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="note">Ghi chú</Label>
-              <Textarea id="note" value={note} onChange={(e) => setNote(e.target.value)} rows={3} />
-            </div>
-            <div className="flex justify-end gap-3 pt-2">
-              <Button variant="outline" onClick={() => setIsCreateOpen(false)}>Hủy</Button>
-              <Button onClick={async () => {
-                if (!selectedProduct) { alert('Vui lòng chọn sản phẩm'); return }
-                if (!quantity || Number(quantity) <= 0) { alert('Số lượng không hợp lệ'); return }
-                setIsSubmitting(true)
-                await new Promise(r => setTimeout(r, 800))
-                setIsSubmitting(false)
-                setIsCreateOpen(false)
-                router.push('/production-management/orders')
-              }} disabled={isSubmitting} className="bg-primary text-primary-foreground">{isSubmitting ? 'Đang tạo...' : 'Tạo đơn'}</Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+
+      <CreateOrderModal
+        isOpen={isCreateOpen}
+        onOpenChange={setIsCreateOpen}
+        products={products}
+        selectedProduct={selectedProduct}
+        onProductChange={setSelectedProduct}
+        quantity={quantity}
+        onQuantityChange={setQuantity}
+        deadline={deadline}
+        onDeadlineChange={setDeadline}
+        note={note}
+        onNoteChange={setNote}
+        onSubmit={handleCreateOrder}
+        isSubmitting={createMutation.isPending}
+      />
     </DashboardLayout>
   )
 }
-
-

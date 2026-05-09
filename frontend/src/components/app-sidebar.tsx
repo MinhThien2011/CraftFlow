@@ -1,7 +1,9 @@
 "use client"
 
+import Image from "next/image"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
+import { usePrefetch } from "@/hooks/use-prefetch"
 import {
   LayoutDashboard,
   Package,
@@ -34,7 +36,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
-import { useAuth } from "@/hooks/user"
+import { useAuth } from "@/features/auth/hooks/use-auth"
 import { getAvatarUrl } from "@/lib/utils"
 
 interface AppSidebarProps {
@@ -138,12 +140,13 @@ const warehouseGroupedNavigation = [
 
 export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
   const pathname = usePathname()
-  const { user, role } = useAuth()
+  const { user, isAdmin, isKhoManager, isProductionManager, role } = useAuth()
+  const prefetch = usePrefetch()
 
   const filteredNavigation = navigation.filter(item =>
     !item.roles || item.roles.includes(role)
   )
-  const isKhoRole = role === "kho_manager"
+  const isKhoRole = isKhoManager || isAdmin
 
   return (
     <aside
@@ -174,9 +177,14 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
                 collapsed && "justify-center"
               )}
             >
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted overflow-hidden">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted overflow-hidden relative">
                 {getAvatarUrl(user?.avatar) ? (
-                  <img src={getAvatarUrl(user?.avatar)} alt={user?.fullName} className="h-full w-full object-cover" />
+                  <Image
+                    src={getAvatarUrl(user?.avatar)!}
+                    alt={user?.fullName || "User avatar"}
+                    fill
+                    className="object-cover"
+                  />
                 ) : (
                   <User className="h-5 w-5 text-muted-foreground" />
                 )}
@@ -300,12 +308,13 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
               (item.href !== "/" && pathname.startsWith(`${item.href}/`))
             return (
               <Link
-                key={item.name}
+                key={item.href}
                 href={item.href}
+                onMouseEnter={() => prefetch(item.href)}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
                   isActive
-                    ? "bg-primary text-primary-foreground"
+                    ? "bg-primary text-primary-foreground shadow-sm"
                     : "text-sidebar-foreground hover:bg-sidebar-accent",
                   collapsed && "justify-center px-2"
                 )}

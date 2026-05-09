@@ -1,31 +1,12 @@
-import { ApiResponse, Material, Product, PaginationData, InventoryHistoryResponse, InventoryOverview } from "@/lib/types";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
-
-async function fetcher<T>(
-    endpoint: string,
-    options: RequestInit = {}
-): Promise<T> {
-    const headers = {
-        "Content-Type": "application/json",
-        ...options.headers,
-    };
-
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        ...options,
-        headers,
-        credentials: 'include',
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-        const errorMessage = data.message || data.data?.message || "Something went wrong";
-        throw new Error(errorMessage);
-    }
-
-    return data;
-}
+import axiosInstance from "@/lib/axios";
+import { 
+    ApiResponse, 
+    Material, 
+    Product, 
+    PaginationData, 
+    InventoryHistoryResponse, 
+    InventoryOverview 
+} from "@/lib/types";
 
 export interface InventoryOverviewResponse {
     status: string;
@@ -52,63 +33,58 @@ export interface ProductStockResponse {
 }
 
 export const inventoryApi = {
+    /**
+     * Get inventory overview statistics
+     */
     getOverview: async (): Promise<InventoryOverviewResponse> => {
-        return fetcher<InventoryOverviewResponse>("/inventory/overview");
+        return axiosInstance.get("/inventory/overview");
     },
 
+    /**
+     * Get material stock with filtering and pagination
+     */
     getMaterialsStock: async (params: {
         search?: string;
         category?: string;
         page?: number;
         limit?: number;
     } = {}): Promise<MaterialStockResponse> => {
-        const queryParams = new URLSearchParams();
-        if (params.search) queryParams.append("search", params.search);
-        if (params.category && params.category !== 'All') queryParams.append("category", params.category);
-        if (params.page) queryParams.append("page", params.page.toString());
-        if (params.limit) queryParams.append("limit", params.limit.toString());
-
-        return fetcher<MaterialStockResponse>(`/inventory/materials?${queryParams.toString()}`);
+        return axiosInstance.get("/inventory/materials", { params });
     },
 
+    /**
+     * Get product stock with filtering and pagination
+     */
     getProductsStock: async (params: {
         search?: string;
         category?: string;
         page?: number;
         limit?: number;
     } = {}): Promise<ProductStockResponse> => {
-        const queryParams = new URLSearchParams();
-        if (params.search) queryParams.append("search", params.search);
-        if (params.category && params.category !== 'All') queryParams.append("category", params.category);
-        if (params.page) queryParams.append("page", params.page.toString());
-        if (params.limit) queryParams.append("limit", params.limit.toString());
-
-        return fetcher<ProductStockResponse>(`/inventory/products?${queryParams.toString()}`);
+        return axiosInstance.get("/inventory/products", { params });
     },
 
+    /**
+     * Get material movement history
+     */
     getMaterialHistory: async (params: {
         page?: number;
         limit?: number;
         direction?: 'in' | 'out';
     } = {}): Promise<InventoryHistoryResponse> => {
-        const queryParams = new URLSearchParams();
-        if (params.page) queryParams.append("page", params.page.toString());
-        if (params.limit) queryParams.append("limit", params.limit.toString());
-        if (params.direction) queryParams.append("direction", params.direction);
-
-        return fetcher<InventoryHistoryResponse>(`/materials/history?${queryParams.toString()}`);
+        return axiosInstance.get("/materials/history", { params });
     },
 
-    getProductHistory: async (params: {
-        page?: number;
-        limit?: number;
-        direction?: 'in' | 'out';
-    } = {}): Promise<InventoryHistoryResponse> => {
-        const queryParams = new URLSearchParams();
-        if (params.page) queryParams.append("page", params.page.toString());
-        if (params.limit) queryParams.append("limit", params.limit.toString());
-        if (params.direction) queryParams.append("direction", params.direction);
-
-        return fetcher<InventoryHistoryResponse>(`/products/history?${queryParams.toString()}`);
+    /**
+     * Create a manual stock adjustment
+     */
+    adjustStock: async (data: {
+        type: 'material' | 'product';
+        id: string;
+        quantity: number;
+        reason: string;
+        note?: string;
+    }): Promise<ApiResponse<any>> => {
+        return axiosInstance.post("/inventory/adjust", data);
     }
 };
