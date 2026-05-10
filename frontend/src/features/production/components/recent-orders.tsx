@@ -5,57 +5,21 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ArrowRight } from "lucide-react"
 import Link from "next/link"
+import { ProductionOrder } from "@/api/production.api"
+import { format } from "date-fns"
 
-const orders = [
-  {
-    id: "PO-2024-001",
-    product: "Giỏ tre đan tay",
-    quantity: 150,
-    status: "in-progress",
-    deadline: "25/04/2026",
-    progress: 65,
-  },
-  {
-    id: "PO-2024-002",
-    product: "Đèn mây thủ công",
-    quantity: 80,
-    status: "in-progress",
-    deadline: "28/04/2026",
-    progress: 12,
-  },
-  {
-    id: "PO-2024-003",
-    product: "Túi cói thêu hoa",
-    quantity: 200,
-    status: "complete",
-    deadline: "20/04/2026",
-    progress: 100,
-  },
-  {
-    id: "PO-2024-004",
-    product: "Khay gỗ chạm khắc",
-    quantity: 50,
-    status: "in-progress",
-    deadline: "30/04/2026",
-    progress: 40,
-  },
-  {
-    id: "PO-2024-005",
-    product: "Lọ hoa gốm sứ",
-    quantity: 100,
-    status: "cancelled",
-    deadline: "22/04/2026",
-    progress: 0,
-  },
-]
-
-const statusConfig = {
-  "in-progress": { label: "Đang thực hiện", color: "bg-[#2B8BE8] text-white" },
-  complete: { label: "Hoàn thành", color: "bg-[#4A9C6B] text-white" },
-  cancelled: { label: "Đã hủy", color: "bg-[#E04E4E] text-white" },
+interface RecentOrdersProps {
+  orders: ProductionOrder[]
 }
 
-export function RecentOrders() {
+const statusConfig: Record<string, { label: string; color: string }> = {
+  "in_production": { label: "Đang sản xuất", color: "bg-[#2B8BE8] text-white" },
+  "completed": { label: "Hoàn thành", color: "bg-[#4A9C6B] text-white" },
+  "cancelled": { label: "Đã hủy", color: "bg-[#E04E4E] text-white" },
+  "pending": { label: "Chờ xử lý", color: "bg-amber-500 text-white" },
+}
+
+export function RecentOrders({ orders }: RecentOrdersProps) {
   return (
     <Card className="bg-card border-border">
       <div className="flex items-center justify-between p-6 border-b border-border">
@@ -83,9 +47,6 @@ export function RecentOrders() {
                 Số lượng
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
-                Tiến độ
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
                 Trạng thái
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
@@ -94,42 +55,48 @@ export function RecentOrders() {
             </tr>
           </thead>
           <tbody>
-            {orders.slice(0, 4).map((order) => (
-              <tr
-                key={order.id}
-                className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
-              >
-                <td className="px-6 py-4">
-                  <Link
-                    href={`/production-management/orders/${order.id}`}
-                    className="font-medium text-primary hover:underline"
-                  >
-                    {order.id}
-                  </Link>
+            {orders.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-6 py-8 text-center text-muted-foreground">
+                  Không có đơn sản xuất nào gần đây
                 </td>
-                <td className="px-6 py-4 text-card-foreground">{order.product}</td>
-                <td className="px-6 py-4 text-card-foreground">{order.quantity}</td>
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden max-w-[100px]">
-                      <div
-                        className="h-full bg-[#4A9C6B] rounded-full transition-all"
-                        style={{ width: `${order.progress}%` }}
-                      />
-                    </div>
-                    <span className="text-sm text-muted-foreground w-10">{order.progress}%</span>
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <Badge
-                    className={`${statusConfig[order.status as keyof typeof statusConfig].color} border-0`}
-                  >
-                    {statusConfig[order.status as keyof typeof statusConfig].label}
-                  </Badge>
-                </td>
-                <td className="px-6 py-4 text-card-foreground">{order.deadline}</td>
               </tr>
-            ))}
+            ) : (
+              orders.map((order) => {
+                const mainProduct = order.products[0];
+                const productDisplay = mainProduct
+                  ? `${mainProduct.product || (mainProduct.product as any)?.name}${order.products.length > 1 ? ` (+${order.products.length - 1})` : ''}`
+                  : 'N/A';
+
+                const totalQuantity = order.products.reduce((sum, p) => sum + p.quantity, 0);
+                const config = statusConfig[order.status] || { label: order.status, color: "bg-gray-500 text-white" };
+
+                return (
+                  <tr
+                    key={order._id}
+                    className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
+                  >
+                    <td className="px-6 py-4 text-sm font-medium text-foreground">
+                      {order.orderCode}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-muted-foreground">
+                      {productDisplay}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-muted-foreground">
+                      {totalQuantity}
+                    </td>
+                    <td className="px-6 py-4">
+                      <Badge className={config.color}>
+                        {config.label}
+                      </Badge>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-muted-foreground">
+                      {order.deadline ? format(new Date(order.deadline), "dd/MM/yyyy") : "N/A"}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
       </div>

@@ -17,7 +17,7 @@ import { generateNormalizedCacheKey } from '../utils/serviceHelper.js';
  */
 export const getAllProducts = async (req, res) => {
   try {
-    const allowedParams = ['page', 'limit', 'search', 'category', 'status', 'sortBy', 'order'];
+    const allowedParams = ['page', 'limit', 'search', 'category', 'isActive', 'sortBy', 'sortOrder'];
     const cacheKey = generateNormalizedCacheKey('product:list', req.query, allowedParams);
 
     // 1. Try Redis cache

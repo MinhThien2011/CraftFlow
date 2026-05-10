@@ -2,7 +2,7 @@
 
 import Image from "next/image"
 import { useRouter } from "next/navigation"
-import { LogOut, Moon, Sun, User, Menu } from "lucide-react"
+import { LogOut, User, Menu, Bell } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -16,6 +16,7 @@ import { useAuth } from "@/features/auth/hooks/use-auth"
 import { toast } from "sonner"
 import { getAvatarUrl } from "@/lib/utils"
 import { useUIStore } from "@/hooks/use-ui-store"
+import { ModeToggle } from "./mode-toggle"
 
 interface AppHeaderProps {
   title: string
@@ -24,7 +25,7 @@ interface AppHeaderProps {
 
 export function AppHeader({ title, subtitle }: AppHeaderProps) {
   const router = useRouter()
-  const { user, logout } = useAuth()
+  const { user, logout, role } = useAuth()
   const { toggleSidebar } = useUIStore()
 
   const handleLogout = async () => {
@@ -52,10 +53,16 @@ export function AppHeader({ title, subtitle }: AppHeaderProps) {
       </div>
 
       <div className="flex items-center gap-3">
+        <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full relative">
+          <Bell className="h-5 w-5 text-muted-foreground" />
+          <span className="absolute top-2 right-2 flex h-2 w-2 rounded-full bg-destructive"></span>
+        </Button>
+        <ModeToggle />
+        <div className="h-6 w-px bg-border mx-1 hidden sm:block"></div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted overflow-hidden relative">
+            <Button variant="ghost" size="sm" className="gap-2 px-2 hover:bg-accent rounded-full">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted overflow-hidden relative border border-border">
                 {getAvatarUrl(user?.avatar) ? (
                   <Image
                     src={getAvatarUrl(user?.avatar)!}
@@ -67,7 +74,10 @@ export function AppHeader({ title, subtitle }: AppHeaderProps) {
                   <User className="h-4 w-4" />
                 )}
               </div>
-              <span className="hidden md:inline">{user?.fullName || user?.username || "Người dùng"}</span>
+              <div className="hidden md:flex flex-col items-start text-left leading-tight">
+                <span className="text-sm font-medium text-foreground">{user?.fullName || user?.username || "Người dùng"}</span>
+                <span className="text-xs text-muted-foreground capitalize">{role.replace("_", " ")}</span>
+              </div>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">

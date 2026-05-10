@@ -14,6 +14,7 @@ export function useProducts(params: any = {}) {
     return useQuery({
         queryKey: productKeys.list(params),
         queryFn: () => productApi.getProducts(params),
+        staleTime: 1000 * 60 * 5, // 5 minutes
     });
 }
 
@@ -22,12 +23,53 @@ export function useProduct(id: string) {
         queryKey: productKeys.detail(id),
         queryFn: () => productApi.getProductById(id),
         enabled: !!id,
+        staleTime: 1000 * 60 * 10, // 10 minutes
+    });
+}
+
+export function useCreateProduct() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (formData: FormData) => productApi.createProduct(formData),
+        onSuccess: (response) => {
+            if (response.status === 'success') {
+                queryClient.invalidateQueries({ queryKey: productKeys.lists() });
+                toast.success("Tạo sản phẩm thành công");
+            } else {
+                toast.error(response.message || "Tạo sản phẩm thất bại");
+            }
+        },
+        onError: (error: any) => {
+            toast.error(error.response?.data?.message || error.message || "Đã xảy ra lỗi");
+        }
+    });
+}
+
+export function useUpdateProduct() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ id, formData }: { id: string, formData: FormData }) =>
+            productApi.updateProduct(id, formData),
+        onSuccess: (response, variables) => {
+            if (response.status === 'success') {
+                queryClient.invalidateQueries({ queryKey: productKeys.lists() });
+                queryClient.invalidateQueries({ queryKey: productKeys.detail(variables.id) });
+                toast.success("Cập nhật sản phẩm thành công");
+            } else {
+                toast.error(response.message || "Cập nhật sản phẩm thất bại");
+            }
+        },
+        onError: (error: any) => {
+            toast.error(error.response?.data?.message || error.message || "Đã xảy ra lỗi");
+        }
     });
 }
 
 export function useDeleteProduct() {
     const queryClient = useQueryClient();
-    
+
     return useMutation({
         mutationFn: (id: string) => productApi.deleteProduct(id),
         onSuccess: () => {

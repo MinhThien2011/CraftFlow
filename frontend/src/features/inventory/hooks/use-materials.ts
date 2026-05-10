@@ -21,6 +21,7 @@ export function useMaterials(params: {
     return useQuery({
         queryKey: materialKeys.list(params),
         queryFn: () => materialApi.getMaterials(params),
+        staleTime: 1000 * 60 * 5, // 5 minutes
     });
 }
 
@@ -29,6 +30,7 @@ export function useMaterial(id: string) {
         queryKey: materialKeys.detail(id),
         queryFn: () => materialApi.getMaterialById(id),
         enabled: !!id,
+        staleTime: 1000 * 60 * 10, // 10 minutes
     });
 }
 

@@ -14,6 +14,7 @@ export function useProductionOrders(params: any = {}) {
     return useQuery({
         queryKey: productionKeys.orders(params),
         queryFn: () => productionApi.getOrders(params),
+        staleTime: 1000 * 60 * 2, // 2 minutes
     });
 }
 
@@ -22,6 +23,7 @@ export function useProductionOrder(id: string) {
         queryKey: productionKeys.order(id),
         queryFn: () => productionApi.getOrderById(id),
         enabled: !!id,
+        staleTime: 1000 * 60 * 5, // 5 minutes
     });
 }
 

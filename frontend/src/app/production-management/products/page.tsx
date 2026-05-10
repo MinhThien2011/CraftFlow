@@ -6,75 +6,11 @@ import { DashboardLayout } from "@/features/production/components/dashboard-layo
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
-import { Plus, Search } from "lucide-react"
+import { Plus, Search, Loader2 } from "lucide-react"
 import Link from "next/link"
-
-const products = [
-  {
-    id: "TT-001",
-    name: "Túi tote vải canvas",
-    description: "Túi tote thêu tay họa tiết hoa sen",
-    bomItems: 4,
-    status: "active",
-    updatedAt: "2026-04-15",
-  },
-  {
-    id: "DL-002",
-    name: "Đèn lồng tre đan",
-    description: "Đèn lồng tre đan thủ công, có đế gỗ",
-    bomItems: 5,
-    status: "active",
-    updatedAt: "2026-04-12",
-  },
-  {
-    id: "KM-003",
-    name: "Khay mây đựng trái cây",
-    description: "Khay mây tròn đường kính 30cm",
-    bomItems: 3,
-    status: "inactive",
-    updatedAt: "2026-04-10",
-  },
-  {
-    id: "HG-004",
-    name: "Hộp gỗ khắc",
-    description: "Hộp đựng trang sức gỗ thông khắc tên",
-    bomItems: 4,
-    status: "active",
-    updatedAt: "2026-04-16",
-  },
-  {
-    id: "VG-005",
-    name: "Vòng tay handmade",
-    description: "Vòng tay handmade thiết kế thủ công",
-    bomItems: 3,
-    status: "active",
-    updatedAt: "2026-04-08",
-  },
-  {
-    id: "TT-006",
-    name: "Tranh thêu tay phong cảnh",
-    description: "Tranh thêu chữ thập khung gỗ 40x50cm",
-    bomItems: 6,
-    status: "inactive",
-    updatedAt: "2026-04-05",
-  },
-  {
-    id: "GT-007",
-    name: "Giỏ tre đựng đồ",
-    description: "Giỏ tre có nắp đậy, quai xách",
-    bomItems: 3,
-    status: "active",
-    updatedAt: "2026-04-14",
-  },
-  {
-    id: "NL-008",
-    name: "Nến thơm handmade",
-    description: "Nến đậu nành hương lavender, ly thủy tinh",
-    bomItems: 5,
-    status: "inactive",
-    updatedAt: "2026-04-11",
-  },
-]
+import Image from "next/image"
+import { useProducts } from "@/features/production/hooks/use-products"
+import { format } from "date-fns"
 
 const statusConfig = {
   active: { label: "Đang hoạt động", bgColor: "bg-[#E8F5EE]", textColor: "text-[#2D6A4F]", dotColor: "bg-[#4A9C6B]" },
@@ -85,25 +21,22 @@ export default function ProductsPage() {
   const router = useRouter()
   const [activeFilter, setActiveFilter] = useState("all")
   const [searchQuery, setSearchQuery] = useState("")
+  const [page, setPage] = useState(1)
 
-  const filteredProducts = products.filter((product) => {
-    const matchesFilter = activeFilter === "all" || product.status === activeFilter
-    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      product.id.toLowerCase().includes(searchQuery.toLowerCase())
-    return matchesFilter && matchesSearch
+  const { data: response, isLoading } = useProducts({
+    search: searchQuery,
+    isActive: activeFilter === "all" ? "all" : activeFilter === "active" ? "true" : "false",
+    page,
+    limit: 10
   })
 
-  // Tính số lượng cho từng trạng thái
-  const counts = {
-    all: products.length,
-    active: products.filter(p => p.status === "active").length,
-    inactive: products.filter(p => p.status === "inactive").length,
-  }
+  const products = response?.data?.items || (response?.data as any)?.products || []
+  const pagination = response?.data?.pagination
 
   const filters = [
-    { id: "all", label: "Tất cả", count: counts.all },
-    { id: "active", label: "Đang hoạt động", count: counts.active },
-    { id: "inactive", label: "Không hoạt động", count: counts.inactive },
+    { id: "all", label: "Tất cả", count: activeFilter === "all" ? pagination?.total : undefined },
+    { id: "active", label: "Đang hoạt động", count: activeFilter === "active" ? pagination?.total : undefined },
+    { id: "inactive", label: "Không hoạt động", count: activeFilter === "inactive" ? pagination?.total : undefined },
   ]
 
   const handleRowClick = (productId: string) => {
@@ -120,7 +53,10 @@ export default function ProductsPage() {
             <Input
               placeholder="Tìm kiếm sản phẩm..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value)
+                setPage(1)
+              }}
               className="pl-9 bg-card"
             />
           </div>
@@ -137,15 +73,17 @@ export default function ProductsPage() {
           {filters.map((filter) => (
             <button
               key={filter.id}
-              onClick={() => setActiveFilter(filter.id)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeFilter === filter.id
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-card text-muted-foreground hover:bg-muted"
-              }`}
+              onClick={() => {
+                setActiveFilter(filter.id)
+                setPage(1)
+              }}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeFilter === filter.id
+                ? "bg-primary text-primary-foreground"
+                : "bg-card text-muted-foreground hover:bg-muted"
+                }`}
             >
               {filter.label}
-              <span className="ml-2 opacity-70">({filter.count})</span>
+              {filter.count !== undefined && <span className="ml-2 opacity-70">({filter.count})</span>}
             </button>
           ))}
         </div>
@@ -169,52 +107,103 @@ export default function ProductsPage() {
                     Trạng thái
                   </th>
                   <th className="px-6 py-4 text-center text-sm font-medium text-muted-foreground">
-                    Số lượng
+                    Định mức
                   </th>
                   <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">
                     Cập nhật
                   </th>
                 </tr>
               </thead>
-              <tbody>
-                {filteredProducts.map((product) => {
-                  const status = statusConfig[product.status as keyof typeof statusConfig]
+              <tbody className="relative">
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-12 text-center">
+                      <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        Đang tải dữ liệu...
+                      </div>
+                    </td>
+                  </tr>
+                ) : products.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground">
+                      Không tìm thấy sản phẩm nào
+                    </td>
+                  </tr>
+                ) : (
+                  products.map((product: any) => {
+                    const status = product.isActive ? statusConfig.active : statusConfig.inactive
 
-                  return (
-                    <tr
-                      key={product.id}
-                      className="border-b border-border hover:bg-muted/30 transition-colors cursor-pointer"
-                      onClick={() => handleRowClick(product.id)}
-                    >
-                      <td className="px-6 py-4 font-medium text-primary">
-                        {product.id}
-                      </td>
-                      <td className="px-6 py-4 text-card-foreground font-medium">
-                        {product.name}
-                      </td>
-                      <td className="px-6 py-4 text-muted-foreground">
-                        {product.description}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex justify-center">
-                          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm ${status.bgColor} ${status.textColor}`}>
-                            <span className={`w-2 h-2 rounded-full ${status.dotColor}`}></span>
-                            {status.label}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-center text-muted-foreground">
-                        {product.bomItems} vật tư
-                      </td>
-                      <td className="px-6 py-4 text-muted-foreground">
-                        {product.updatedAt}
-                      </td>
-                    </tr>
-                  )
-                })}
+                    return (
+                      <tr
+                        key={product._id}
+                        className="border-b border-border hover:bg-muted/30 transition-colors cursor-pointer"
+                        onClick={() => handleRowClick(product._id)}
+                      >
+                        <td className="px-6 py-4 font-medium text-primary">
+                          {product.code}
+                        </td>
+                        <td className="px-6 py-4 text-card-foreground font-medium">
+                          <div className="flex items-center gap-3">
+                            {product.productImage && (
+                              <div className="h-8 w-8 rounded overflow-hidden bg-muted flex-shrink-0 relative">
+                                <Image src={product.productImage} alt={product.name} fill className="object-cover" />
+                              </div>
+                            )}
+                            {product.name}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-muted-foreground truncate max-w-xs">
+                          {product.description}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex justify-center">
+                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm ${status.bgColor} ${status.textColor}`}>
+                              <span className={`w-2 h-2 rounded-full ${status.dotColor}`}></span>
+                              {status.label}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-center text-muted-foreground">
+                          {product.estimateMaterialCost?.length || 0} vật tư
+                        </td>
+                        <td className="px-6 py-4 text-muted-foreground">
+                          {product.updatedAt ? format(new Date(product.updatedAt), "dd/MM/yyyy") : "N/A"}
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
               </tbody>
             </table>
           </div>
+
+          {/* Pagination */}
+          {pagination && pagination.totalPages > 1 && (
+            <div className="flex items-center justify-between px-6 py-4 border-t border-border bg-muted/30">
+              <div className="text-sm text-muted-foreground">
+                Hiển thị {(page - 1) * 10 + 1} - {Math.min(page * 10, pagination.total)} trong tổng số {pagination.total}
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page === 1}
+                  onClick={() => setPage(p => p - 1)}
+                >
+                  Trước
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page === pagination.totalPages}
+                  onClick={() => setPage(p => p + 1)}
+                >
+                  Sau
+                </Button>
+              </div>
+            </div>
+          )}
         </Card>
       </div>
     </DashboardLayout>

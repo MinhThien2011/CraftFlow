@@ -1,5 +1,6 @@
 "use client"
 
+import React, { useMemo } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
@@ -143,9 +144,35 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
   const { user, isAdmin, isKhoManager, isProductionManager, role } = useAuth()
   const prefetch = usePrefetch()
 
-  const filteredNavigation = navigation.filter(item =>
-    !item.roles || item.roles.includes(role)
+  // Logic kiểm tra tab đang active chính xác hơn sử dụng nguyên tắc Longest Prefix Match
+  const checkActive = (href: string) => {
+    if (pathname === href) return true
+
+    if (pathname.startsWith(`${href}/`)) {
+      // Kiểm tra xem có mục menu nào khác khớp dài hơn (cụ thể hơn) không
+      const allPossibleHrefs = [
+        ...navigation.map((n) => n.href),
+        ...warehouseGroupedNavigation.flatMap((g) => g.children.map((c) => c.href)),
+      ]
+
+      const isBetterMatchExists = allPossibleHrefs.some(
+        (otherHref) =>
+          otherHref !== href &&
+          otherHref.length > href.length &&
+          (pathname === otherHref || pathname.startsWith(`${otherHref}/`))
+      )
+
+      return !isBetterMatchExists
+    }
+
+    return false
+  }
+
+  const filteredNavigation = useMemo(() =>
+    navigation.filter(item => !item.roles || item.roles.includes(role)),
+    [role]
   )
+
   const isKhoRole = isKhoManager || isAdmin
 
   return (
@@ -155,16 +182,36 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
         collapsed ? "w-16" : "w-64"
       )}
     >
-      {/* Logo */}
-      <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-4">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <Factory className="h-5 w-5" />
-        </div>
+      {/* Logo Section */}
+      <div className={cn(
+        "flex h-16 items-center border-b border-sidebar-border px-6 transition-all duration-300",
+        collapsed ? "justify-center px-0" : "justify-between"
+      )}>
         {!collapsed && (
-          <div className="flex flex-col">
-            <span className="text-lg font-bold tracking-wide text-foreground">CRAFTFLOW</span>
+          <Link href="/dashboard" className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+              <Sparkles className="h-5 w-5" />
+            </div>
+            <span className="text-lg font-bold tracking-tight text-foreground">CRAFTFLOW</span>
+          </Link>
+        )}
+        {collapsed && (
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+            <Sparkles className="h-5 w-5" />
           </div>
         )}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onToggle}
+          className="hidden lg:flex h-8 w-8 rounded-full hover:bg-sidebar-accent"
+        >
+          {collapsed ? (
+            <PanelLeft className="h-4 w-4 text-muted-foreground" />
+          ) : (
+            <PanelLeftClose className="h-4 w-4 text-muted-foreground" />
+          )}
+        </Button>
       </div>
 
       {/* User Profile */}
@@ -196,13 +243,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
                       {user?.fullName || user?.username || "Người dùng"}
                     </p>
                     <span className="inline-flex items-center rounded-md bg-primary px-2 py-0.5 text-[10px] font-bold text-primary-foreground">
-                      {(() => {
-                        const currentRole =
-                          typeof user?.role === "string"
-                            ? user.role
-                            : (user?.role as any)?.roleName || "user"
-                        return currentRole === "kho_manager" ? "Quản lý kho" : currentRole
-                      })()}
+                      {role === "kho_manager" ? "Quản lý kho" : role.replace("_", " ")}
                     </span>
                   </div>
                   <ChevronDown className="h-4 w-4 text-muted-foreground" />
@@ -223,117 +264,108 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
         </Collapsible>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 space-y-1 overflow-y-auto p-3">
-        {isKhoRole && !collapsed ? (
-          <>
-            <Link
-              href="/dashboard_warehouse"
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                pathname === "/dashboard_warehouse" || pathname.startsWith("/dashboard_warehouse/")
-                  ? "bg-primary text-primary-foreground"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent"
-              )}
-            >
-              <PackageOpen className="h-5 w-5 shrink-0" />
-              <span className="flex-1">Tổng quan kho (WMS)</span>
-            </Link>
-            <Link
-              href="/inventory"
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                pathname === "/inventory" || pathname.startsWith("/inventory/")
-                  ? "bg-primary text-primary-foreground"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent"
-              )}
-            >
-              <Package className="h-5 w-5 shrink-0" />
-              <span className="flex-1">Kho hàng</span>
-            </Link>
+      <div className="flex-1 overflow-y-auto py-6 px-3 scrollbar-none">
+        <nav className="space-y-1.5">
+          {isKhoRole && !collapsed ? (
+            <>
+              {/* Grouped Navigation for Warehouse Role */}
+              {warehouseGroupedNavigation.map((group) => {
+                const isGroupActive = group.children.some(
+                  (child) => checkActive(child.href)
+                )
+                const Icon = group.icon
 
-            {warehouseGroupedNavigation.map((group) => {
-              const isGroupActive = group.children.some(
-                (child) => pathname === child.href || pathname.startsWith(`${child.href}/`)
-              )
+                return (
+                  <Collapsible key={group.name} defaultOpen={isGroupActive} className="space-y-1">
+                    <CollapsibleTrigger asChild>
+                      <button
+                        className={cn(
+                          "group flex w-full items-center rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200",
+                          isGroupActive
+                            ? "bg-sidebar-accent text-sidebar-foreground"
+                            : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                        )}
+                      >
+                        <Icon className={cn(
+                          "h-5 w-5 shrink-0 transition-colors mr-3",
+                          isGroupActive ? "text-primary" : "group-hover:text-sidebar-accent-foreground"
+                        )} />
+                        <span className="flex-1 text-left truncate">{group.name}</span>
+                        {group.badge && (
+                          <span className="mr-2 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                            {group.badge}
+                          </span>
+                        )}
+                        <ChevronRight className={cn(
+                          "h-4 w-4 shrink-0 transition-transform duration-200",
+                          isGroupActive && "rotate-90"
+                        )} />
+                      </button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="space-y-1 ml-9 overflow-hidden transition-all data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+                      {group.children.map((child) => {
+                        const isChildActive = checkActive(child.href)
+                        return (
+                          <Link
+                            key={child.href}
+                            href={child.href}
+                            prefetch={true}
+                            className={cn(
+                              "block rounded-lg px-3 py-1.5 text-sm transition-all duration-200",
+                              isChildActive
+                                ? "bg-primary/10 font-medium text-primary"
+                                : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                            )}
+                          >
+                            {child.name}
+                          </Link>
+                        )
+                      })}
+                    </CollapsibleContent>
+                  </Collapsible>
+                )
+              })}
+            </>
+          ) : (
+            /* Flat Navigation for other roles or collapsed state */
+            filteredNavigation.map((item) => {
+              const isActive = checkActive(item.href)
+              const Icon = item.icon
+
               return (
-                <Collapsible key={group.name} defaultOpen={isGroupActive} className="space-y-1">
-                  <CollapsibleTrigger asChild>
-                    <button
-                      className={cn(
-                        "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                        isGroupActive
-                          ? "bg-sidebar-accent text-sidebar-foreground"
-                          : "text-sidebar-foreground hover:bg-sidebar-accent"
-                      )}
-                    >
-                      <group.icon className="h-5 w-5 shrink-0" />
-                      <span className="flex-1 text-left">{group.name}</span>
-                      {group.badge ? (
-                        <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700">
-                          {group.badge}
-                        </span>
-                      ) : null}
-                      <ChevronRight className="h-4 w-4 shrink-0 transition-transform data-[state=open]:rotate-90" />
-                    </button>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="space-y-1 pl-9">
-                    {group.children.map((child) => {
-                      const isChildActive =
-                        pathname === child.href || pathname.startsWith(`${child.href}/`)
-                      return (
-                        <Link
-                          key={child.href}
-                          href={child.href}
-                          className={cn(
-                            "block rounded-md px-2 py-1.5 text-sm transition-colors",
-                            isChildActive
-                              ? "bg-primary text-primary-foreground"
-                              : "text-sidebar-foreground hover:bg-sidebar-accent"
-                          )}
-                        >
-                          {child.name}
-                        </Link>
-                      )
-                    })}
-                  </CollapsibleContent>
-                </Collapsible>
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  prefetch={true}
+                  className={cn(
+                    "group flex items-center rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200",
+                    isActive
+                      ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20"
+                      : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                    collapsed && "justify-center px-0"
+                  )}
+                  title={collapsed ? item.name : undefined}
+                >
+                  <Icon className={cn(
+                    "h-5 w-5 shrink-0 transition-colors",
+                    isActive ? "text-primary-foreground" : "group-hover:text-sidebar-accent-foreground",
+                    !collapsed && "mr-3"
+                  )} />
+                  {!collapsed && (
+                    <span className="flex-1 truncate">{item.name}</span>
+                  )}
+                  {!collapsed && item.badge && (
+                    <span className={cn(
+                      "ml-auto h-2 w-2 rounded-full",
+                      isActive ? "bg-primary-foreground" : "bg-primary"
+                    )} />
+                  )}
+                </Link>
               )
-            })}
-          </>
-        ) : (
-          filteredNavigation.map((item) => {
-            const isActive =
-              pathname === item.href ||
-              (item.href !== "/" && pathname.startsWith(`${item.href}/`))
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onMouseEnter={() => prefetch(item.href)}
-                className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
-                  isActive
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent",
-                  collapsed && "justify-center px-2"
-                )}
-                title={collapsed ? item.name : undefined}
-              >
-                <item.icon className="h-5 w-5 shrink-0" />
-                {!collapsed && (
-                  <>
-                    <span className="flex-1">{item.name}</span>
-                    {item.badge && (
-                      <span className="flex h-2 w-2 rounded-full bg-primary/50" />
-                    )}
-                  </>
-                )}
-              </Link>
-            )
-          })
-        )}
-      </nav>
+            })
+          )}
+        </nav>
+      </div>
 
       {/* Footer */}
       <div className="border-t border-sidebar-border p-3">

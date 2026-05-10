@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
-import { useParams } from "next/navigation"
+import { useState, useRef, useEffect } from "react"
+import { useParams, useRouter } from "next/navigation"
+import Image from "next/image"
 import { DashboardLayout } from "@/features/production/components/dashboard-layout"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -15,15 +16,11 @@ import {
   Send,
   Package,
   CheckCircle,
+  Upload,
+  Loader2,
+  ChevronLeft,
 } from "lucide-react"
 import Link from "next/link"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
 import {
   Select,
   SelectContent,
@@ -31,546 +28,459 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { useProduct, useUpdateProduct, useDeleteProduct } from "@/features/production/hooks/use-products"
+import { useMaterials } from "@/features/inventory/hooks/use-materials"
 
-const unitOptions = [
-  "kg", "g", "m", "m²", "ml", "cái", "cuộn", "sợi", "tấm", "bộ", "hộp", "hạt"
+const categories = [
+  "Amigurumi",
+  "Fashion",
+  "Home Decor",
+  "Jewelry",
+  "Accessories",
+  "Other",
 ]
 
-const productsData: Record<string, {
+interface BOMItem {
   id: string
-  name: string
-  category: string
-  description: string
-  status: string
-  createdAt: string
-  updatedAt: string
-  createdBy: string
-  bom: { id: number; name: string; unit: string; quantity: number; note: string }[]
-}> = {
-  "TT-001": {
-    id: "TT-001",
-    name: "Túi tote vải canvas",
-    category: "Túi xách",
-    description: "Túi tote thêu tay họa tiết hoa sen",
-    status: "active",
-    createdAt: "2026-04-10",
-    updatedAt: "2026-04-15",
-    createdBy: "Nguyễn Văn A",
-    bom: [
-      { id: 1, name: "Vải canvas", unit: "m", quantity: 0.8, note: "Canvas 12oz" },
-      { id: 2, name: "Chỉ thêu", unit: "cuộn", quantity: 3, note: "Chỉ DMC nhiều màu" },
-      { id: 3, name: "Dây kéo", unit: "cái", quantity: 1, note: "Dây kéo 20cm" },
-      { id: 4, name: "Khóa túi", unit: "cái", quantity: 2, note: "Khóa nam châm" },
-    ],
-  },
-  "DL-002": {
-    id: "DL-002",
-    name: "Đèn lồng tre đan",
-    category: "Đèn trang trí",
-    description: "Đèn lồng tre đan thủ công, có đế gỗ",
-    status: "active",
-    createdAt: "2026-04-08",
-    updatedAt: "2026-04-12",
-    createdBy: "Nguyễn Văn A",
-    bom: [
-      { id: 1, name: "Nan tre", unit: "cái", quantity: 50, note: "Nan tre vót mỏng" },
-      { id: 2, name: "Đế gỗ thông", unit: "cái", quantity: 1, note: "Đế tròn D15cm" },
-      { id: 3, name: "Đui đèn E27", unit: "cái", quantity: 1, note: "Đui sứ" },
-      { id: 4, name: "Dây điện", unit: "m", quantity: 2, note: "Dây bọc vải" },
-      { id: 5, name: "Sơn bóng", unit: "ml", quantity: 50, note: "Sơn PU trong" },
-    ],
-  },
-  "KM-003": {
-    id: "KM-003",
-    name: "Khay mây đựng trái cây",
-    category: "Mây tre đan",
-    description: "Khay mây tròn đường kính 30cm",
-    status: "inactive",
-    createdAt: "2026-04-05",
-    updatedAt: "2026-04-10",
-    createdBy: "Nguyễn Văn A",
-    bom: [
-      { id: 1, name: "Mây tự nhiên", unit: "sợi", quantity: 100, note: "Mây nước" },
-      { id: 2, name: "Khung tre", unit: "cái", quantity: 1, note: "Khung tròn 30cm" },
-      { id: 3, name: "Sơn bảo vệ", unit: "ml", quantity: 30, note: "Sơn chống nước" },
-    ],
-  },
-  "HG-004": {
-    id: "HG-004",
-    name: "Hộp gỗ khắc",
-    category: "Sản phẩm gỗ",
-    description: "Hộp đựng trang sức gỗ thông khắc tên",
-    status: "active",
-    createdAt: "2026-04-14",
-    updatedAt: "2026-04-16",
-    createdBy: "Nguyễn Văn A",
-    bom: [
-      { id: 1, name: "Gỗ thông", unit: "tấm", quantity: 1, note: "Gỗ thông 10mm" },
-      { id: 2, name: "Bản lề mini", unit: "cái", quantity: 2, note: "Bản lề đồng" },
-      { id: 3, name: "Nhung lót", unit: "m", quantity: 0.1, note: "Nhung đỏ" },
-      { id: 4, name: "Sơn dầu", unit: "ml", quantity: 20, note: "Sơn trong suốt" },
-    ],
-  },
-  "VG-005": {
-    id: "VG-005",
-    name: "Vòng tay handmade",
-    category: "Phụ kiện",
-    description: "Vòng tay handmade thiết kế thủ công",
-    status: "active",
-    createdAt: "2026-04-01",
-    updatedAt: "2026-04-08",
-    createdBy: "Nguyễn Văn A",
-    bom: [
-      { id: 1, name: "Hạt nhựa/đá", unit: "hạt", quantity: 14, note: "Hạt trang trí nhiều màu" },
-      { id: 2, name: "Dây đàn hồi", unit: "m", quantity: 0.3, note: "Dây co giãn" },
-      { id: 3, name: "Charm trang trí", unit: "cái", quantity: 1, note: "Charm kim loại hoặc nhựa" },
-    ],
-  },
-  "TT-006": {
-    id: "TT-006",
-    name: "Tranh thêu tay phong cảnh",
-    category: "Thêu tay",
-    description: "Tranh thêu chữ thập khung gỗ 40x50cm",
-    status: "inactive",
-    createdAt: "2026-03-28",
-    updatedAt: "2026-04-05",
-    createdBy: "Nguyễn Văn A",
-    bom: [
-      { id: 1, name: "Vải thêu Aida", unit: "tấm", quantity: 1, note: "Aida 14CT" },
-      { id: 2, name: "Chỉ thêu", unit: "cuộn", quantity: 20, note: "Chỉ DMC đủ màu" },
-      { id: 3, name: "Kim thêu", unit: "cái", quantity: 3, note: "Kim số 24" },
-      { id: 4, name: "Khung gỗ", unit: "cái", quantity: 1, note: "Khung 40x50cm" },
-      { id: 5, name: "Khung thêu", unit: "cái", quantity: 1, note: "Khung tròn 20cm" },
-      { id: 6, name: "Kính bảo vệ", unit: "tấm", quantity: 1, note: "Kính 2mm" },
-    ],
-  },
-  "GT-007": {
-    id: "GT-007",
-    name: "Giỏ tre đựng đồ",
-    category: "Mây tre đan",
-    description: "Giỏ tre có nắp đậy, quai xách",
-    status: "active",
-    createdAt: "2026-04-10",
-    updatedAt: "2026-04-14",
-    createdBy: "Nguyễn Văn A",
-    bom: [
-      { id: 1, name: "Nan tre", unit: "cái", quantity: 80, note: "Nan tre dày 3mm" },
-      { id: 2, name: "Mây buộc", unit: "sợi", quantity: 30, note: "Mây nhuộm màu" },
-      { id: 3, name: "Vải lót", unit: "m", quantity: 0.3, note: "Vải cotton kẻ" },
-    ],
-  },
-  "NL-008": {
-    id: "NL-008",
-    name: "Nến thơm handmade",
-    category: "Nến thơm",
-    description: "Nến đậu nành hương lavender, ly thủy tinh",
-    status: "inactive",
-    createdAt: "2026-04-06",
-    updatedAt: "2026-04-11",
-    createdBy: "Nguyễn Văn A",
-    bom: [
-      { id: 1, name: "Sáp đậu nành", unit: "g", quantity: 200, note: "Sáp 100% tự nhiên" },
-      { id: 2, name: "Tinh dầu lavender", unit: "ml", quantity: 15, note: "Tinh dầu nguyên chất" },
-      { id: 3, name: "Bấc nến", unit: "cái", quantity: 1, note: "Bấc cotton" },
-      { id: 4, name: "Ly thủy tinh", unit: "cái", quantity: 1, note: "Ly 250ml" },
-      { id: 5, name: "Nhãn dán", unit: "cái", quantity: 1, note: "Nhãn kraft" },
-    ],
-  },
-}
-
-const availableMaterials = [
-  "Vải canvas",
-  "Chỉ thêu",
-  "Nan tre",
-  "Mây tự nhiên",
-  "Gỗ thông",
-  "Đất sét trắng",
-  "Sáp đậu nành",
-  "Tinh dầu lavender",
-  "Dây kéo",
-  "Bản lề mini",
-  "Sơn bóng",
-  "Nhung lót",
-]
-
-const statusConfig = {
-  active: { label: "Đang hoạt động", bgColor: "bg-[#E8F5EE]", textColor: "text-[#2D6A4F]", dotColor: "bg-[#4A9C6B]" },
-  inactive: { label: "Không hoạt động", bgColor: "bg-[#FEE2E2]", textColor: "text-[#B91C1C]", dotColor: "bg-[#E04E4E]" },
-}
-
-const statusOptions = [
-  { value: "active", label: "Đang hoạt động" },
-  { value: "inactive", label: "Không hoạt động" },
-]
-
-const warehouseReceipts: Record<string, {
-  id: number
-  receiptCode: string
-  productId: string
+  materialId: string
+  materialCode: string
   quantity: number
-  date: string
-  status: "pending" | "completed" | "sent"
-  relatedOrders: string[]
-  createdBy: string
-}[]> = {
-  "TT-001": [
-    {
-      id: 1,
-      receiptCode: "NK-TT-001-001",
-      productId: "TT-001",
-      quantity: 50,
-      date: "2026-04-20",
-      status: "completed",
-      relatedOrders: ["ĐH-001", "ĐH-002"],
-      createdBy: "Nguyễn Văn A",
-    },
-    {
-      id: 2,
-      receiptCode: "NK-TT-001-002",
-      productId: "TT-001",
-      quantity: 30,
-      date: "2026-04-22",
-      status: "completed",
-      relatedOrders: ["ĐH-003"],
-      createdBy: "Trần Thị B",
-    },
-  ],
-  "DL-002": [
-    {
-      id: 3,
-      receiptCode: "NK-DL-002-001",
-      productId: "DL-002",
-      quantity: 20,
-      date: "2026-04-19",
-      status: "completed",
-      relatedOrders: ["ĐH-004"],
-      createdBy: "Nguyễn Văn A",
-    },
-  ],
-  "KM-003": [],
-  "HG-004": [],
-  "VG-005": [],
-  "TT-006": [],
-  "GT-007": [],
-  "NL-008": [],
-}
-
-const receiptStatusConfig = {
-  pending: { label: "Chờ xác nhận", bgColor: "bg-[#FEF3C7]", textColor: "text-[#92400E]", dotColor: "bg-[#F59E0B]" },
-  completed: { label: "Hoàn thành", bgColor: "bg-[#E8F5EE]", textColor: "text-[#2D6A4F]", dotColor: "bg-[#4A9C6B]" },
-  sent: { label: "Đã gửi kho", bgColor: "bg-[#EBF8FF]", textColor: "text-[#0369A1]", dotColor: "bg-[#0EA5E9]" },
+  unit: string
 }
 
 export default function ProductDetailPage() {
   const params = useParams()
-  const productId = params.id as string
-  const product = productsData[productId] || productsData["TT-001"]
-  
-  const [isEditOpen, setIsEditOpen] = useState(false)
-  const [currentProduct, setCurrentProduct] = useState(product)
-  const [materials, setMaterials] = useState(product.bom)
-  
-  // Edit form state
-  const [editName, setEditName] = useState(product.name)
-  const [editCode, setEditCode] = useState(product.id)
-  const [editDescription, setEditDescription] = useState(product.description)
-  const [editStatus, setEditStatus] = useState(product.status)
-  const [editMaterials, setEditMaterials] = useState(product.bom)
-  const [newMaterial, setNewMaterial] = useState("")
-  const [newQuantity, setNewQuantity] = useState("")
-  const [newUnit, setNewUnit] = useState("")
-  const [warehouseReceiptsList, setWarehouseReceiptsList] = useState(warehouseReceipts[productId] || [])
-  const [isCreateReceiptOpen, setIsCreateReceiptOpen] = useState(false)
+  const router = useRouter()
+  const id = params.id as string
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const status = statusConfig[currentProduct.status as keyof typeof statusConfig]
+  const [isEditing, setIsEditing] = useState(false)
+  const [formData, setFormData] = useState({
+    name: "",
+    code: "",
+    description: "",
+    category: "",
+    unit: "",
+    estimatedProductionTime: 0,
+    isActive: true,
+  })
 
-  const handleAddMaterialInEdit = () => {
-    if (newMaterial && newQuantity && newUnit) {
-      setEditMaterials([
-        ...editMaterials,
-        {
-          id: Date.now(),
-          name: newMaterial,
-          quantity: parseFloat(newQuantity),
-          unit: newUnit,
-          note: "",
-        },
-      ])
-      setNewMaterial("")
-      setNewQuantity("")
-      setNewUnit("")
+  const [bomItems, setBomItems] = useState<BOMItem[]>([])
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+
+  const { data: productResponse, isLoading: productLoading } = useProduct(id)
+  const { data: materialsData } = useMaterials({ limit: 100 })
+  const materials = materialsData?.data?.materials || []
+
+  const updateProductMutation = useUpdateProduct()
+  const deleteProductMutation = useDeleteProduct()
+
+  useEffect(() => {
+    if (productResponse?.data?.product) {
+      const p = productResponse.data.product
+      setFormData({
+        name: p.name,
+        code: p.code,
+        description: p.description || "",
+        category: p.category,
+        unit: p.unit,
+        estimatedProductionTime: p.estimatedProductionTime,
+        isActive: p.isActive,
+      })
+
+      if (p.estimateMaterialCost) {
+        setBomItems(p.estimateMaterialCost.map(item => ({
+          id: item._id || Math.random().toString(),
+          materialId: (item.material as any)?._id || "",
+          materialCode: item.materialCode,
+          quantity: item.quantity,
+          unit: item.unit
+        })))
+      }
+
+      if (p.productImage) {
+        setImagePreview(p.productImage)
+      }
+    }
+  }, [productResponse])
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    const payload = new FormData()
+    payload.append("name", formData.name)
+    payload.append("code", formData.code)
+    payload.append("description", formData.description)
+    payload.append("category", formData.category)
+    payload.append("unit", formData.unit)
+    payload.append("estimatedProductionTime", formData.estimatedProductionTime.toString())
+    payload.append("isActive", formData.isActive.toString())
+
+    const materialCosts = bomItems
+      .filter(item => item.materialCode && item.quantity > 0)
+      .map(item => ({
+        materialCode: item.materialCode,
+        quantity: item.quantity
+      }))
+
+    payload.append("estimateMaterialCost", JSON.stringify(materialCosts))
+
+    if (imageFile) {
+      payload.append("productImage", imageFile)
+    }
+
+    updateProductMutation.mutate({ id, formData: payload }, {
+      onSuccess: () => {
+        setIsEditing(false)
+      }
+    })
+  }
+
+  const handleDelete = () => {
+    if (confirm("Bạn có chắc chắn muốn xóa sản phẩm này?")) {
+      deleteProductMutation.mutate(id, {
+        onSuccess: () => {
+          router.push("/production-management/products")
+        }
+      })
     }
   }
 
-  const handleRemoveMaterialInEdit = (id: number) => {
-    setEditMaterials(editMaterials.filter((m) => m.id !== id))
+  const addBomItem = () => {
+    setBomItems([
+      ...bomItems,
+      { id: Math.random().toString(), materialId: "", materialCode: "", quantity: 0, unit: "" },
+    ])
   }
 
-  const handleSaveEdit = () => {
-    setCurrentProduct({
-      ...currentProduct,
-      id: editCode,
-      name: editName,
-      description: editDescription,
-      status: editStatus,
-      bom: editMaterials,
-    })
-    setMaterials(editMaterials)
-    setIsEditOpen(false)
+  const removeBomItem = (id: string) => {
+    setBomItems(bomItems.filter((item) => item.id !== id))
+  }
+
+  const updateBomItem = (id: string, materialId: string) => {
+    const material = materials.find(m => m._id === materialId)
+    if (!material) return
+
+    setBomItems(
+      bomItems.map((item) =>
+        item.id === id ? {
+          ...item,
+          materialId: material._id,
+          materialCode: material.code,
+          unit: material.unit
+        } : item
+      )
+    )
+  }
+
+  const updateQuantity = (id: string, quantity: number) => {
+    setBomItems(
+      bomItems.map((item) =>
+        item.id === id ? { ...item, quantity } : item
+      )
+    )
+  }
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setImageFile(file)
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  if (productLoading) {
+    return (
+      <DashboardLayout title="Chi tiết sản phẩm">
+        <div className="flex h-64 items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    )
   }
 
   return (
-    <DashboardLayout title="Chi tiết sản phẩm">
-      <div className="space-y-6">
-        {/* Breadcrumb & Actions */}
+    <DashboardLayout title={isEditing ? "Chỉnh sửa sản phẩm" : "Chi tiết sản phẩm"}>
+      <form onSubmit={handleUpdate} className="space-y-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap gap-3 ml-auto">
-            <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" className="border-border">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => router.push("/production-management/products")}
+            className="w-fit"
+          >
+            <ChevronLeft className="mr-2 h-4 w-4" />
+            Quay lại danh sách
+          </Button>
+
+          <div className="flex gap-3">
+            {!isEditing ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsEditing(true)}
+                  className="border-border"
+                >
                   <Edit className="mr-2 h-4 w-4" />
                   Chỉnh sửa
                 </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle className="text-xl font-bold text-primary">
-                    Chỉnh sửa sản phẩm
-                  </DialogTitle>
-                </DialogHeader>
-                <div className="space-y-6 py-4">
-                  {/* Product Info */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-name">Tên sản phẩm</Label>
-                      <Input
-                        id="edit-name"
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        placeholder="Nhập tên sản phẩm"
-                      />
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={handleDelete}
+                  disabled={deleteProductMutation.isPending}
+                >
+                  {deleteProductMutation.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="mr-2 h-4 w-4" />
+                  )}
+                  Xóa sản phẩm
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsEditing(false)}
+                >
+                  Hủy bỏ
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={updateProductMutation.isPending}
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                >
+                  {updateProductMutation.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <CheckCircle className="mr-2 h-4 w-4" />
+                  )}
+                  Lưu thay đổi
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-3">
+          {/* Product Info */}
+          <Card className="p-6 bg-card border-border lg:col-span-1">
+            <h3 className="text-lg font-semibold text-card-foreground mb-6">
+              Thông tin sản phẩm
+            </h3>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Ảnh sản phẩm</Label>
+                <div
+                  className={`relative h-48 w-full border-2 border-dashed border-border rounded-xl overflow-hidden group ${isEditing ? 'cursor-pointer hover:border-primary/50' : ''}`}
+                  onClick={() => isEditing && fileInputRef.current?.click()}
+                >
+                  {imagePreview ? (
+                    <>
+                      <Image src={imagePreview} alt="Product" fill className="object-cover" />
+                      {isEditing && (
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                          <Upload className="h-8 w-8" />
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="h-full w-full flex flex-col items-center justify-center text-muted-foreground bg-muted/30">
+                      <Package className="h-10 w-10 mb-2" />
+                      <span className="text-sm">Chưa có ảnh</span>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-code">Mã sản phẩm</Label>
-                      <Input
-                        id="edit-code"
-                        value={editCode}
-                        onChange={(e) => setEditCode(e.target.value)}
-                        placeholder="Nhập mã sản phẩm"
-                      />
-                    </div>
-                  </div>
+                  )}
+                </div>
+                {isEditing && (
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    className="hidden"
+                    accept="image/*"
+                    onChange={handleImageChange}
+                  />
+                )}
+              </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-status">Trạng thái</Label>
-                    <Select value={editStatus} onValueChange={setEditStatus}>
-                      <SelectTrigger id="edit-status">
-                        <SelectValue placeholder="Chọn trạng thái" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {statusOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+              <div className="space-y-2">
+                <Label htmlFor="name">Tên sản phẩm</Label>
+                <Input
+                  id="name"
+                  value={formData.name}
+                  disabled={!isEditing}
+                  onChange={e => setFormData({ ...formData, name: e.target.value })}
+                />
+              </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-description">Mô tả</Label>
-                    <Textarea
-                      id="edit-description"
-                      value={editDescription}
-                      onChange={(e) => setEditDescription(e.target.value)}
-                      placeholder="Nhập mô tả sản phẩm"
-                      rows={3}
-                    />
-                  </div>
+              <div className="space-y-2">
+                <Label htmlFor="code">Mã sản phẩm</Label>
+                <Input
+                  id="code"
+                  value={formData.code}
+                  disabled={!isEditing}
+                  onChange={e => setFormData({ ...formData, code: e.target.value })}
+                />
+              </div>
 
-                  {/* BOM Section */}
-                  <div className="space-y-4">
-                    <Label className="text-base font-semibold">Định mức nguyên vật liệu</Label>
-                    
-                    {/* Add Material Row */}
-                    <div className="flex gap-3">
-                      <Input
-                        placeholder="Nhập tên vật tư..."
-                        value={newMaterial}
-                        onChange={(e) => setNewMaterial(e.target.value)}
-                        className="flex-1"
-                      />
-                      <Input
-                        placeholder="Số lượng"
-                        value={newQuantity}
-                        onChange={(e) => setNewQuantity(e.target.value)}
-                        className="w-24"
-                      />
-                      <Select value={newUnit} onValueChange={setNewUnit}>
-                        <SelectTrigger className="w-28">
-                          <SelectValue placeholder="Đơn vị" />
+              <div className="space-y-2">
+                <Label htmlFor="category">Danh mục</Label>
+                <Select
+                  disabled={!isEditing}
+                  value={formData.category}
+                  onValueChange={v => setFormData({ ...formData, category: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map(c => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="unit">Đơn vị</Label>
+                  <Input
+                    id="unit"
+                    value={formData.unit}
+                    disabled={!isEditing}
+                    onChange={e => setFormData({ ...formData, unit: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="time">Thời gian SX (phút)</Label>
+                  <Input
+                    id="time"
+                    type="number"
+                    value={formData.estimatedProductionTime}
+                    disabled={!isEditing}
+                    onChange={e => setFormData({ ...formData, estimatedProductionTime: parseInt(e.target.value) || 0 })}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="description">Mô tả</Label>
+                <Textarea
+                  id="description"
+                  rows={3}
+                  value={formData.description}
+                  disabled={!isEditing}
+                  onChange={e => setFormData({ ...formData, description: e.target.value })}
+                />
+              </div>
+            </div>
+          </Card>
+
+          {/* BOM Form */}
+          <Card className="bg-card border-border lg:col-span-2">
+            <div className="flex items-center justify-between p-6 border-b border-border">
+              <h3 className="text-lg font-semibold text-card-foreground">
+                Định mức nguyên vật liệu (BOM)
+              </h3>
+              {isEditing && (
+                <Button
+                  type="button"
+                  onClick={addBomItem}
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Thêm vật tư
+                </Button>
+              )}
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="hidden sm:grid sm:grid-cols-12 gap-4 text-xs font-medium uppercase text-muted-foreground pb-2 border-b border-border">
+                <div className="col-span-5">Nguyên vật liệu</div>
+                <div className="col-span-3">Số lượng</div>
+                <div className="col-span-3">Đơn vị</div>
+                <div className="col-span-1"></div>
+              </div>
+
+              {bomItems.map((item) => (
+                <div
+                  key={item.id}
+                  className={`grid gap-4 sm:grid-cols-12 p-4 rounded-xl border border-border/50 items-center ${isEditing ? 'bg-muted/20' : 'bg-transparent'}`}
+                >
+                  <div className="sm:col-span-5">
+                    {isEditing ? (
+                      <Select
+                        value={item.materialId}
+                        onValueChange={(v) => updateBomItem(item.id, v)}
+                      >
+                        <SelectTrigger className="bg-card">
+                          <SelectValue placeholder="Chọn vật tư" />
                         </SelectTrigger>
                         <SelectContent>
-                          {unitOptions.map((unit) => (
-                            <SelectItem key={unit} value={unit}>
-                              {unit}
+                          {materials.map(m => (
+                            <SelectItem key={m._id} value={m._id}>
+                              {m.name} ({m.code})
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
-                      <Button
-                        onClick={handleAddMaterialInEdit}
-                        className="bg-[#2B8BE8] hover:bg-[#2B8BE8]/90 text-white px-4"
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </div>
-
-                    {/* Materials List */}
-                    <div className="space-y-2">
-                      {editMaterials.map((item) => (
-                        <div
-                          key={item.id}
-                          className="flex items-center justify-between p-3 bg-muted/30 rounded-lg"
-                        >
-                          <div>
-                            <span className="font-medium text-card-foreground">
-                              {item.name}
-                            </span>
-                            <span className="text-muted-foreground ml-2">
-                              {item.quantity} {item.unit}
-                            </span>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleRemoveMaterialInEdit(item.id)}
-                            className="h-8 w-8"
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </div>
-                      ))}
+                    ) : (
+                      <div className="text-sm font-medium text-foreground">
+                        {materials.find(m => m._id === item.materialId)?.name || item.materialCode}
+                      </div>
+                    )}
+                  </div>
+                  <div className="sm:col-span-3">
+                    {isEditing ? (
+                      <Input
+                        type="number"
+                        className="bg-card"
+                        value={item.quantity || ""}
+                        onChange={(e) => updateQuantity(item.id, parseFloat(e.target.value) || 0)}
+                      />
+                    ) : (
+                      <div className="text-sm text-foreground font-semibold">
+                        {item.quantity}
+                      </div>
+                    )}
+                  </div>
+                  <div className="sm:col-span-3">
+                    <div className="text-sm text-muted-foreground">
+                      {item.unit || "---"}
                     </div>
                   </div>
-
-                  {/* Action Buttons */}
-                  <div className="flex justify-end gap-3 pt-4">
-                    <Button
-                      variant="outline"
-                      onClick={() => setIsEditOpen(false)}
-                    >
-                      Hủy
-                    </Button>
-                    <Button
-                      onClick={handleSaveEdit}
-                      className="bg-[#2B8BE8] hover:bg-[#2B8BE8]/90 text-white"
-                    >
-                      Cập nhật
-                    </Button>
+                  <div className="sm:col-span-1 flex items-center justify-end">
+                    {isEditing && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeBomItem(item.id)}
+                        className="h-9 w-9 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 </div>
-              </DialogContent>
-            </Dialog>
-            <Button variant="outline" className="border-destructive text-destructive hover:bg-destructive/10">
-              <Trash2 className="mr-2 h-4 w-4" />
-              Xóa
-            </Button>
-          </div>
+              ))}
+
+              {bomItems.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground border-2 border-dashed border-border rounded-xl">
+                  Chưa có vật tư nào trong định mức
+                </div>
+              )}
+            </div>
+          </Card>
         </div>
-
-        {/* Product Info Card */}
-        <Card className="p-6 bg-card border-border">
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">Mã sản phẩm</p>
-              <p className="font-semibold text-card-foreground">{currentProduct.id}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">Tên sản phẩm</p>
-              <p className="font-semibold text-card-foreground">{currentProduct.name}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">Danh mục</p>
-              <p className="font-semibold text-card-foreground">{currentProduct.category}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">Trạng thái</p>
-              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm ${status.bgColor} ${status.textColor}`}>
-                <span className={`w-2 h-2 rounded-full ${status.dotColor}`}></span>
-                {status.label}
-              </span>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">Mô tả</p>
-              <p className="text-card-foreground">{currentProduct.description}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">Người tạo</p>
-              <p className="text-card-foreground">{currentProduct.createdBy}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">Ngày tạo</p>
-              <p className="text-card-foreground">{currentProduct.createdAt}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">Cập nhật</p>
-              <p className="text-card-foreground">{currentProduct.updatedAt}</p>
-            </div>
-          </div>
-        </Card>
-
-        {/* BOM Table */}
-        <Card className="bg-card border-border">
-          <div className="p-6 border-b border-border">
-            <h3 className="text-lg font-semibold text-card-foreground">
-              Định mức nguyên vật liệu
-            </h3>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border bg-muted/50">
-                  <th className="px-6 py-3 text-left text-sm font-medium text-muted-foreground">
-                    STT
-                  </th>
-                  <th className="px-6 py-3 text-left text-sm font-medium text-muted-foreground">
-                    Tên vật tư
-                  </th>
-                  <th className="px-6 py-3 text-left text-sm font-medium text-muted-foreground">
-                    Số lượng
-                  </th>
-                  <th className="px-6 py-3 text-left text-sm font-medium text-muted-foreground">
-                    Đơn vị
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {materials.map((item, index) => (
-                  <tr
-                    key={item.id}
-                    className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
-                  >
-                    <td className="px-6 py-4 text-card-foreground">{index + 1}</td>
-                    <td className="px-6 py-4 font-medium text-card-foreground">
-                      {item.name}
-                    </td>
-                    <td className="px-6 py-4 text-card-foreground">{item.quantity}</td>
-                    <td className="px-6 py-4 text-card-foreground">{item.unit}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="p-6 border-t border-border bg-muted/30">
-            <span className="text-sm text-muted-foreground">
-              Tổng cộng: {materials.length} loại vật tư
-            </span>
-          </div>
-        </Card>
-      </div>
+      </form>
     </DashboardLayout>
   )
 }

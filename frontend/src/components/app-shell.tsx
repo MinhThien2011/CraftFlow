@@ -1,6 +1,4 @@
-"use client"
-
-import { useState, useEffect } from "react"
+import React, { useState, useEffect, useMemo, memo } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { AppSidebar } from "./app-sidebar"
 import { AppHeader } from "./app-header"
@@ -14,42 +12,41 @@ interface AppShellProps {
   subtitle?: string
 }
 
+// Memoize layout components to prevent unnecessary re-renders during tab switching
+const MemoizedSidebar = memo(AppSidebar)
+const MemoizedHeader = memo(AppHeader)
+
 export function AppShell({ children, title, subtitle }: AppShellProps) {
   const { sidebarCollapsed, toggleSidebar } = useUIStore()
   const { isAuthenticated, loading, role } = useAuth()
   const router = useRouter()
   const pathname = usePathname()
 
-  const warehouseFeaturePrefixes = [
-    "/receiving",
-    "/issuing",
-    "/requisitions",
-    "/locations",
-    "/alerts",
-    "/defects",
-  ]
-  const khoManagerOnlyPrefixes = ["/dashboard_warehouse"]
-  const productionManagerPrefixes = ["/production-management"]
+  // Use useMemo to optimize path configuration and avoid redundant computations on each render
+  const pathConfig = useMemo(() => {
+    const warehouseFeaturePrefixes = [
+      "/receiving", "/issuing", "/requisitions", "/locations", "/alerts", "/defects",
+    ]
+    const adminPrefixes = [
+      "/dashboard", "/products", "/production", "/users", "/system-log",
+    ]
 
-  const adminPrefixes = [
-    "/dashboard",
-    "/products",
-    "/production",
-    "/users",
-    "/system-log",
-  ]
+    const isReportsInventoryPath = pathname === "/reports/inventory" || pathname.startsWith("/reports/inventory/")
+    const isAdminReportsPath = pathname.startsWith("/reports") && !isReportsInventoryPath
+    const isInventoryRootPath = pathname === "/inventory" || pathname === "/inventory/"
+    const isKhoInventoryAllowedPath = isInventoryRootPath || pathname.startsWith("/inventory/stocktake")
 
-  /** /reports and /reports/inventory are admin only */
-  const isReportsInventoryPath =
-    pathname === "/reports/inventory" || pathname.startsWith("/reports/inventory/")
-  const isAdminReportsPath =
-    pathname === "/reports" ||
-    (pathname.startsWith("/reports/") && !isReportsInventoryPath)
-  const isInventoryRootPath = pathname === "/inventory" || pathname === "/inventory/"
-  const isKhoInventoryAllowedPath =
-    isInventoryRootPath ||
-    pathname === "/inventory/stocktake" ||
-    pathname.startsWith("/inventory/stocktake/")
+    return {
+      isWarehouseFeaturePath: warehouseFeaturePrefixes.some(p => pathname === p || pathname.startsWith(`${p}/`)),
+      isKhoManagerOnlyPath: pathname === "/dashboard_warehouse" || pathname.startsWith("/dashboard_warehouse/"),
+      isAdminPath: adminPrefixes.some(p => pathname === p || pathname.startsWith(`${p}/`)),
+      isProductionManagerPath: pathname.startsWith("/production-management"),
+      isReportsInventoryPath,
+      isAdminReportsPath,
+      isInventoryRootPath,
+      isKhoInventoryAllowedPath
+    }
+  }, [pathname])
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -60,62 +57,32 @@ export function AppShell({ children, title, subtitle }: AppShellProps) {
   useEffect(() => {
     if (loading || !isAuthenticated || !role || !pathname) return
 
-    const isWarehouseFeaturePath = warehouseFeaturePrefixes.some(
-      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
-    )
-    const isKhoManagerOnlyPath = khoManagerOnlyPrefixes.some(
-      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
-    )
-    const isAdminPath = adminPrefixes.some(
-      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
-    )
-    const isProductionManagerPath = productionManagerPrefixes.some(
-      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
-    )
+    const {
+      isKhoManagerOnlyPath, isAdminPath, isProductionManagerPath,
+      isAdminReportsPath, isInventoryRootPath, isKhoInventoryAllowedPath,
+      isWarehouseFeaturePath, isReportsInventoryPath
+    } = pathConfig
 
-    if (role === "admin" && isKhoManagerOnlyPath) {
-      router.push("/dashboard")
-      return
-    }
-
-    // Allow admin to access locations for oversight
-    if (role === "admin" && isWarehouseFeaturePath && !isKhoManagerOnlyPath) {
-      // Admin can access locations for monitoring purposes
-      return
-    }
-
-    if (role === "admin" && (isWarehouseFeaturePath || isReportsInventoryPath) && isKhoManagerOnlyPath) {
-      router.push("/dashboard")
-      return
-    }
-
-    if (
-      role === "kho_manager" &&
-      (
-        isAdminPath ||
-        isAdminReportsPath ||
-        isInventoryRootPath ||
-        isProductionManagerPath
-      ) &&
-      !isKhoInventoryAllowedPath
-    ) {
-      router.push("/dashboard_warehouse")
-      return
-    }
-
-    if (role === "production_manager" && !isProductionManagerPath) {
-      router.push("/production-management/dashboard")
-      return
-    }
-
-    if (role !== "production_manager" && isProductionManagerPath) {
-      if (role === "kho_manager") {
+    // Unified redirection logic
+    if (role === "admin") {
+      if (isKhoManagerOnlyPath) {
+        router.push("/dashboard")
+      }
+    } else if (role === "kho_manager") {
+      if ((isAdminPath || isAdminReportsPath || isInventoryRootPath || isProductionManagerPath) && !isKhoInventoryAllowedPath) {
         router.push("/dashboard_warehouse")
-      } else {
+      }
+    } else if (role === "production_manager") {
+      if (!isProductionManagerPath && pathname !== "/settings") {
+        router.push("/production-management/dashboard")
+      }
+    } else {
+      // Handle other roles or restricted access
+      if (isProductionManagerPath || isAdminPath || isWarehouseFeaturePath) {
         router.push("/dashboard")
       }
     }
-  }, [loading, isAuthenticated, role, pathname, router])
+  }, [loading, isAuthenticated, role, pathname, pathConfig, router])
 
   if (loading) {
     return (
@@ -130,12 +97,15 @@ export function AppShell({ children, title, subtitle }: AppShellProps) {
   }
 
   return (
-    <div className="flex h-screen bg-background">
-      <AppSidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
+    <div className="flex h-screen bg-background text-foreground overflow-hidden">
+      <MemoizedSidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <AppHeader title={title} subtitle={subtitle} />
-        <main className="flex-1 overflow-auto p-6">
-          {children}
+        <MemoizedHeader title={title} subtitle={subtitle} />
+        <main className="flex-1 overflow-y-auto overflow-x-hidden bg-background/50 scroll-smooth">
+          {/* Add a fade-in animation to make tab switching feel smoother */}
+          <div className="container mx-auto p-4 md:p-6 lg:p-8 animate-in fade-in slide-in-from-bottom-1 duration-300">
+            {children}
+          </div>
         </main>
       </div>
     </div>

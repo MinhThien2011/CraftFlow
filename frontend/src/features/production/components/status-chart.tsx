@@ -1,67 +1,53 @@
 "use client"
 
 import { Card } from "@/components/ui/card"
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts"
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts"
 
-const data = [
-  { name: "Đang thực hiện", value: 25, color: "#2B8BE8" },
-  { name: "Hoàn thành", value: 45, color: "#4A9C6B" },
-  { name: "Đã hủy", value: 0, color: "#E04E4E" },
-]
+interface StatusChartProps {
+  data: Array<{ name: string; value: number; color: string }>
+}
 
-export function StatusChart() {
-  const total = data.reduce((sum, item) => sum + item.value, 0)
+export function StatusChart({ data }: StatusChartProps) {
+  const hasData = data.some(item => item.value > 0)
 
   return (
-    <Card className="p-6 bg-card border-border h-full">
+    <Card className="p-6 bg-card border-border">
       <h3 className="text-lg font-semibold text-card-foreground mb-6">
-        Trạng thái đơn hàng
+        Trạng thái sản xuất
       </h3>
-      <div className="h-[180px] relative">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={data}
-              cx="50%"
-              cy="50%"
-              innerRadius={55}
-              outerRadius={80}
-              paddingAngle={2}
-              dataKey="value"
-            >
-              {data.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.color} />
-              ))}
-            </Pie>
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "#FFFFFF",
-                border: "1px solid #E5DDD5",
-                borderRadius: "8px",
-                fontSize: "12px",
-              }}
-              formatter={(value: number) => [`${value} đơn`, ""]}
-            />
-          </PieChart>
-        </ResponsiveContainer>
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-          <p className="text-3xl font-bold text-card-foreground">{total}</p>
-          <p className="text-sm text-muted-foreground">Tổng đơn</p>
-        </div>
-      </div>
-      <div className="mt-4 space-y-3">
-        {data.map((item) => (
-          <div key={item.name} className="flex items-center gap-2">
-            <div
-              className="h-3 w-3 rounded-full"
-              style={{ backgroundColor: item.color }}
-            />
-            <span className="text-sm text-muted-foreground">{item.name}</span>
-            <span className="ml-auto text-sm font-medium text-card-foreground">
-              {item.value}
-            </span>
+      <div className="h-[300px] w-full">
+        {hasData ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={data}
+                cx="50%"
+                cy="50%"
+                innerRadius={60}
+                outerRadius={80}
+                paddingAngle={5}
+                dataKey="value"
+              >
+                {data.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.color} />
+                ))}
+              </Pie>
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: 'hsl(var(--card))',
+                  borderColor: 'hsl(var(--border))',
+                  borderRadius: '8px'
+                }}
+                itemStyle={{ color: 'hsl(var(--foreground))' }}
+              />
+              <Legend verticalAlign="bottom" height={36} />
+            </PieChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="h-full flex items-center justify-center text-muted-foreground">
+            Chưa có dữ liệu trạng thái
           </div>
-        ))}
+        )}
       </div>
     </Card>
   )

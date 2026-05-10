@@ -69,9 +69,8 @@ export function OrdersTable({ orders, isLoading, onOrderClick }: OrdersTableProp
                   </span>
                 </td>
                 <td className="px-6 py-4 text-card-foreground">
-                  {typeof order.products[0]?.product === 'object' 
-                    ? order.products[0].product.name 
-                    : 'Đang tải...'}
+                  {order.products[0]?.product|| (order.products[0]?.product as any)?.name || 'Đang tải...'}
+                  {order.products.length > 1 && <span className="text-muted-foreground ml-1">(+{order.products.length - 1})</span>}
                 </td>
                 <td className="px-6 py-4 text-card-foreground">
                   {order.products.reduce((sum, p) => sum + p.quantity, 0)}
