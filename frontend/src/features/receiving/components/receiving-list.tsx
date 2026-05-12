@@ -1,18 +1,19 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { format } from 'date-fns'
 import { vi } from 'date-fns/locale'
-import { 
-  PackagePlus, 
-  Search, 
-  Eye, 
-  Check, 
-  X, 
-  QrCode, 
-  FileSignature, 
-  Truck, 
-  AlertCircle 
+import {
+  PackagePlus,
+  Search,
+  Eye,
+  Check,
+  X,
+  QrCode,
+  FileSignature,
+  Truck,
+  AlertCircle,
+  ArrowRight
 } from 'lucide-react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -42,6 +43,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 
 import { useReceivingSlips, useUpdateSlipStatus } from '../hooks/use-receiving'
 import { ReceivingStatus } from '../types'
+import { purchaseOrderApi, type PurchaseOrder } from '@/api/purchaseOrder.api'
+import { toast } from 'sonner'
+import { CurrencyDisplay } from '@/components/ui/currency-display'
 
 const statusColors: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-700',
@@ -70,18 +74,39 @@ interface ReceivingListProps {
 
 export function ReceivingList({ onShowQR, onOpenScanner }: ReceivingListProps) {
   const [searchTerm, setSearchTerm] = useState('')
-  const [activeTab, setActiveTab] = useState<ReceivingStatus | 'all'>('all')
+  const [activeTab, setActiveTab] = useState<ReceivingStatus | 'all' | 'po_pending'>('all')
   const [page, setPage] = useState(1)
+  const [acceptedPOs, setAcceptedPOs] = useState<PurchaseOrder[]>([])
+  const [isLoadingPOs, setIsLoadingPOs] = useState(false)
 
   const { data, isLoading, isError, refetch } = useReceivingSlips({
     page,
     limit: 10,
     type: 'import',
-    status: activeTab === 'all' ? undefined : activeTab,
+    status: (activeTab === 'all' || activeTab === 'po_pending') ? undefined : activeTab as ReceivingStatus,
     search: searchTerm
   })
 
   const updateStatusMutation = useUpdateSlipStatus()
+
+  useEffect(() => {
+    if (activeTab === 'po_pending') {
+      const fetchPOs = async () => {
+        setIsLoadingPOs(true)
+        try {
+          const res: any = await purchaseOrderApi.getAll({ status: 'accepted' })
+          if (res.success || res.status === 'success') {
+            setAcceptedPOs(res.data?.items || res.data || [])
+          }
+        } catch (error) {
+          toast.error("Lỗi khi tải danh sách PO chờ nhập kho")
+        } finally {
+          setIsLoadingPOs(false)
+        }
+      }
+      fetchPOs()
+    }
+  }, [activeTab])
 
   if (isError) {
     return (
@@ -115,25 +140,66 @@ export function ReceivingList({ onShowQR, onOpenScanner }: ReceivingListProps) {
                   <TabsTrigger value="all">Tất cả</TabsTrigger>
                   <TabsTrigger value="pending">Chờ xử lý</TabsTrigger>
                   <TabsTrigger value="inspected">Đã kiểm tra</TabsTrigger>
+                  <TabsTrigger value="po_pending">PO chờ nhập</TabsTrigger>
                 </TabsList>
                 <div className="flex gap-2">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input 
-                      placeholder="Tìm mã phiếu..." 
-                      value={searchTerm} 
-                      onChange={(e) => setSearchTerm(e.target.value)} 
-                      className="pl-9 w-64" 
+                    <Input
+                      placeholder="Tìm kiếm..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-9 w-64"
                     />
                   </div>
                   <Button onClick={onOpenScanner} variant="outline"><QrCode className="mr-2 size-4" />Quét QR</Button>
-                  <Link href="/receiving/create"><Button><PackagePlus className="mr-2 size-4" />Tạo phiếu nhập</Button></Link>
                 </div>
               </div>
             </CardHeader>
 
             <div className="p-6 pt-4">
-              {isLoading ? (
+              {activeTab === 'po_pending' ? (
+                isLoadingPOs ? (
+                  <div className="space-y-2">
+                    {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Mã PO</TableHead>
+                          <TableHead>Lý do</TableHead>
+                          <TableHead>Tổng tiền</TableHead>
+                          <TableHead>Ngày duyệt</TableHead>
+                          <TableHead className="text-right">Thao tác</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {acceptedPOs.length === 0 ? (
+                          <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Không có PO nào chờ nhập kho</TableCell></TableRow>
+                        ) : (
+                          acceptedPOs.map((po) => (
+                            <TableRow key={po._id}>
+                              <TableCell className="font-medium">{(po as any).orderCode || po._id.slice(-6).toUpperCase()}</TableCell>
+                              <TableCell>{po.orderReason}</TableCell>
+                              <TableCell><CurrencyDisplay value={po.totalBaseCost} /></TableCell>
+                              <TableCell>{format(new Date(po.updatedAt || po.createdAt), 'dd/MM/yyyy', { locale: vi })}</TableCell>
+                              <TableCell className="text-right">
+                                <Link href={`/receiving/create?poId=${po._id}`}>
+                                  <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                                    Nhập kho <ArrowRight className="ml-2 size-4" />
+                                  </Button>
+                                </Link>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )
+              ) : isLoading ? (
                 <div className="space-y-2">
                   {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
                 </div>
@@ -192,7 +258,7 @@ export function ReceivingList({ onShowQR, onOpenScanner }: ReceivingListProps) {
                                     </div>
                                     {slip.status === 'pending' && (
                                       <DialogFooter>
-                                        <Button 
+                                        <Button
                                           className="bg-emerald-600 hover:bg-emerald-700"
                                           onClick={() => updateStatusMutation.mutate({ id: slip._id, status: 'received' })}
                                           disabled={updateStatusMutation.isPending}
@@ -203,10 +269,10 @@ export function ReceivingList({ onShowQR, onOpenScanner }: ReceivingListProps) {
                                     )}
                                   </DialogContent>
                                 </Dialog>
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="size-8" 
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="size-8"
                                   onClick={() => onShowQR(slip)}
                                 ><QrCode className="size-4" /></Button>
                               </div>

@@ -52,5 +52,5 @@ export const materialApi = {
      */
     deleteMaterial: async (id: string): Promise<ApiResponse<null>> => {
         return axiosInstance.delete(`/materials/${id}`);
-    }
+    },
 };

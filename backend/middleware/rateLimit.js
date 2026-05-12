@@ -47,9 +47,10 @@ const fastSendCommand = async (...args) => {
 
     // Final check before sending
     if (!client.isOpen) {
-        // Return safe default instead of throwing
+        // Only throw for critical commands like SCRIPT LOAD or EVAL
+        // For INCR/HINCRBY, we can still return 1 as a safe default if we want to bypass
         if (args[0] === 'INCR' || args[0] === 'HINCRBY') return 1;
-        return null;
+        throw new Error('Redis client is closed');
     }
 
     try {
@@ -63,13 +64,9 @@ const fastSendCommand = async (...args) => {
             global._lastRedisErrorLog = Date.now();
         }
 
-        // Return a safe default instead of throwing to avoid UNHANDLED REJECTION
-        // For rate-limit-redis, returning 1 for INCR or similar safe values 
-        // will effectively bypass the limit or at least not crash.
-        // However, it's better to return null/undefined and let the caller handle it if possible,
-        // but since we want to avoid rejections, we'll return a resolved promise with a safe value.
+        // Rethrow for script commands, but return 1 for increments
         if (args[0] === 'INCR' || args[0] === 'HINCRBY') return 1;
-        return null;
+        throw error;
     }
 };
 
@@ -110,10 +107,29 @@ const commonOptions = {
  * Base configuration for Redis-backed rate limiters with memory fallback
  */
 const createStore = (prefix) => {
-    return new RedisStore({
-        sendCommand: fastSendCommand,
-        prefix: `rl:${prefix}:`,
-    });
+    // If we're sure Redis is down (max retries reached or health check failed)
+    // we use MemoryStore. Otherwise we try RedisStore.
+    if (!getRedisHealth()) {
+        console.warn(`ℹ️ Using MemoryStore for ${prefix} rate limiting (Redis is unhealthy)`);
+        return undefined;
+    }
+
+    try {
+        return new RedisStore({
+            sendCommand: async (...args) => {
+                try {
+                    return await fastSendCommand(...args);
+                } catch (err) {
+                    // If sendCommand fails, we throw so rate-limit-redis knows something is wrong
+                    throw err;
+                }
+            },
+            prefix: `rl:${prefix}:`,
+        });
+    } catch (error) {
+        console.error(`⚠️ Failed to initialize RedisStore for ${prefix}, falling back to MemoryStore`);
+        return undefined;
+    }
 };
 
 /**

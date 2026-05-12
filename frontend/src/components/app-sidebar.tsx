@@ -56,21 +56,21 @@ const navigation = [
   { name: "Nhập kho", href: "/receiving", icon: PackagePlus, roles: ["kho_manager"] },
   { name: "Xuất kho", href: "/issuing", icon: PackageMinus, roles: ["kho_manager"] },
   { name: "Yêu cầu vật liệu", href: "/requisitions/pending", icon: ClipboardList, roles: ["kho_manager"] },
-  { name: "Sản phẩm & BOM", href: "/products", icon: Boxes, roles: ["admin"] },
+  { name: "Sản phẩm & BOM", href: "/products", icon: Boxes, roles: ["admin", "production_manager"] },
   { name: "Sản xuất", href: "/production", icon: Factory, roles: ["admin"] },
   { name: "Cảnh báo tồn kho", href: "/alerts", icon: AlertTriangle, roles: ["kho_manager", "admin"] },
+  { name: "Yêu cầu mua hàng", href: "/production-management/purchase-orders", icon: PackagePlus, roles: ["admin"] },
   { name: "Nhật ký hệ thống", href: "/system-log", icon: FileSearch, roles: ["admin"] },
   { name: "Người dùng", href: "/users", icon: Users, roles: ["admin"] },
   { name: "Báo cáo", href: "/reports", icon: BarChart3, roles: ["admin"], badge: true },
   { name: "Báo cáo kho (N-X-T)", href: "/reports/inventory", icon: BarChart3, roles: ["kho_manager"], badge: true },
-  { name: "Tổng quan PM", href: "/production-management/dashboard", icon: LayoutDashboard, roles: ["production_manager"] },
-  { name: "Sản phẩm PM", href: "/production-management/products", icon: Boxes, roles: ["production_manager"] },
-  { name: "Đơn sản xuất PM", href: "/production-management/orders", icon: ClipboardList, roles: ["production_manager"] },
-  { name: "Công việc PM", href: "/production-management/tasks", icon: ListTodo, roles: ["production_manager"] },
-  { name: "Hao hụt PM", href: "/production-management/issues", icon: AlertTriangle, roles: ["production_manager"] },
-  { name: "Cảnh báo vật tư PM", href: "/alerts", icon: Bell, roles: ["production_manager"] },
-  { name: "Yêu cầu mua hàng PM", href: "/production-management/purchase-orders", icon: PackagePlus, roles: ["production_manager"] },
-  { name: "Báo cáo PM", href: "/production-management/reports", icon: BarChart3, roles: ["production_manager"], badge: true },
+  { name: "Tổng quan sản xuất", href: "/production-management/dashboard", icon: LayoutDashboard, roles: ["production_manager"] },
+  { name: "Đơn sản xuất", href: "/production-management/orders", icon: ClipboardList, roles: ["production_manager"] },
+  { name: "Công việc", href: "/production-management/tasks", icon: ListTodo, roles: ["production_manager"] },
+  { name: "Hao hụt", href: "/production-management/issues", icon: AlertTriangle, roles: ["production_manager"] },
+  { name: "Cảnh báo vật tư", href: "/alerts", icon: Bell, roles: ["production_manager"] },
+  { name: "Yêu cầu mua hàng", href: "/production-management/purchase-orders", icon: PackagePlus, roles: ["production_manager"] },
+  { name: "Báo cáo", href: "/production-management/reports", icon: BarChart3, roles: ["production_manager"], badge: true },
 ]
 
 const warehouseGroupedNavigation = [
@@ -80,10 +80,8 @@ const warehouseGroupedNavigation = [
     badge: "6",
     roles: ["admin", "kho_manager"],
     children: [
-      { name: "Danh sách phiếu nhập", href: "/receiving" },
-      { name: "Tạo phiếu nhập", href: "/receiving/create" },
-      { name: "Kiểm tra chất lượng (QC)", href: "/receiving/qc" },
-      { name: "Phiếu chờ duyệt", href: "/receiving/pending" },
+      { name: "Phiếu nhập vật liệu", href: "/receiving/materials" },
+      { name: "Phiếu nhập thành phẩm", href: "/receiving/products" },
     ],
   },
   {
@@ -163,7 +161,6 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
     if (normalizedPath === normalizedHref) return true
 
     if (normalizedPath.startsWith(`${normalizedHref}/`)) {
-      // Kiểm tra xem có mục menu nào khác khớp dài hơn (cụ thể hơn) không
       const allPossibleHrefs = [
         ...navigation.map((n) => n.href),
         ...warehouseGroupedNavigation.flatMap((g) => g.children.map((c) => c.href)),

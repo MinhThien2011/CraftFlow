@@ -15,9 +15,12 @@ import {
   User,
   ArrowRight,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Plus
 } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
+import { materialApi } from "@/api/material.api"
+import { productionApi } from "@/api/production.api"
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -45,6 +48,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog"
 
 const CustomPagination = ({ page, total, pageSize, onChange }: { page: number; total: number; pageSize: number; onChange: (p: number) => void }) => {
@@ -81,6 +85,16 @@ export default function PurchaseOrdersPage() {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
   const [adminNote, setAdminNote] = useState("")
 
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [createPriority, setCreatePriority] = useState<'low' | 'medium' | 'high'>('medium')
+  const [createReason, setCreateReason] = useState('')
+  const [createOrder, setCreateOrder] = useState('')
+  const [createItems, setCreateItems] = useState<any[]>([])
+
+  const [insufficientOrders, setInsufficientOrders] = useState<any[]>([])
+  const [materialAlerts, setMaterialAlerts] = useState<any[]>([])
+  const [availableMaterials, setAvailableMaterials] = useState<any[]>([])
+
   const [page, setPage] = useState(1)
   const ITEMS_PER_PAGE = 10
 
@@ -110,11 +124,123 @@ export default function PurchaseOrdersPage() {
     fetchOrders()
   }, [fetchOrders])
 
+  const handleOpenCreate = () => {
+    setIsCreateOpen(true)
+    setCreatePriority('medium')
+    setCreateReason('')
+    setCreateOrder('none')
+    setCreateItems([])
+
+    if (insufficientOrders.length === 0) {
+      Promise.all([
+        (productionApi as any).getAll ? (productionApi as any).getAll({ status: 'insufficient_materials', limit: 100 }) : (productionApi as any).getOrders({ status: 'insufficient_materials', limit: 100 }),
+        (materialApi as any).getMaterials({ limit: 100 }),
+        (productionApi as any).getMaterialAlerts({ limit: 100, status: 'pending' })
+      ]).then(([ordersRes, materialsRes, alertsRes]: any) => {
+        setInsufficientOrders(ordersRes?.data?.orders || ordersRes?.data?.items || ordersRes?.data || [])
+        setAvailableMaterials(materialsRes?.data?.materials || materialsRes?.data?.items || materialsRes?.data || [])
+        setMaterialAlerts(alertsRes?.data?.alerts || alertsRes?.data?.items || alertsRes?.data || [])
+      }).catch(console.error)
+    }
+  }
+
+  const handleCreateOrderChange = (val: string) => {
+    const newVal = val === "none" ? "" : val;
+    setCreateOrder(newVal);
+    if (newVal) {
+      const alertsForOrder = materialAlerts.filter(a => {
+        const orderId = a.productionOrder?._id || a.productionOrder;
+        return orderId === newVal && !a.purchaseOrder;
+      });
+
+      const newItems = alertsForOrder.map(a => ({
+        isManual: false,
+        material: a.material,
+        quantity: String(a.shortageQuantity || a.neededQuantity || 1),
+        alertId: a._id
+      }));
+
+      setCreateItems(prev => [
+        ...newItems,
+        ...prev.filter(i => i.isManual)
+      ]);
+      setCreatePriority('high');
+
+      const orderData = insufficientOrders.find(o => o._id === newVal);
+      if (orderData && !createReason) {
+        setCreateReason(`Nhập vật tư cho đơn sản xuất ${orderData.orderCode || orderData._id}`);
+      }
+    } else {
+      setCreateItems(prev => prev.filter(i => i.isManual));
+    }
+  }
+
+  const addEmptyCreateItem = () => {
+    setCreateItems([...createItems, {
+      isManual: true,
+      material: { _id: '', name: 'Chọn vật tư...', code: '', unit: 'đv', price: 0 },
+      quantity: '1'
+    }])
+  }
+
+  const handleCreateSubmit = async () => {
+    const validItems = createItems.filter(i => i.material && i.material._id)
+    if (validItems.length === 0) {
+      toast.error('Vui lòng thêm ít nhất 1 vật tư')
+      return
+    }
+    if (validItems.some(i => !i.quantity || Number(i.quantity) <= 0)) {
+      toast.error('Vui lòng nhập số lượng hợp lệ cho tất cả vật tư')
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      const purchaseOrderItems = validItems.map(item => ({
+        material: item.material._id,
+        quantity: Number(item.quantity),
+        materialCode: item.material.code || item.materialCode || '',
+        unit: item.material.unit || 'đv',
+        priceAtTimePurchase: item.material.price || 0,
+        totalPriceAtTimePurchase: (item.material.price || 0) * Number(item.quantity)
+      }))
+
+      const payload: any = {
+        orderReason: createReason || `Yêu cầu nhập hàng cho ${purchaseOrderItems.length} vật tư`,
+        priority: createPriority,
+        purchaseOrderItems,
+        ...(createOrder && { productionOrder: createOrder })
+      }
+
+      const alertIds = validItems.map(i => i.alertId).filter(Boolean)
+      if (alertIds.length > 0) {
+        payload.materialAlert = alertIds[0]
+        if (alertIds.length > 1) payload.materialAlerts = alertIds
+      }
+
+      const response = await purchaseOrderApi.create(payload)
+      const res: any = response;
+
+      if (res.success || res.status === 'success') {
+        toast.success(`Đã tạo yêu cầu mua hàng thành công`)
+        setIsCreateOpen(false)
+        fetchOrders()
+      } else {
+        throw new Error(res.message || "Không thể tạo yêu cầu mua hàng")
+      }
+    } catch (error: any) {
+      console.error("Create PO error:", error)
+      toast.error(error.response?.data?.message || error.message || "Không thể tạo yêu cầu mua hàng")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   const handleUpdateStatus = async (id: string, newStatus: string) => {
     setIsSubmitting(true)
     try {
       await purchaseOrderApi.updateStatus(id, newStatus, adminNote)
-      toast.success(`Đã ${newStatus === 'approved' ? 'duyệt' : 'từ chối'} yêu cầu thành công`)
+      toast.success(`Đã ${newStatus === 'accepted' ? 'duyệt' : 'từ chối'} yêu cầu thành công`)
       setIsDetailsOpen(false)
       setAdminNote("")
       fetchOrders()
@@ -129,7 +255,7 @@ export default function PurchaseOrdersPage() {
     switch (status) {
       case 'pending':
         return <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">Chờ duyệt</Badge>
-      case 'approved':
+      case 'accepted':
         return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Đã duyệt</Badge>
       case 'rejected':
         return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Từ chối</Badge>
@@ -186,11 +312,17 @@ export default function PurchaseOrdersPage() {
               <SelectContent>
                 <SelectItem value="all">Tất cả</SelectItem>
                 <SelectItem value="pending">Chờ duyệt</SelectItem>
-                <SelectItem value="approved">Đã duyệt</SelectItem>
+                <SelectItem value="accepted">Đã duyệt</SelectItem>
                 <SelectItem value="rejected">Từ chối</SelectItem>
                 <SelectItem value="completed">Hoàn thành</SelectItem>
               </SelectContent>
             </Select>
+            {!isAdmin && (
+              <Button onClick={handleOpenCreate} className="gap-2">
+                <Plus className="h-4 w-4" />
+                Tạo PO
+              </Button>
+            )}
           </div>
         </div>
 
@@ -214,7 +346,7 @@ export default function PurchaseOrdersPage() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Đã duyệt</p>
-                <p className="text-xl font-bold">{orders.filter(o => o.status === 'approved').length}</p>
+                <p className="text-xl font-bold">{orders.filter(o => o.status === 'accepted').length}</p>
               </div>
             </CardContent>
           </Card>
@@ -446,7 +578,7 @@ export default function PurchaseOrdersPage() {
                 </Button>
                 <Button
                   className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                  onClick={() => handleUpdateStatus(selectedOrder._id, 'approved')}
+                  onClick={() => handleUpdateStatus(selectedOrder._id, 'accepted')}
                   disabled={isSubmitting}
                 >
                   {isSubmitting ? <Spinner className="mr-2" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
@@ -459,6 +591,139 @@ export default function PurchaseOrdersPage() {
               <Button className="bg-primary text-white">Chỉnh sửa</Button>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Dialog */}
+      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+        <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Tạo Yêu Cầu Mua Hàng</DialogTitle>
+            <DialogDescription>
+              Tạo yêu cầu nhập vật tư mới hoặc nhập cho đơn sản xuất bị thiếu vật liệu.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Mức độ ưu tiên</Label>
+                <Select value={createPriority} onValueChange={(v: any) => setCreatePriority(v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Chọn mức độ" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Thấp</SelectItem>
+                    <SelectItem value="medium">Trung bình</SelectItem>
+                    <SelectItem value="high">Cao</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Lý do / Ghi chú</Label>
+                <Input
+                  placeholder="VD: Nhập vật tư cho đơn hàng..."
+                  value={createReason}
+                  onChange={e => setCreateReason(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Đơn Sản Xuất (Thiếu vật tư)</Label>
+                <Select value={createOrder || "none"} onValueChange={handleCreateOrderChange}>
+                  <SelectTrigger className="bg-background">
+                    <SelectValue placeholder="Chọn đơn sản xuất..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">-- Không chọn --</SelectItem>
+                    {(Array.isArray(insufficientOrders) ? insufficientOrders : []).map(o => (
+                      <SelectItem key={o._id} value={o._id}>{o.orderCode || o._id}</SelectItem>
+                    ))}
+                    {createOrder && !(Array.isArray(insufficientOrders) ? insufficientOrders : []).some(o => o._id === createOrder) && (
+                      <SelectItem value={createOrder}>{createOrder}</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <Label>Danh sách vật tư</Label>
+                <Button variant="outline" size="sm" onClick={addEmptyCreateItem} className="h-7 text-xs">
+                  <Plus className="h-3 w-3 mr-1" /> Thêm vật tư
+                </Button>
+              </div>
+              <div className="border rounded-md p-2 max-h-64 overflow-y-auto">
+                <div className="space-y-3">
+                  {createItems.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground text-sm">
+                      Chưa có vật tư nào được thêm
+                    </div>
+                  ) : createItems.map((item, index) => (
+                    <div key={index} className="flex items-center justify-between gap-4 p-2 bg-muted/30 rounded">
+                      {item.isManual ? (
+                        <Select
+                          value={item.material._id}
+                          onValueChange={(val) => {
+                            const selectedMat = availableMaterials.find(m => m._id === val)
+                            if (selectedMat) {
+                              const newItems = [...createItems]
+                              newItems[index].material = selectedMat
+                              setCreateItems(newItems)
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="flex-1 min-w-[200px] h-9 bg-background">
+                            <SelectValue placeholder="Chọn vật tư" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(Array.isArray(availableMaterials) ? availableMaterials : []).map(m => (
+                              <SelectItem key={m._id} value={m._id}>{m.name} ({m.code})</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{item.material.name}</p>
+                          <p className="text-xs text-muted-foreground truncate">{item.material.code} · Tồn: {item.material.currentStock || 0}</p>
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Input
+                          type="number"
+                          value={item.quantity}
+                          onChange={(e) => {
+                            const newItems = [...createItems]
+                            newItems[index].quantity = e.target.value
+                            setCreateItems(newItems)
+                          }}
+                          className="h-9 w-20 bg-background"
+                          min={1}
+                        />
+                        <span className="text-sm text-muted-foreground w-8 truncate">{item.material?.unit || 'đv'}</span>
+                        <Button variant="ghost" size="sm" onClick={() => {
+                          const newItems = [...createItems]
+                          newItems.splice(index, 1)
+                          setCreateItems(newItems)
+                        }} className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive">
+                          <XCircle className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCreateOpen(false)}>Hủy</Button>
+            <Button onClick={handleCreateSubmit} disabled={isSubmitting}>
+              {isSubmitting ? <Spinner className="mr-2" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+              Tạo PO
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </AppShell>

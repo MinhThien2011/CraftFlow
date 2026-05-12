@@ -141,18 +141,35 @@ function AlertsPage() {
   const fetchLowStock = useCallback(async (search?: string) => {
     setIsLoading(true)
     try {
-      // Nếu filter là All, ta gửi status là 'all' để BE không lọc theo status mặc định là 'pending'
-      const response = await productionApi.getMaterialAlerts({
-        status: statusFilter === 'All' ? 'all' : (statusFilter === 'Critical' ? 'critical' : 'low_stock'),
-        limit: 100,
-        page: 1
-      })
+      // Gọi cả 2 API để lấy đủ dữ liệu cho 2 tab
+      const [inventoryRes, ordersRes] = await Promise.all([
+        materialApi.getLowStockMaterials({ search, limit: 100 }).catch(e => { console.error(e); return { success: false }; }),
+        productionApi.getMaterialAlerts({
+          status: statusFilter === 'All' ? 'all' : (statusFilter === 'Critical' ? 'critical' : 'low_stock'),
+          limit: 100,
+          page: 1
+        }).catch(e => { console.error(e); return { success: false }; })
+      ])
 
-      const res: any = response;
-      if ((res.success || res.status === 'success') && res.data?.alerts) {
-        const mappedAlerts = res.data.alerts.map((alert: any) => {
+      let mappedInventory: Material[] = []
+      let mappedOrders: Material[] = []
+
+      // 1. Map dữ liệu Tồn kho thấp (từ materialApi)
+      const invRes: any = inventoryRes;
+      if (invRes.success || invRes.status === 'success') {
+        const materials = invRes.data?.materials || invRes.data?.items || invRes.data || [];
+        mappedInventory = materials.map((m: any) => ({
+          ...m,
+          alertType: 'low_stock',
+          alertId: m._id // Sử dụng _id của material làm alertId cho tab này
+        }))
+      }
+
+      // 2. Map dữ liệu Thiếu cho đơn hàng (từ productionApi)
+      const ordRes: any = ordersRes;
+      if ((ordRes.success || ordRes.status === 'success') && ordRes.data?.alerts) {
+        mappedOrders = ordRes.data.alerts.map((alert: any) => {
           const materialInfo = alert.material && typeof alert.material === 'object' ? alert.material : {};
-
           return {
             ...materialInfo,
             _id: materialInfo._id || (typeof alert.material === 'string' ? alert.material : alert._id),
@@ -162,27 +179,24 @@ function AlertsPage() {
             currentStock: materialInfo.currentStock ?? alert.availableQuantity ?? 0,
             threshold: materialInfo.threshold ?? alert.neededQuantity ?? 0,
             price: materialInfo.price || alert.price || 0,
-
-            // Bổ sung thông tin alert để phân loại và hiển thị
             alertId: alert._id,
-            // QUAN TRỌNG: Phân loại dựa trên việc có gắn với productionOrder hay không
             alertType: alert.productionOrder ? 'order_requirement' : 'low_stock',
             productionOrder: alert.productionOrder,
             alertStatus: alert.status,
             shortageQuantity: alert.shortageQuantity || 0,
             neededQuantity: alert.neededQuantity || 0
           }
-        })
-
-        // Lọc theo search query nếu có
-        const finalData = search
-          ? mappedAlerts.filter((m: any) => m.name.toLowerCase().includes(search.toLowerCase()) || m.code.toLowerCase().includes(search.toLowerCase()))
-          : mappedAlerts;
-
-        setAllMaterials(finalData)
-      } else {
-        setAllMaterials([])
+        }).filter((m: any) => m.alertType === 'order_requirement') // Lọc chỉ giữ lại alert của đơn hàng
       }
+
+      const combined = [...mappedInventory, ...mappedOrders]
+
+      // Lọc theo search query nếu có
+      const finalData = search
+        ? combined.filter((m: any) => m.name.toLowerCase().includes(search.toLowerCase()) || m.code.toLowerCase().includes(search.toLowerCase()))
+        : combined;
+
+      setAllMaterials(finalData)
     } catch (error) {
       console.error("Fetch material alerts error:", error)
       setAllMaterials([])
@@ -292,7 +306,7 @@ function AlertsPage() {
         orderReason: restockItem.note || `Yêu cầu nhập hàng cho ${material.name} (${material.alertType === 'order_requirement' ? 'Thiếu vật tư cho đơn hàng' : 'Tồn kho thấp'})`,
         priority: (material.alertType === 'order_requirement' ? 'high' : 'medium') as 'high' | 'medium' | 'low',
         productionOrder: material.productionOrder?._id || (typeof material.productionOrder === 'string' ? material.productionOrder : null),
-        materialAlert: material.alertId,
+        ...(material.alertType === 'order_requirement' && { materialAlert: material.alertId }),
         purchaseOrderItems: [
           {
             material: material._id,
@@ -333,7 +347,8 @@ function AlertsPage() {
       else if (typeof (materialApi as any).getMaterials === 'function') res = await (materialApi as any).getMaterials({ limit: 1000 })
 
       if (res && (res.success || res.status === 'success')) {
-        setAvailableMaterials(res.data?.materials || res.data || [])
+        const materialsData = res.data?.materials || res.data?.items || res.data
+        setAvailableMaterials(Array.isArray(materialsData) ? materialsData : [])
       }
     } catch (e) { console.error("Fetch materials error:", e) }
   }
@@ -346,7 +361,8 @@ function AlertsPage() {
       else if (typeof (productionApi as any).getOrders === 'function') res = await (productionApi as any).getOrders({ status: 'insufficient_materials', limit: 100 })
       
       if (res && (res.success || res.status === 'success')) {
-        setInsufficientOrders(res.data?.items || res.data || [])
+        const ordersData = res.data?.orders || res.data?.items || res.data
+        setInsufficientOrders(Array.isArray(ordersData) ? ordersData : [])
       }
     } catch (e) { console.error("Fetch orders error:", e) }
   }
@@ -414,7 +430,10 @@ function AlertsPage() {
         ...(batchOrder && { productionOrder: batchOrder })
       }
 
-      const alertIds = validItems.map(i => i.material.alertId).filter(Boolean)
+      const alertIds = validItems
+        .filter(i => i.material.alertType === 'order_requirement')
+        .map(i => i.material.alertId)
+        .filter(Boolean)
       if (alertIds.length > 0) {
         payload.materialAlert = alertIds[0] // Để tương thích API cũ
         if (alertIds.length > 1) payload.materialAlerts = alertIds // Gửi thêm list
@@ -928,11 +947,11 @@ function AlertsPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">-- Không chọn --</SelectItem>
-                      {insufficientOrders.map(o => (
+                      {(Array.isArray(insufficientOrders) ? insufficientOrders : []).map(o => (
                         <SelectItem key={o._id} value={o._id}>{o.orderCode || o._id}</SelectItem>
                       ))}
                       {/* Hiển thị mã hiện tại nếu nó không nằm trong danh sách (để không bị mất label) */}
-                      {batchOrder && !insufficientOrders.some(o => o._id === batchOrder) && (
+                      {batchOrder && !(Array.isArray(insufficientOrders) ? insufficientOrders : []).some(o => o._id === batchOrder) && (
                         <SelectItem value={batchOrder}>{batchOrder}</SelectItem>
                       )}
                     </SelectContent>
@@ -967,7 +986,7 @@ function AlertsPage() {
                               <SelectValue placeholder="Chọn vật tư" />
                             </SelectTrigger>
                             <SelectContent>
-                              {availableMaterials.map(m => (
+                              {(Array.isArray(availableMaterials) ? availableMaterials : []).map(m => (
                                 <SelectItem key={m._id} value={m._id}>{m.name} ({m.code})</SelectItem>
                               ))}
                             </SelectContent>

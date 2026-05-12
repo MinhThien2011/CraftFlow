@@ -14,8 +14,7 @@ const purchaseOrderSchema = joi.object({
 
 const updateStatusPurchaseOrderSchema = joi.object({
     status: joi.string().valid(PURCHASE_ORDER_STATUS.ACCEPTED, PURCHASE_ORDER_STATUS.REJECTED).required(),
-    adminNotes: joi.string().required(),
-
+    adminNotes: joi.string().allow('').optional(),
 });
 
 export const updateStatusPurchaseOrderValidator = (data) => updateStatusPurchaseOrderSchema.validate(data, { abortEarly: false, stripUnknown: true });

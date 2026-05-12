@@ -321,7 +321,7 @@ export default function InventoryPage() {
                   </div>
                   <div>
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Sắp hết hàng</p>
-                    <p className="text-2xl font-bold text-[#FFA500]">{(overview.materials.lowStockCount || 0) + (overview.products.lowStockCount || 0)}</p>
+                    <p className="text-2xl font-bold text-[#FFA500]">{(overview.materials.lowStockItems || 0) + (overview.products.lowStockItems || 0)}</p>
                   </div>
                 </CardContent>
               </Card>
@@ -332,7 +332,7 @@ export default function InventoryPage() {
                   </div>
                   <div>
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Mức nguy cấp</p>
-                    <p className="text-2xl font-bold text-[#DC3545]">{overview.materials.criticalCount || 0}</p>
+                    <p className="text-2xl font-bold text-[#DC3545]">{overview.materials.totalItems || 0}</p>
                   </div>
                 </CardContent>
               </Card>

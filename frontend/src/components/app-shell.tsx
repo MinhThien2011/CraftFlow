@@ -74,7 +74,8 @@ export function AppShell({ children, title, subtitle }: AppShellProps) {
       }
     } else if (role === "production_manager") {
       // Cho phép PM truy cập các trang production-management, alerts, và settings
-      const isAllowedPMPath = isProductionManagerPath || pathname === "/alerts" || pathname.startsWith("/alerts/") || pathname === "/settings";
+      const isProductsPath = pathname === "/products" || pathname.startsWith("/products/")
+      const isAllowedPMPath = isProductionManagerPath || isProductsPath || pathname === "/alerts" || pathname.startsWith("/alerts/") || pathname === "/settings";
       if (!isAllowedPMPath) {
         router.push("/production-management/dashboard")
       }

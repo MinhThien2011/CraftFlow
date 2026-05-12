@@ -22,13 +22,11 @@ export const getProductsByQuery = async (query) => {
       sortOrder = 'desc'
     } = query;
 
-    // Normalize parameters to handle empty strings from query params
     const normalizedSortBy = (sortBy && typeof sortBy === 'string' && sortBy.trim() !== '') ? sortBy : 'createdAt';
     const normalizedSortOrder = (sortOrder && typeof sortOrder === 'string' && sortOrder.trim() !== '') ? sortOrder : 'desc';
     const normalizedSearch = (search && typeof search === 'string' && search.trim() !== '') ? search : '';
     const normalizedCategory = (category && typeof category === 'string' && category.trim() !== '') ? category : '';
 
-    // For isActive, if it's an empty string or not provided, default to true
     let normalizedIsActive = isActive;
     if (isActive === '' || isActive === undefined || isActive === null) {
       normalizedIsActive = 'true';
@@ -63,7 +61,7 @@ export const getProductsByQuery = async (query) => {
     // --- Execute Query ---
     const [products, total] = await Promise.all([
       Product.find(conditions)
-        .select('name code category unit productImage currentStock threshold shelf isActive createdAt') // Added projection
+        .select('name code description category unit baseCost estimateMaterialCost productImage currentStock threshold shelf isActive createdAt totalProduced') // Added projection
         .sort(sortOptions)
         .skip(skip)
         .limit(limitNum)
@@ -74,7 +72,7 @@ export const getProductsByQuery = async (query) => {
     ]);
 
     return {
-      status: 'success',
+      success: true,
       message: 'Products retrieved successfully.',
       data: {
         products: transformProducts(products),
@@ -97,6 +95,9 @@ export const getProductsByQuery = async (query) => {
  */
 export const getProductById = async (id) => {
   try {
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return { status: 'error', message: 'Product ID is required.', data: null };
+    }
     const product = await Product.findById(id)
       .select('-__v')
       .populate('estimateMaterialCost.material', 'name code unit currency')
@@ -105,7 +106,7 @@ export const getProductById = async (id) => {
     if (!product) {
       return { status: 'error', message: 'Product not found.', data: null };
     }
-    return { status: 'success', message: 'Product retrieved successfully.', data: { product: transformProduct(product) } };
+    return { success: true, message: 'Product retrieved successfully.', data: { product: transformProduct(product) } };
   } catch (error) {
     console.log('[ProductService] getProductById error:', error);
     return { status: 'error', message: 'An error occurred while fetching the product: ' + error.message, data: null };
@@ -147,7 +148,7 @@ export const recordIncomingProduct = async (productId, quantity, type, note, use
     await session.commitTransaction();
 
     return {
-      status: 'success',
+      success: true,
       message: 'Incoming product recorded successfully.',
       data: { product: transformProduct(product), transaction: transaction[0] }
     };
@@ -200,7 +201,7 @@ export const recordOutgoingProduct = async (productId, quantity, type, note, use
     await session.commitTransaction();
 
     return {
-      status: 'success',
+      success: true,
       message: 'Outgoing product recorded successfully.',
       data: { product: transformProduct(product), transaction: transaction[0] }
     };
@@ -240,7 +241,7 @@ export const getProductHistoryService = async ({ productId, type, direction, pag
     ]);
 
     return {
-      status: 'success',
+      success: true,
       message: 'Product history retrieved successfully.',
       data: {
         history: standardlizeResponseDataHelper(history),
@@ -313,7 +314,7 @@ export const getLowStockProductsService = async ({ search = '', page = 1, limit 
     const total = result[0].metadata[0]?.total || 0;
 
     return {
-      status: 'success',
+      success: true,
       message: products.length > 0 ? 'Low stock products found.' : 'No low stock products found.',
       data: {
         products: transformProducts(products),
@@ -349,7 +350,7 @@ export const createProduct = async (productData) => {
 
     const product = await Product.create(productData);
     return {
-      status: 'success',
+      success: true,
       message: 'Product created successfully.',
       data: { product: transformProduct(product) }
     };
@@ -384,7 +385,7 @@ export const updateProduct = async (id, updateData) => {
 
     const updatedProduct = await Product.findByIdAndUpdate(id, updateData, { returnDocument: 'after' }).lean();
     return {
-      status: 'success',
+      success: true,
       message: 'Product updated successfully.',
       data: { product: transformProduct(updatedProduct) }
     };
@@ -403,7 +404,7 @@ export const deleteProduct = async (id) => {
     if (!product) {
       return { status: 'error', message: 'Product not found.', data: null };
     }
-    return { status: 'success', message: 'Product deactivated successfully.', data: product };
+    return { success: true, message: 'Product deactivated successfully.', data: product };
   } catch (error) {
     console.log('[ProductService] deleteProduct error:', error);
     return { status: 'error', message: 'Failed to deactivate product: ' + error.message, data: null };

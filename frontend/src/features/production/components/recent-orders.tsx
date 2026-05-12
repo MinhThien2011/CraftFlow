@@ -17,6 +17,9 @@ const statusConfig: Record<string, { label: string; color: string }> = {
   "completed": { label: "Hoàn thành", color: "bg-[#4A9C6B] text-white" },
   "cancelled": { label: "Đã hủy", color: "bg-[#E04E4E] text-white" },
   "pending": { label: "Chờ xử lý", color: "bg-amber-500 text-white" },
+  "insufficient_materials": { label: "Thiếu vật tư", color: "bg-purple-500 text-white" },
+  "on_hold": { label: "Tạm dừng", color: "bg-gray-500 text-white" },
+  "assigned": { label: "Đã phân công", color: "bg-cyan-500 text-white" },
 }
 
 export function RecentOrders({ orders }: RecentOrdersProps) {
@@ -104,5 +107,3 @@ export function RecentOrders({ orders }: RecentOrdersProps) {
     </Card>
   )
 }
-
-

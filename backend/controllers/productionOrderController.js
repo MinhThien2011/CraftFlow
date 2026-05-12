@@ -24,7 +24,7 @@ export const getListProductionOrder = async (req, res) => {
     const cachedResult = await getCachedData(cacheKey);
     if (cachedResult) {
       return res.status(StatusCodes.OK).json({
-        status: 'success',
+        success: true,
         message: 'Production orders retrieved successfully (from cache)',
         data: cachedResult
       });
@@ -66,7 +66,7 @@ export const getProductionOrderById = async (req, res) => {
     const cachedResult = await getCachedData(cacheKey);
     if (cachedResult) {
       return res.status(StatusCodes.OK).json({
-        status: 'success',
+        success: true,
         message: 'Production order details retrieved (from cache)',
         data: cachedResult
       });
@@ -126,7 +126,7 @@ export const createOrder = async (req, res) => {
     }, req);
 
     return res.status(StatusCodes.CREATED).json({
-      status: 'success',
+      success: true,
       message: result.message,
       data: result.data
     });
@@ -145,7 +145,7 @@ export const getSuggestions = async (req, res) => {
   try {
     const result = await productionOrderService.getStaffSuggestions();
     return res.status(StatusCodes.OK).json({
-      status: 'success',
+      success: true,
       message: result.message,
       data: result.data
     });
@@ -164,7 +164,7 @@ export const suggestAssignments = async (req, res) => {
     const { id } = req.params;
     const result = await productionOrderService.suggestOrderAssignments(id);
     return res.status(StatusCodes.OK).json({
-      status: 'success',
+      success: true,
       message: result.message,
       data: result.data
     });
@@ -231,7 +231,7 @@ export const assignOrder = async (req, res) => {
     }, req);
 
     return res.status(StatusCodes.OK).json({
-      status: 'success',
+      success: true,
       message: result.message,
       data: result.data
     });
@@ -263,7 +263,7 @@ export const checkMaterials = async (req, res) => {
     clearCacheByPattern(`production:detail:${id}`);
 
     return res.status(StatusCodes.OK).json({
-      status: 'success',
+      success: true,
       message: result.message,
       data: result.data
     });
@@ -312,7 +312,7 @@ export const updateOrderStatus = async (req, res) => {
     }, req);
 
     return res.status(StatusCodes.OK).json({
-      status: 'success',
+      success: true,
       message: result.message,
       data: result.data
     });
@@ -364,7 +364,7 @@ export const reassignTask = async (req, res) => {
     }, req);
 
     return res.status(StatusCodes.OK).json({
-      status: 'success',
+      success: true,
       message: result.message,
       data: result.data
     });
@@ -419,7 +419,7 @@ export const updateAssignmentStatus = async (req, res) => {
     }, req);
 
     return res.status(StatusCodes.OK).json({
-      status: 'success',
+      success: true,
       message: result.message,
       data: result.data
     });
@@ -448,7 +448,7 @@ export const getBom = async (req, res) => {
     }
 
     return res.status(StatusCodes.OK).json({
-      status: 'success',
+      success: true,
       message: result.message,
       data: result.data
     });
@@ -493,7 +493,7 @@ export const createStockInSlip = async (req, res) => {
     }, req);
 
     return res.status(StatusCodes.CREATED).json({
-      status: 'success',
+      success: true,
       message: result.message,
       data: result.data
     });

@@ -87,4 +87,12 @@ export const inventoryApi = {
     }): Promise<ApiResponse<any>> => {
         return axiosInstance.post("/inventory/adjust", data);
     }
+    ,
+    getProductHistory: async (params: {
+        page?: number;
+        limit?: number;
+        direction?: 'in' | 'out';
+    } = {}): Promise<InventoryHistoryResponse> => {
+        return axiosInstance.get("/products/history", { params });
+    }
 };

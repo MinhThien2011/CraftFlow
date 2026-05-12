@@ -6,9 +6,9 @@ export const getMyNotifications = async (req, res) => {
         const userId = req.userId;
         const { page, limit } = req.query;
         const result = await notificationService.getUserNotifications(userId, { page, limit });
-        
+
         return res.status(StatusCodes.OK).json({
-            status: 'success',
+            success: true,
             data: result
         });
     } catch (error) {
@@ -24,7 +24,7 @@ export const markRead = async (req, res) => {
         const userId = req.userId;
         const { id } = req.params;
         const result = await notificationService.markAsRead(id, userId);
-        
+
         if (!result) {
             return res.status(StatusCodes.NOT_FOUND).json({
                 status: 'error',
@@ -33,7 +33,7 @@ export const markRead = async (req, res) => {
         }
 
         return res.status(StatusCodes.OK).json({
-            status: 'success',
+            success: true,
             data: result
         });
     } catch (error) {
@@ -48,9 +48,9 @@ export const markAllRead = async (req, res) => {
     try {
         const userId = req.userId;
         await notificationService.markAllAsRead(userId);
-        
+
         return res.status(StatusCodes.OK).json({
-            status: 'success',
+            success: true,
             message: 'All notifications marked as read'
         });
     } catch (error) {

@@ -79,7 +79,7 @@ export const approveRequisition = async (requisitionId, adminId) => {
     await session.commitTransaction();
 
     return {
-      status: 'success',
+      success: true,
       message: 'Requisition approved and export slip created.',
       data: { requisition, slip: createdSlip }
     };
@@ -173,7 +173,7 @@ export const requestSupplementaryMaterials = async (productionOrderId, managerId
     await productionOrder.save();
 
     return {
-      status: 'success',
+      success: true,
       message: 'Supplementary material requisition submitted and production order updated.',
       data: { requisition: newRequisition }
     };
@@ -206,7 +206,7 @@ export const requestReturnMaterials = async (productionOrderId, managerId, items
     await newRequisition.save();
 
     return {
-      status: 'success',
+      success: true,
       message: 'Material return request submitted.',
       data: { requisition: newRequisition }
     };
@@ -281,7 +281,7 @@ export const approveReturnRequisition = async (requisitionId, managerId) => {
 
     await session.commitTransaction();
     return {
-      status: 'success',
+      success: true,
       message: 'Return requisition approved and import slip created.',
       data: { requisition, slip: slipResult.data }
     };
@@ -329,7 +329,7 @@ export const getRequisitions = async ({ status, productionOrderId, search, page 
     ]);
 
     return {
-      status: 'success',
+      success: true,
       message: 'Requisitions retrieved successfully.',
       data: {
         requisitions,
@@ -362,7 +362,7 @@ export const getRequisitionById = async (id) => {
     if (!requisition) throw new Error('Requisition not found.');
 
     return {
-      status: 'success',
+      success: true,
       message: 'Requisition retrieved successfully.',
       data: requisition
     };
@@ -437,7 +437,7 @@ export const updateRequisitionByManager = async (requisitionId, updateData, mana
     }
 
     return {
-      status: 'success',
+      success: true,
       message: hasChanges ? 'Requisition updated successfully.' : 'No changes detected.',
       data: requisition,
       changes: changes
@@ -582,7 +582,7 @@ export const updateRequisitionStatus = async (requisitionId, managerId, status, 
  */
 export const handleRequisitionTimeouts = async () => {
   // Logic removed as per user request to simplify material flow
-  return { status: 'success', message: 'Timeout handling disabled.' };
+  return { success: true, message: 'Timeout handling disabled.' };
 };
 
 /**
@@ -591,7 +591,7 @@ export const handleRequisitionTimeouts = async () => {
 export const getRequisitionsByOrder = async (orderId) => {
   try {
     const requisitions = await MaterialRequisition.find({ productionOrder: orderId }).populate('items.material');
-    return { status: 'success', data: { requisitions } };
+    return { success: true, data: { requisitions } };
   } catch (error) {
     return { status: 'error', message: error.message };
   }

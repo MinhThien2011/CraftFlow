@@ -363,7 +363,7 @@ export const createProductionOrder = async (orderData, creatorId) => {
     console.log(`[Production] Order ${orderCode} created successfully with ${validatedProducts.length} products.`);
 
     return {
-      status: 'success',
+      success: true,
       message: hasInsufficientStock
         ? `Production order created with ${shortages.length} material shortages. Material alerts generated.`
         : 'Production order created and ready to assign.',
@@ -435,7 +435,7 @@ export const checkOrderMaterials = async (orderId) => {
     );
 
     return {
-      status: 'success',
+      success: true,
       message: 'Materials are now sufficient. Order is ready to be assigned.',
       data: { order }
     };
@@ -463,7 +463,7 @@ export const getStaffSuggestions = async () => {
     );
 
     return {
-      status: 'success',
+      success: true,
       message: 'Staff suggestions retrieved.',
       data: { suggestions }
     };
@@ -541,7 +541,7 @@ export const suggestOrderAssignments = async (orderId) => {
     }
 
     return {
-      status: 'success',
+      success: true,
       message: 'Assignment suggestions generated with dynamic scaling.',
       data: { suggestions: suggestedAssignments }
     };
@@ -578,7 +578,7 @@ export const autoUpdateInsufficientOrders = async (materialIds = [], session = n
       .populate('products.product')
       .session(session);
 
-    if (orders.length === 0) return { status: 'success', updatedCount: 0 };
+    if (orders.length === 0) return { success: true, updatedCount: 0 };
 
     let updatedCount = 0;
     for (const order of orders) {
@@ -621,7 +621,7 @@ export const autoUpdateInsufficientOrders = async (materialIds = [], session = n
       }
     }
 
-    return { status: 'success', updatedCount };
+    return { success: true, updatedCount };
   } catch (error) {
     console.error('[ProductionOrderService] autoUpdateInsufficientOrders error:', error);
     return { status: 'error', message: error.message };
@@ -709,7 +709,7 @@ export const assignProductionOrder = async (orderId, assignments) => {
     console.log(`[Production] Order ${orderId} assigned. Summary: ${summary.join(', ')}`);
 
     return {
-      status: 'success',
+      success: true,
       message: 'Assignments created successfully.',
       data: { assignments: newAssignments }
     };

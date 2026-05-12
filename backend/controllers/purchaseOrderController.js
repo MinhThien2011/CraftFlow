@@ -183,7 +183,7 @@ export const getAllPurchaseOrders = async (req, res) => {
         const cachedResult = await getCachedData(cacheKey);
         if (cachedResult) {
             return res.status(StatusCodes.OK).json({
-                status: 'success',
+                success: true,
                 message: 'Purchase orders retrieved successfully (from cache)',
                 data: cachedResult
             });

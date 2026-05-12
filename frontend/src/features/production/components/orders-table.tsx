@@ -18,6 +18,8 @@ const statusConfig: Record<string, { label: string, color: string }> = {
   completed: { label: "Hoàn thành", color: "bg-emerald-100 text-emerald-700" },
   cancelled: { label: "Đã hủy", color: "bg-red-100 text-red-700" },
   on_hold: { label: "Tạm dừng", color: "bg-amber-100 text-amber-700" },
+  insufficient_materials: { label: "Thiếu vật tư", color: "bg-purple-100 text-purple-700" },
+  assigned: { label: "Đã phân công", color: "bg-cyan-100 text-cyan-700" },
 }
 
 export function OrdersTable({ orders, isLoading, onOrderClick }: OrdersTableProps) {

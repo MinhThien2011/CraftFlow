@@ -253,6 +253,7 @@ export interface Product {
   productImage: string
   currentStock: number
   threshold: number
+  shelf?: any
   location?: string
   totalProduced: number
   createdAt: string

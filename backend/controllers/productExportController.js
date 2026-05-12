@@ -37,7 +37,7 @@ export const createExportRequest = async (req, res) => {
         }, req);
 
         return res.status(StatusCodes.CREATED).json({
-            status: 'success',
+            success: true,
             message: 'Yêu cầu xuất hàng đã được tạo.',
             data: result.data
         });

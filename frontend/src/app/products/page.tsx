@@ -1,5 +1,6 @@
 "use client"
 
+import { useRouter } from "next/navigation"
 import { useState, useEffect, useCallback, useMemo } from "react"
 import {
   Boxes,
@@ -64,6 +65,7 @@ import { productApi } from "@/api/product.api"
 import type { Product, PaginationData } from "@/lib/types"
 import { toast } from "sonner"
 import { Spinner } from "@/components/ui/spinner"
+import { useAuth } from "@/features/auth/hooks/use-auth"
 
 type TabType = "products" | "bom"
 
@@ -95,7 +97,20 @@ function BOMSkeleton() {
   )
 }
 
+const calculateBaseCost = (product: any) => {
+  if (product.baseCost && product.baseCost > 0) return product.baseCost;
+  if (!product.estimateMaterialCost || !Array.isArray(product.estimateMaterialCost)) return 0;
+  return product.estimateMaterialCost.reduce((acc: number, item: any) => {
+    const qty = item.quantity ?? item.qtyPerUnit ?? item.amount ?? 0;
+    const price = item.priceAtTime ?? item.material?.price ?? 0;
+    return acc + (qty * price);
+  }, 0);
+}
+
 export default function ProductsPage() {
+  const router = useRouter()
+  const { role } = useAuth()
+  const isProductionManager = role === 'production_manager'
   const [activeTab, setActiveTab] = useState<TabType>("products")
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState<string>("All")
@@ -115,16 +130,20 @@ export default function ProductsPage() {
 
     try {
       const response = await productApi.getProducts(params)
-      if (response.status === "success" || response.success) {
-        setProducts(response.data.items || [])
-        // Adapt pagination format if needed
-        const apiPagination = response.data.pagination as any
-        setPagination({
-          total: apiPagination.total,
-          pages: apiPagination.totalPages,
-          page: apiPagination.currentPage,
-          limit: apiPagination.limit
-        })
+      const res: any = response
+      if (res.status === "success" || res.success) {
+        const data = res.data?.products || res.data?.items || res.data || []
+        setProducts(Array.isArray(data) ? data : [])
+
+        const apiPagination = res.data?.pagination || res.pagination
+        if (apiPagination) {
+          setPagination({
+            total: apiPagination.total,
+            pages: apiPagination.totalPages,
+            page: apiPagination.currentPage,
+            limit: apiPagination.limit,
+          })
+        }
       }
     } catch (error: any) {
       toast.error(error.message || "Không thể tải danh sách sản phẩm")
@@ -140,7 +159,7 @@ export default function ProductsPage() {
       fetchProducts({
         page: currentPage,
         search: searchQuery,
-        category: selectedCategory,
+        category: selectedCategory === "All" ? '' : selectedCategory,
         limit: 10
       }, products.length === 0)
     }, 300)
@@ -157,7 +176,7 @@ export default function ProductsPage() {
     fetchProducts({
       page: currentPage,
       search: searchQuery,
-      category: selectedCategory,
+      category: selectedCategory === "All" ? '' : selectedCategory,
       limit: 10
     })
   }
@@ -214,36 +233,41 @@ export default function ProductsPage() {
             <Button variant="outline" size="icon" onClick={handleRefresh} disabled={isRefreshing}>
               <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
             </Button>
-            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-              <DialogTrigger asChild>
-                <Button className="gap-2 bg-primary hover:bg-primary/90">
+            {isProductionManager && (
+              activeTab === "products" ? (
+                <Button className="gap-2 bg-primary hover:bg-primary/90" onClick={() => router.push('/products/create')}>
                   <Plus className="h-4 w-4" />
-                  {activeTab === "products" ? "Thêm sản phẩm" : "Tạo BOM"}
+                  Thêm sản phẩm
                 </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-lg">
-                <DialogHeader>
-                  <DialogTitle className="text-xl">
-                    {activeTab === "products" ? "Thêm sản phẩm mới" : "Tạo BOM mới"}
-                  </DialogTitle>
-                  <DialogDescription>
-                    {activeTab === "products"
-                      ? "Điền thông tin sản phẩm để bắt đầu quản lý trong hệ thống."
-                      : "Thiết lập định mức nguyên vật liệu tiêu chuẩn cho một đơn vị sản phẩm."}
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-6 py-4">
-                  {/* Form fields here - truncated for brevity as we are focusing on API call implementation */}
-                  <div className="rounded-lg bg-muted/50 p-4 text-center text-sm text-muted-foreground border border-dashed">
-                    Chức năng thêm/sửa đang được cập nhật trong Sprint tiếp theo.
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button variant="ghost" onClick={() => setIsAddDialogOpen(false)}>Hủy</Button>
-                  <Button disabled>{activeTab === "products" ? "Thêm sản phẩm" : "Tạo BOM"}</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+              ) : (
+                <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button className="gap-2 bg-primary hover:bg-primary/90">
+                      <Plus className="h-4 w-4" />
+                      Tạo BOM
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-lg">
+                    <DialogHeader>
+                      <DialogTitle className="text-xl">
+                        Tạo BOM mới
+                      </DialogTitle>
+                      <DialogDescription>
+                        Thiết lập định mức nguyên vật liệu tiêu chuẩn cho một đơn vị sản phẩm.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-6 py-4">
+                      <div className="rounded-lg bg-muted/50 p-4 text-center text-sm text-muted-foreground border border-dashed">
+                        Vui lòng sử dụng tính năng "Xem chi tiết / Sửa" ở từng sản phẩm để cập nhật, hoặc truy cập trang tạo mới.
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="ghost" onClick={() => setIsAddDialogOpen(false)}>Đóng</Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              )
+            )}
           </div>
         </div>
 
@@ -398,7 +422,7 @@ export default function ProductsPage() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right font-medium">
-                          <CurrencyDisplay value={product.baseCost} />
+                          <CurrencyDisplay value={calculateBaseCost(product)} />
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex flex-col items-end">
@@ -430,14 +454,20 @@ export default function ProductsPage() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="rounded-xl">
-                              <DropdownMenuItem className="gap-2"><Edit className="h-4 w-4" /> Chỉnh sửa</DropdownMenuItem>
-                              <DropdownMenuItem className="gap-2"><ExternalLink className="h-4 w-4" /> Xem chi tiết</DropdownMenuItem>
                               <DropdownMenuItem
-                                className="gap-2 text-destructive focus:text-destructive"
-                                onClick={() => handleDeleteProduct(product._id)}
+                                className="gap-2 cursor-pointer"
+                                onClick={() => router.push(`/products/${product._id}`)}
                               >
-                                <Trash2 className="h-4 w-4" /> Xóa
+                                <ExternalLink className="h-4 w-4" /> Xem chi tiết {isProductionManager && "/ Sửa"}
                               </DropdownMenuItem>
+                              {isProductionManager && (
+                                <DropdownMenuItem
+                                  className="gap-2 text-destructive focus:text-destructive cursor-pointer"
+                                  onClick={() => handleDeleteProduct(product._id)}
+                                >
+                                  <Trash2 className="h-4 w-4" /> Xóa
+                                </DropdownMenuItem>
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>
@@ -541,7 +571,7 @@ export default function ProductsPage() {
                         <div className="text-center md:text-right">
                           <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">Chi phí dự kiến</p>
                           <p className="font-black text-xl text-[#8B7355]">
-                            <CurrencyDisplay value={product.baseCost} />
+                            <CurrencyDisplay value={calculateBaseCost(product)} />
                           </p>
                         </div>
 
@@ -573,20 +603,26 @@ export default function ProductsPage() {
                                   <p className="text-sm font-bold text-foreground truncate">
                                     {typeof item.material === 'object' && item.material !== null
                                       ? (item.material as any).name
-                                      : item.materialCode}
+                                      : item.materialCode || 'Nguyên liệu không xác định'}
                                   </p>
                                   <p className="text-[10px] text-muted-foreground font-mono">
-                                    {item.materialCode}
+                                    {item.materialCode || (item.material as any)?.code}
                                   </p>
                                 </div>
-                                <div className="text-right shrink-0">
-                                  <p className="text-sm font-black text-foreground">
-                                    {item.quantity} <span className="text-[10px] font-normal text-muted-foreground uppercase ml-0.5">{item.unit}</span>
-                                  </p>
-                                  <p className="text-[10px] text-muted-foreground">
-                                    <CurrencyDisplay value={item.priceAtTime * item.quantity} />
-                                  </p>
-                                </div>
+                                {(() => {
+                                  const qty = item.quantity ?? (item as any).qtyPerUnit ?? (item as any).amount ?? 0;
+                                  const price = item.priceAtTime ?? (item.material as any)?.price ?? 0;
+                                  return (
+                                    <div className="text-right shrink-0">
+                                      <p className="text-sm font-black text-foreground">
+                                        {qty} <span className="text-[10px] font-normal text-muted-foreground uppercase ml-0.5">{item.unit || (item.material as any)?.unit}</span>
+                                      </p>
+                                      <p className="text-[10px] text-muted-foreground">
+                                        <CurrencyDisplay value={price * qty} />
+                                      </p>
+                                    </div>
+                                  )
+                                })()}
                               </div>
                             ))
                           ) : (
@@ -596,12 +632,18 @@ export default function ProductsPage() {
                           )}
                         </div>
 
-                        <div className="mt-6 flex justify-end">
-                          <Button size="sm" className="rounded-lg gap-2">
-                            <Edit className="h-3.5 w-3.5" />
-                            Cập nhật định mức
-                          </Button>
-                        </div>
+                        {isProductionManager && (
+                          <div className="mt-6 flex justify-end">
+                            <Button
+                              size="sm"
+                              className="rounded-lg gap-2"
+                              onClick={() => router.push(`/products/${product._id}`)}
+                            >
+                              <Edit className="h-3.5 w-3.5" />
+                              Cập nhật định mức
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     </CollapsibleContent>
                   </Collapsible>

@@ -24,7 +24,7 @@ export const getAllProducts = async (req, res) => {
     const cachedResult = await getCachedData(cacheKey);
     if (cachedResult) {
       return res.status(StatusCodes.OK).json({
-        status: 'success',
+        success: true,
         message: 'Products retrieved successfully (from cache).',
         data: cachedResult
       });
@@ -59,7 +59,7 @@ export const getProductById = async (req, res) => {
     const cachedResult = await getCachedData(cacheKey);
     if (cachedResult) {
       return res.status(StatusCodes.OK).json({
-        status: 'success',
+        success: true,
         message: 'Product retrieved successfully (from cache).',
         data: cachedResult
       });

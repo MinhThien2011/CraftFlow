@@ -13,7 +13,7 @@ export interface PurchaseOrderItem {
 export interface PurchaseOrder {
     _id: string;
     creator: string | any;
-    status: 'pending' | 'approved' | 'rejected' | 'completed';
+    status: 'pending' | 'accepted' | 'rejected' | 'completed';
     priority: 'low' | 'medium' | 'high';
     productionOrder?: string | any;
     materialAlert?: string | any;

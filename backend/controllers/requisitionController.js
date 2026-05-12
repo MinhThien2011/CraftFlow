@@ -67,7 +67,7 @@ export const requestMaterials = async (req, res) => {
     }, req);
 
     return res.status(StatusCodes.CREATED).json({
-      status: 'success',
+      success: true,
       message: result.message,
       data: result.data
     });
@@ -85,9 +85,9 @@ export const requestSupplementaryMaterials = async (req, res) => {
   try {
     const { productionOrderId, items, parentRequisitionId } = req.body;
     const result = await requisitionService.requestSupplementaryMaterials(
-      productionOrderId, 
-      req.userId, 
-      items, 
+      productionOrderId,
+      req.userId,
+      items,
       parentRequisitionId
     );
 
@@ -118,8 +118,8 @@ export const requestReturnMaterials = async (req, res) => {
   try {
     const { productionOrderId, items } = req.body;
     const result = await requisitionService.requestReturnMaterials(
-      productionOrderId, 
-      req.userId, 
+      productionOrderId,
+      req.userId,
       items
     );
 
@@ -269,7 +269,7 @@ export const updateRequisitionStatus = async (req, res) => {
     }, req);
 
     return res.status(StatusCodes.OK).json({
-      status: 'success',
+      success: true,
       message: result.message,
       data: result.data
     });

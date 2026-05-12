@@ -71,7 +71,7 @@ export const getAllShelves = async (query = {}) => {
     ]);
 
     return {
-      status: 'success',
+      success: true,
       message: detailedShelves.length > 0 ? 'Shelves retrieved successfully.' : 'No shelves found.',
       data: detailedShelves
     };
@@ -107,7 +107,7 @@ export const getShelfById = async (id) => {
     const currentLoad = items.reduce((sum, item) => sum + (item.currentStock || 0), 0);
 
     return {
-      status: 'success',
+      success: true,
       message: 'Shelf details retrieved successfully.',
       data: {
         ...shelf,
@@ -135,7 +135,7 @@ export const createShelf = async (shelfData) => {
     const newShelf = new Shelf(shelfData);
     await newShelf.save();
     return {
-      status: 'success',
+      success: true,
       message: 'Shelf created successfully.',
       data: newShelf
     };
@@ -158,7 +158,7 @@ export const updateShelf = async (id, updateData) => {
     if (!shelf) return { status: 'error', message: 'Shelf not found.', data: null };
 
     return {
-      status: 'success',
+      success: true,
       message: 'Shelf updated successfully.',
       data: shelf
     };
@@ -195,7 +195,7 @@ export const deleteShelf = async (id) => {
     if (!shelf) return { status: 'error', message: 'Shelf not found.', data: null };
 
     return {
-      status: 'success',
+      success: true,
       message: 'Shelf deleted successfully.',
       data: null
     };

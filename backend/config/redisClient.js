@@ -2,7 +2,7 @@ import { createClient } from 'redis';
 
 const retryStrategy = (times) => {
     // Exponential backoff with jitter
-    const delay = Math.min(times * 200, 5000);
+    const delay = Math.min(times * 500, 10000); // Increased delay
     const jitter = Math.floor(Math.random() * 200);
     const totalDelay = delay + jitter;
 
@@ -10,15 +10,18 @@ const retryStrategy = (times) => {
         console.log(`🔄 Redis reconnect attempt ${times} in ${totalDelay}ms`);
     }
 
-    if (times > 50) { // Increased from 20 to 50
-        console.error('❌ Redis: Max reconnection attempts reached.');
-        return new Error('Redis reconnection failed');
+    // Stop retrying if the host is completely unreachable (DNS issue)
+    // This prevents infinite loop of ENOTFOUND errors
+    if (times > 20) { 
+        console.error('❌ Redis: Max reconnection attempts reached. Continuing without Redis caching/ratelimiting.');
+        isRedisHealthy = false;
+        return false; // Stop retrying
     }
     return totalDelay;
 }
 
 const reconnectOnError = (err) => {
-    const errors = ['READONLY', 'ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'SOCKET_CLOSED'];
+    const errors = ['READONLY', 'ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'SOCKET_CLOSED', 'ENOTFOUND'];
     const shouldReconnect = errors.some(e => err.message.includes(e));
     if (shouldReconnect) {
         console.warn(`⚠️ Redis: Reconnecting due to error: ${err.message}`);
