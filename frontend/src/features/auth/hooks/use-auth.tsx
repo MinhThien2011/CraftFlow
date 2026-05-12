@@ -26,6 +26,7 @@ interface AuthContextType {
     isProductionManager: boolean;
     isStaff: boolean;
     role: string;
+    hasPermission: (allowedRoles: string[]) => boolean;
     refreshUser: () => void;
 }
 
@@ -82,6 +83,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const role = getRoleName(user)
 
+    const hasPermission = useCallback((allowedRoles: string[]) => {
+        return allowedRoles.includes(role);
+    }, [role]);
+
     const value: AuthContextType = useMemo(() => ({
         user,
         loading,
@@ -94,8 +99,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isProductionManager: role === "production_manager",
         isStaff: role === "staff",
         role,
+        hasPermission,
         refreshUser,
-    }), [user, loading, loginError, queryError, login, logout, role, refreshUser]);
+    }), [user, loading, loginError, queryError, login, logout, role, hasPermission, refreshUser]);
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

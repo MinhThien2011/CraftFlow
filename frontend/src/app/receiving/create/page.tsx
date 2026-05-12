@@ -33,6 +33,8 @@ import {
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 
+import { withPermission } from '@/components/guards/permission-guard'
+
 // ============================================================
 // TYPES
 // ============================================================
@@ -110,7 +112,7 @@ function FieldError({ message }: { message?: string }) {
 // ============================================================
 // MAIN PAGE
 // ============================================================
-export default function CreateReceivingPage() {
+function CreateReceivingPage() {
   const router = useRouter()
 
   // --- form state (thêm vào so với bản gốc) ---
@@ -591,7 +593,7 @@ export default function CreateReceivingPage() {
 
       {/* ── PO Search Modal ── */}
       <Dialog open={poModalOpen} onOpenChange={setPoModalOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent size="lg">
           <DialogHeader>
             <DialogTitle>Tìm kiếm PO</DialogTitle>
           </DialogHeader>
@@ -637,3 +639,5 @@ export default function CreateReceivingPage() {
     </AppShell>
   )
 }
+
+export default withPermission(CreateReceivingPage, ['admin', 'kho_manager'])

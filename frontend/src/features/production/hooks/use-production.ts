@@ -7,6 +7,7 @@ export const productionKeys = {
     orders: (params: any) => [...productionKeys.all, 'orders', { params }] as const,
     order: (id: string) => [...productionKeys.all, 'order', id] as const,
     suggestions: () => [...productionKeys.all, 'suggestions'] as const,
+    alerts: (params: any) => [...productionKeys.all, 'alerts', { params }] as const,
     bom: (id: string) => [...productionKeys.all, 'bom', id] as const,
 };
 
@@ -29,7 +30,7 @@ export function useProductionOrder(id: string) {
 
 export function useCreateProductionOrder() {
     const queryClient = useQueryClient();
-    
+
     return useMutation({
         mutationFn: (data: any) => productionApi.createOrder(data),
         onSuccess: (response) => {
@@ -44,9 +45,9 @@ export function useCreateProductionOrder() {
 
 export function useUpdateOrderStatus() {
     const queryClient = useQueryClient();
-    
+
     return useMutation({
-        mutationFn: ({ id, status, notes }: { id: string; status: string; notes?: string }) => 
+        mutationFn: ({ id, status, notes }: { id: string; status: string; notes?: string }) =>
             productionApi.updateStatus(id, status, notes),
         onSuccess: (response, variables) => {
             queryClient.invalidateQueries({ queryKey: productionKeys.all });
@@ -56,9 +57,57 @@ export function useUpdateOrderStatus() {
     });
 }
 
+export function useAssignOrder() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ orderId, assignments }: { orderId: string, assignments: any[] }) =>
+            productionApi.assignOrder(orderId, assignments),
+        onSuccess: (response, variables) => {
+            queryClient.invalidateQueries({ queryKey: productionKeys.all });
+            queryClient.invalidateQueries({ queryKey: productionKeys.order(variables.orderId) });
+            toast.success("Phân công nhân sự thành công");
+        },
+        onError: (error: any) => {
+            toast.error(error.response?.data?.message || error.message || "Phân công thất bại");
+        }
+    });
+}
+
 export function useStaffSuggestions() {
     return useQuery({
         queryKey: productionKeys.suggestions(),
-        queryFn: () => productionApi.getStaffSuggestions(),
+        queryFn: () => productionApi.getStaffSuggestions()
+    });
+}
+
+export function useSuggestedAssignments(id: string) {
+    return useQuery({
+        queryKey: [...productionKeys.order(id), 'suggest'],
+        queryFn: () => productionApi.getSuggestedAssignments(id),
+        enabled: !!id
+    });
+}
+
+export function useMaterialAlerts(params: any = {}) {
+    return useQuery({
+        queryKey: productionKeys.alerts(params),
+        queryFn: () => productionApi.getMaterialAlerts(params),
+    });
+}
+
+export function useReassignTask() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (data: { assignmentId: string; newStaffId: string; reason?: string }) =>
+            productionApi.reassignTask(data),
+        onSuccess: (response) => {
+            queryClient.invalidateQueries({ queryKey: productionKeys.all });
+            toast.success("Thay đổi nhân sự thành công");
+        },
+        onError: (error: any) => {
+            toast.error(error.response?.data?.message || error.message || "Thay đổi thất bại");
+        }
     });
 }

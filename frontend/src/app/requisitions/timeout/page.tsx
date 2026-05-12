@@ -182,7 +182,7 @@ function DetailDialog({ req }: { req: TimeoutRequisition }) {
           <Eye className="size-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-140">
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>Chi tiết — {req.code}</DialogTitle>
           <DialogDescription>Thông tin yêu cầu vật liệu timeout</DialogDescription>

@@ -10,6 +10,7 @@ import {
   updateAssignmentStatusValidator,
   createStockInSlipValidator
 } from '../validations/productionValidation.js';
+import { handleServiceResponse } from '../utils/responseHelper.js';
 
 export const getListProductionOrder = async (req, res) => {
   try {
@@ -149,9 +150,45 @@ export const getSuggestions = async (req, res) => {
       data: result.data
     });
   } catch (error) {
+    console.log('[ProductionOrderController] getSuggestions error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
       message: 'Failed to get staff suggestions.',
+      data: null
+    });
+  }
+};
+
+export const suggestAssignments = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await productionOrderService.suggestOrderAssignments(id);
+    return res.status(StatusCodes.OK).json({
+      status: 'success',
+      message: result.message,
+      data: result.data
+    });
+  } catch (error) {
+    console.log('[ProductionOrderController] suggestAssignments error:', error);
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: 'error',
+      message: 'Failed to suggest assignments.',
+      data: null
+    });
+  }
+};
+
+export const getMaterialAlerts = async (req, res) => {
+  try {
+    const { status, page = 1, limit = 20 } = req.query;
+    const result = await productionOrderService.getMaterialAlerts({ status, page, limit });
+
+    return handleServiceResponse(res, result);
+  } catch (error) {
+    console.log('[ProductionOrderController] getMaterialAlerts error:', error);
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: 'error',
+      message: 'Failed to get material alerts.',
       data: null
     });
   }
@@ -213,7 +250,7 @@ export const checkMaterials = async (req, res) => {
     const { id } = req.params;
     const result = await productionOrderService.checkOrderMaterials(id);
 
-    if (result.status === 'error') {
+    if (!result.success) {
       return res.status(StatusCodes.BAD_REQUEST).json({
         status: 'error',
         message: result.message,
@@ -254,8 +291,12 @@ export const updateOrderStatus = async (req, res) => {
 
     const result = await productionOrderService.updateProductionOrderStatus(id, status, notes);
 
-    if (result.status === 'error') {
-      return res.status(StatusCodes.BAD_REQUEST).json(result);
+    if (!result.success) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        status: 'error',
+        message: result.message,
+        data: null
+      });
     }
 
     // Invalidate caches
@@ -270,7 +311,11 @@ export const updateOrderStatus = async (req, res) => {
       targetId: id
     }, req);
 
-    return res.status(StatusCodes.OK).json(result);
+    return res.status(StatusCodes.OK).json({
+      status: 'success',
+      message: result.message,
+      data: result.data
+    });
   } catch (error) {
     console.error('[ProductionOrderController] updateOrderStatus error:', error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
@@ -296,7 +341,7 @@ export const reassignTask = async (req, res) => {
     const { assignmentId, newStaffId, reason } = value;
     const result = await productionOrderService.reassignProductionOrder(assignmentId, newStaffId, reason);
 
-    if (result.status === 'error') {
+    if (!result.success) {
       return res.status(StatusCodes.BAD_REQUEST).json({
         status: 'error',
         message: result.message,
@@ -351,8 +396,12 @@ export const updateAssignmentStatus = async (req, res) => {
 
     const result = await productionOrderService.updateAssignmentStatus(id, status, completedQuantity, userId, userRole);
 
-    if (result.status === 'error') {
-      return res.status(userRole === ROLES.STAFF ? StatusCodes.FORBIDDEN : StatusCodes.BAD_REQUEST).json(result);
+    if (!result.success) {
+      return res.status(userRole === ROLES.STAFF ? StatusCodes.FORBIDDEN : StatusCodes.BAD_REQUEST).json({
+        status: 'error',
+        message: result.message,
+        data: null
+      });
     }
 
     // Invalidate caches

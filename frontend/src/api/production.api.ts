@@ -1,18 +1,41 @@
 import axiosInstance from "@/lib/axios";
 import { ApiResponse, PaginationData } from "@/lib/types";
 
+export interface ProductionOrderAssignment {
+    _id: string;
+    productionOrder: string;
+    product: string | any;
+    staff: {
+        _id: string;
+        fullName: string;
+        username: string;
+        currentAssignedQuantity?: number;
+    };
+    assignedQuantity: number;
+    completedQuantity: number;
+    status: string;
+    notes?: string;
+    startedAt?: string;
+    finishedAt?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
 export interface ProductionOrder {
     _id: string;
     orderCode: string;
     products: Array<{
         product: string | any;
         quantity: number;
+        productName?: string;
+        productCode?: string;
     }>;
     status: string;
     priority: string;
     deadline: string;
     notes?: string;
     createdBy: string | any;
+    assignments?: ProductionOrderAssignment[];
     createdAt: string;
     updatedAt: string;
 }
@@ -21,7 +44,7 @@ export interface ProductionOrderListResponse {
     status: string;
     message: string;
     data: {
-        items: ProductionOrder[];
+        orders: ProductionOrder[];
         pagination: PaginationData;
     };
 }
@@ -90,9 +113,30 @@ export const productionApi = {
     },
 
     /**
+     * Get specific suggested distribution for an order
+     */
+    getSuggestedAssignments: async (id: string): Promise<ApiResponse<any>> => {
+        return axiosInstance.get(`/production/${id}/suggest`);
+    },
+
+    /**
      * Get BOM for a specific order
      */
     getBom: async (id: string): Promise<ApiResponse<any>> => {
         return axiosInstance.get(`/production/${id}/bom`);
+    },
+
+    /**
+     * Get material alerts for production manager
+     */
+    getMaterialAlerts: async (params: { status?: string, page?: number, limit?: number } = {}): Promise<ApiResponse<any>> => {
+        return axiosInstance.get("/production/material-alerts", { params });
+    },
+
+    /**
+     * Reassign a task to a different staff member
+     */
+    reassignTask: async (data: { assignmentId: string; newStaffId: string; reason?: string }): Promise<ApiResponse<any>> => {
+        return axiosInstance.post("/production/reassign", data);
     }
 };

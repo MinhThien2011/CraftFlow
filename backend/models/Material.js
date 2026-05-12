@@ -42,8 +42,10 @@ materialSchema.virtual('stockLevel').get(function () {
   return determineStockLevel(this.currentStock, this.threshold);
 });
 
-materialSchema.index({ name: 1 });
+materialSchema.index({ name: 'text', code: 'text' });
 materialSchema.index({ shelf: 1 });
-materialSchema.index({ isActive: 1, name: 1 });
+materialSchema.index({ isActive: 1 });
+materialSchema.index({ currentStock: 1 });
+materialSchema.index({ createdAt: -1 });
 
 export default mongoose.model('Material', materialSchema);

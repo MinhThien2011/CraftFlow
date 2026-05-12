@@ -12,7 +12,8 @@ import SystemLog from '../models/SystemLog.js';
  * @param {Object} [params.metadata] - Additional technical data
  * @param {Object} [req] - Express request object to capture IP and User-Agent
  */
-export const logActivity = async ({ author, action, module, details, targetId, metadata }, req = null, background = true) => {
+export const logActivity = ({ author, action, module, details, targetId, metadata }, req = null, background = true) => {
+  // Capture data immediately before any async shifts
   const logData = {
     author,
     action: action.toUpperCase(),
@@ -21,20 +22,27 @@ export const logActivity = async ({ author, action, module, details, targetId, m
     targetId,
     metadata,
     ipAddress: req ? req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress : null,
-    userAgent: req ? req.headers['user-agent'] : null
+    userAgent: req ? req.headers['user-agent'] : null,
+    createdAt: new Date()
   };
 
   const saveLog = async () => {
     try {
-      await SystemLog.create(logData);
+      // Use direct collection access for slightly better performance than model instantiation
+      await SystemLog.collection.insertOne(logData);
     } catch (error) {
-      console.error('[Logger Error]:', error.message);
+      // Minimal logging for logger errors to avoid recursion/spam
+      process.stderr.write(`[Logger Error]: ${error.message}\n`);
     }
   };
 
   if (background) {
+    // setImmediate pushes the task to the check phase of Event Loop, 
+    // ensuring current request finishes first.
     setImmediate(saveLog);
   } else {
-    await saveLog();
+    // If not background, we return the promise but don't await it here 
+    // unless the caller explicitly wants to.
+    return saveLog();
   }
 };

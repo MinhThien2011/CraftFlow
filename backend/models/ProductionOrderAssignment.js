@@ -40,16 +40,10 @@ const assignmentSchema = new mongoose.Schema({
 }, {
   timestamps: true,
   toJSON: {
-    // virtuals: true,
     versionKey: false,
   },
   toObject: {
-    // virtuals: true,
     versionKey: false,
-    // transform: function (doc, ret) {
-    //   delete ret._id;
-    //   return ret;
-    // }
   }
 });
 

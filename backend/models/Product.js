@@ -46,6 +46,14 @@ const productSchema = new mongoose.Schema({
   }
 });
 
+// --- INDEXES ---
+productSchema.index({ name: 'text', code: 'text' });
+productSchema.index({ category: 1 });
+productSchema.index({ isActive: 1 });
+productSchema.index({ shelf: 1 });
+productSchema.index({ createdAt: -1 });
+productSchema.index({ currentStock: 1 });
+
 /**
  * Virtual property to get current stock level status.
  * Used for display and categorization.
@@ -119,10 +127,5 @@ productSchema.statics.syncMaterialChanges = async function (materialId, updateDa
     console.log(`[ProductSync] Error syncing material changes for ${materialId}:`, error);
   }
 };
-
-productSchema.index({ isActive: 1 });
-productSchema.index({ category: 1 });
-productSchema.index({ name: 1, code: 1, barcode: 1 });
-productSchema.index({ createdAt: -1 });
 
 export default mongoose.model('Product', productSchema);

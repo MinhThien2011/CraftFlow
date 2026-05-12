@@ -63,6 +63,7 @@ export const getProductsByQuery = async (query) => {
     // --- Execute Query ---
     const [products, total] = await Promise.all([
       Product.find(conditions)
+        .select('name code category unit productImage currentStock threshold shelf isActive createdAt') // Added projection
         .sort(sortOptions)
         .skip(skip)
         .limit(limitNum)
@@ -97,6 +98,7 @@ export const getProductsByQuery = async (query) => {
 export const getProductById = async (id) => {
   try {
     const product = await Product.findById(id)
+      .select('-__v')
       .populate('estimateMaterialCost.material', 'name code unit currency')
       .populate('shelf', 'shelfCode warehouseSection')
       .lean();

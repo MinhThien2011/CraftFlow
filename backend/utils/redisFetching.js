@@ -11,13 +11,17 @@ const LIST_EXPIRY = 300; // 5 minutes
 export const getCachedData = async (key) => {
     if (!client.isOpen) return null;
     try {
-        console.log(`[Redis] Trying to get cached data for ${key}`);
-        const data = await client.get(`${DATA_CACHE_PREFIX}${key}`);
+        // Add timeout to prevent hanging if Redis is slow
+        const data = await Promise.race([
+            client.get(`${DATA_CACHE_PREFIX}${key}`),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Redis Timeout')), 1000))
+        ]);
         if (!data) return null;
-        console.log(`[Redis] Found cached data for ${key}:`, data);
         return JSON.parse(data);
     } catch (error) {
-        console.log(`[Redis] Error getting cached data for ${key}:`, error);
+        if (error.message !== 'Redis Timeout') {
+            console.error(`[Redis] Error getting cached data for ${key}:`, error.message);
+        }
         return null;
     }
 };
@@ -28,12 +32,16 @@ export const getCachedData = async (key) => {
 export const setCachedData = async (key, data, expiry = LIST_EXPIRY) => {
     if (!client.isOpen) return;
     try {
-        console.log(`[Redis] Setting cached data for ${key} with expiry ${expiry} seconds`);
-        await client.set(`${DATA_CACHE_PREFIX}${key}`, JSON.stringify(data), {
-            EX: expiry
-        });
+        await Promise.race([
+            client.set(`${DATA_CACHE_PREFIX}${key}`, JSON.stringify(data), {
+                EX: expiry
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Redis Timeout')), 1000))
+        ]);
     } catch (error) {
-        console.log(`[Redis] Error setting cached data for ${key}:`, error);
+        if (error.message !== 'Redis Timeout') {
+            console.error(`[Redis] Error setting cached data for ${key}:`, error.message);
+        }
     }
 };
 
@@ -79,13 +87,11 @@ export const clearCacheByPattern = async (pattern) => {
 export const getUserAccessInfo = async (userId) => {
     if (!client.isOpen) return null;
     try {
-        console.log(`[Redis] Trying to get user access info for ${userId}`);
         const data = await client.get(`${CACHE_PREFIX}${userId}`);
         if (!data) return null;
-        console.log(`[Redis] User access info retrieved for ${userId}:`, data);
         return JSON.parse(data);
     } catch (error) {
-        console.log(`[Redis] Error getting user access info for ${userId}:`, error);
+        console.error(`[Redis] Error getting user access info for ${userId}:`, error.message);
         return null;
     }
 };

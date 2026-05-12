@@ -7,7 +7,6 @@ export const setupGracefulShutdown = () => {
     signals.forEach((signal) => {
         process.on(signal, async () => {
             console.log(`\nCleanup initiated by ${signal}...`);
-            // Set the "Forced Exit After 10 Seconds" setting if the cleaning process takes too long.
             const forceExit = setTimeout(() => {
                 console.error("Could not close connections in time, forcefully shutting down");
                 process.exit(1);

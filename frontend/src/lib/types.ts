@@ -268,7 +268,8 @@ export interface ProductListResponse {
   success?: boolean
   message: string
   data: {
-    items: Product[]
+    items?: Product[]
+    products?: Product[]
     pagination: {
       total: number
       totalPages: number

@@ -36,6 +36,9 @@ export function OrdersTable({ orders, isLoading, onOrderClick }: OrdersTableProp
               Số lượng
             </th>
             <th className="px-6 py-4 text-left text-xs font-medium uppercase text-muted-foreground">
+              Phân công
+            </th>
+            <th className="px-6 py-4 text-left text-xs font-medium uppercase text-muted-foreground">
               Trạng thái
             </th>
             <th className="px-6 py-4 text-left text-xs font-medium uppercase text-muted-foreground">
@@ -69,11 +72,43 @@ export function OrdersTable({ orders, isLoading, onOrderClick }: OrdersTableProp
                   </span>
                 </td>
                 <td className="px-6 py-4 text-card-foreground">
-                  {order.products[0]?.product|| (order.products[0]?.product as any)?.name || 'Đang tải...'}
+                  {order.products[0]?.productName ||
+                    (typeof order.products[0]?.product === 'object'
+                      ? order.products[0]?.product?.name
+                      : (order.products[0]?.product || 'Đang tải...'))}
                   {order.products.length > 1 && <span className="text-muted-foreground ml-1">(+{order.products.length - 1})</span>}
                 </td>
                 <td className="px-6 py-4 text-card-foreground">
                   {order.products.reduce((sum, p) => sum + p.quantity, 0)}
+                </td>
+                <td className="px-6 py-4">
+                  {order.assignments && order.assignments.length > 0 ? (
+                    <div className="flex flex-col gap-1">
+                      <div className="flex -space-x-2 overflow-hidden">
+                        {order.assignments.slice(0, 3).map((assign, i) => (
+                          <div
+                            key={i}
+                            className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary"
+                            title={assign.staff?.fullName || assign.staff?.username}
+                          >
+                            {(assign.staff?.fullName || assign.staff?.username || "?").charAt(0)}
+                          </div>
+                        ))}
+                        {order.assignments.length > 3 && (
+                          <div className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground">
+                            +{order.assignments.length - 3}
+                          </div>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-muted-foreground">
+                        {order.assignments.length} người
+                      </span>
+                    </div>
+                  ) : (
+                    <Badge variant="outline" className="bg-gray-50 text-gray-500 border-gray-200 text-[10px]">
+                      Chưa phân công
+                    </Badge>
+                  )}
                 </td>
                 <td className="px-6 py-4">
                   <Badge

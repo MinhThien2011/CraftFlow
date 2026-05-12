@@ -64,9 +64,10 @@ export function RecentOrders({ orders }: RecentOrdersProps) {
             ) : (
               orders.map((order) => {
                 const mainProduct = order.products[0];
-                const productDisplay = mainProduct
-                  ? `${mainProduct.product || (mainProduct.product as any)?.name}${order.products.length > 1 ? ` (+${order.products.length - 1})` : ''}`
+                const productName = mainProduct
+                  ? (mainProduct.productName || (typeof mainProduct.product === 'object' ? mainProduct.product?.name : mainProduct.product))
                   : 'N/A';
+                const productDisplay = `${productName}${order.products.length > 1 ? ` (+${order.products.length - 1})` : ''}`;
 
                 const totalQuantity = order.products.reduce((sum, p) => sum + p.quantity, 0);
                 const config = statusConfig[order.status] || { label: order.status, color: "bg-gray-500 text-white" };

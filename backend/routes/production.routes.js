@@ -11,6 +11,8 @@ import {
   getListProductionOrder,
   getProductionOrderById,
   getSuggestions,
+  suggestAssignments,
+  getMaterialAlerts,
   reassignTask,
   updateAssignmentStatus,
   updateOrderStatus
@@ -22,7 +24,9 @@ const productionRouter = Router();
 productionRouter.use(jwtAuth);
 
 // Planning & Lists
+productionRouter.get('/material-alerts', rolePermission([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER]), getMaterialAlerts);
 productionRouter.get('/suggestions', rolePermission([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER]), getSuggestions);
+productionRouter.get('/:id/suggest', rolePermission([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER]), suggestAssignments);
 productionRouter.get('/', rolePermission([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.STAFF]), getListProductionOrder);
 productionRouter.get('/:id', rolePermission([ROLES.ADMIN, ROLES.STAFF, ROLES.PRODUCTION_MANAGER]), getProductionOrderById);
 productionRouter.get('/:id/bom', rolePermission([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.STAFF, ROLES.KHO_MANAGER]), getBom);

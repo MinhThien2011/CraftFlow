@@ -28,6 +28,7 @@ import {
   ClipboardList,
   CircleOff,
   ListTodo,
+  Bell,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -57,7 +58,7 @@ const navigation = [
   { name: "Yêu cầu vật liệu", href: "/requisitions/pending", icon: ClipboardList, roles: ["kho_manager"] },
   { name: "Sản phẩm & BOM", href: "/products", icon: Boxes, roles: ["admin"] },
   { name: "Sản xuất", href: "/production", icon: Factory, roles: ["admin"] },
-  { name: "Cảnh báo tồn kho", href: "/alerts", icon: AlertTriangle, roles: ["kho_manager"] },
+  { name: "Cảnh báo tồn kho", href: "/alerts", icon: AlertTriangle, roles: ["kho_manager", "admin"] },
   { name: "Nhật ký hệ thống", href: "/system-log", icon: FileSearch, roles: ["admin"] },
   { name: "Người dùng", href: "/users", icon: Users, roles: ["admin"] },
   { name: "Báo cáo", href: "/reports", icon: BarChart3, roles: ["admin"], badge: true },
@@ -67,6 +68,8 @@ const navigation = [
   { name: "Đơn sản xuất PM", href: "/production-management/orders", icon: ClipboardList, roles: ["production_manager"] },
   { name: "Công việc PM", href: "/production-management/tasks", icon: ListTodo, roles: ["production_manager"] },
   { name: "Hao hụt PM", href: "/production-management/issues", icon: AlertTriangle, roles: ["production_manager"] },
+  { name: "Cảnh báo vật tư PM", href: "/alerts", icon: Bell, roles: ["production_manager"] },
+  { name: "Yêu cầu mua hàng PM", href: "/production-management/purchase-orders", icon: PackagePlus, roles: ["production_manager"] },
   { name: "Báo cáo PM", href: "/production-management/reports", icon: BarChart3, roles: ["production_manager"], badge: true },
 ]
 
@@ -75,6 +78,7 @@ const warehouseGroupedNavigation = [
     name: "Nhập kho",
     icon: PackagePlus,
     badge: "6",
+    roles: ["admin", "kho_manager"],
     children: [
       { name: "Danh sách phiếu nhập", href: "/receiving" },
       { name: "Tạo phiếu nhập", href: "/receiving/create" },
@@ -86,6 +90,7 @@ const warehouseGroupedNavigation = [
     name: "Xuất kho",
     icon: PackageMinus,
     badge: "4",
+    roles: ["admin", "kho_manager"],
     children: [
       { name: "Danh sách phiếu xuất", href: "/issuing" },
       { name: "Chờ duyệt", href: "/issuing/pending" },
@@ -97,6 +102,7 @@ const warehouseGroupedNavigation = [
     name: "Yêu cầu vật liệu",
     icon: ClipboardList,
     badge: "12",
+    roles: ["admin", "kho_manager", "production_manager"],
     children: [
       { name: "Chờ duyệt", href: "/requisitions/pending" },
       { name: "Timeout", href: "/requisitions/timeout" },
@@ -106,6 +112,7 @@ const warehouseGroupedNavigation = [
     name: "Hàng lỗi & Phế liệu",
     icon: CircleOff,
     badge: "8",
+    roles: ["admin", "kho_manager"],
     children: [
       { name: "Lỗi nội bộ (Internal)", href: "/defects/internal" },
       { name: "Hàng trả từ khách (RMA)", href: "/defects/rma" },
@@ -115,6 +122,7 @@ const warehouseGroupedNavigation = [
   {
     name: "Tồn kho",
     icon: Package,
+    roles: ["admin", "kho_manager", "production_manager"],
     children: [
       { name: "Nguyên vật liệu", href: "/inventory/materials" },
       { name: "Kiểm kê kho", href: "/inventory/stocktake" },
@@ -124,6 +132,7 @@ const warehouseGroupedNavigation = [
   {
     name: "Vị trí kho",
     icon: FileSearch,
+    roles: ["admin", "kho_manager"],
     children: [
       { name: "Kệ nguyên liệu", href: "/locations/materials" },
       { name: "Kệ thành phẩm", href: "/locations/materials/products" },
@@ -133,6 +142,7 @@ const warehouseGroupedNavigation = [
   {
     name: "Báo cáo",
     icon: BarChart3,
+    roles: ["admin", "kho_manager"],
     children: [
       { name: "Báo cáo kho", href: "/reports/inventory" },
     ],
@@ -146,20 +156,24 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
 
   // Logic kiểm tra tab đang active chính xác hơn sử dụng nguyên tắc Longest Prefix Match
   const checkActive = (href: string) => {
-    if (pathname === href) return true
+    // Chuẩn hóa path (loại bỏ trailing slash)
+    const normalizedPath = pathname.replace(/\/$/, "") || "/"
+    const normalizedHref = href.replace(/\/$/, "") || "/"
 
-    if (pathname.startsWith(`${href}/`)) {
+    if (normalizedPath === normalizedHref) return true
+
+    if (normalizedPath.startsWith(`${normalizedHref}/`)) {
       // Kiểm tra xem có mục menu nào khác khớp dài hơn (cụ thể hơn) không
       const allPossibleHrefs = [
         ...navigation.map((n) => n.href),
         ...warehouseGroupedNavigation.flatMap((g) => g.children.map((c) => c.href)),
-      ]
+      ].map(h => h.replace(/\/$/, "") || "/")
 
       const isBetterMatchExists = allPossibleHrefs.some(
         (otherHref) =>
-          otherHref !== href &&
-          otherHref.length > href.length &&
-          (pathname === otherHref || pathname.startsWith(`${otherHref}/`))
+          otherHref !== normalizedHref &&
+          otherHref.length > normalizedHref.length &&
+          (normalizedPath === otherHref || normalizedPath.startsWith(`${otherHref}/`))
       )
 
       return !isBetterMatchExists
@@ -168,12 +182,18 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
     return false
   }
 
-  const filteredNavigation = useMemo(() =>
-    navigation.filter(item => !item.roles || item.roles.includes(role)),
-    [role]
-  )
+  const filteredNavigation = useMemo(() => {
+    if (!role) return []
+    return navigation.filter(item => !item.roles || item.roles.includes(role))
+  }, [role])
 
-  const isKhoRole = isKhoManager || isAdmin
+  const filteredWarehouseGroupedNavigation = useMemo(() => {
+    if (!role) return []
+    return warehouseGroupedNavigation.filter(group => !group.roles || group.roles.includes(role))
+  }, [role])
+
+  const isKhoRole = isKhoManager && !isAdmin // Admin dùng flat navigation cho đầy đủ
+  const isPMORAdmin = isProductionManager || isAdmin
 
   return (
     <aside
@@ -269,7 +289,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
           {isKhoRole && !collapsed ? (
             <>
               {/* Grouped Navigation for Warehouse Role */}
-              {warehouseGroupedNavigation.map((group) => {
+              {filteredWarehouseGroupedNavigation.map((group) => {
                 const isGroupActive = group.children.some(
                   (child) => checkActive(child.href)
                 )

@@ -1,14 +1,31 @@
 import { createClient } from 'redis';
 
 const retryStrategy = (times) => {
-    const delay = Math.min(times * 100, 1000);
-    console.log(`🔄 Redis reconnect attempt ${times + 1} in ${delay}ms`);
-    return delay;
+    // Exponential backoff with jitter
+    const delay = Math.min(times * 200, 5000);
+    const jitter = Math.floor(Math.random() * 200);
+    const totalDelay = delay + jitter;
+
+    if (times % 5 === 0) {
+        console.log(`🔄 Redis reconnect attempt ${times} in ${totalDelay}ms`);
+    }
+
+    if (times > 50) { // Increased from 20 to 50
+        console.error('❌ Redis: Max reconnection attempts reached.');
+        return new Error('Redis reconnection failed');
+    }
+    return totalDelay;
 }
+
 const reconnectOnError = (err) => {
-    const errors = ['READONLY', 'ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED'];
-    return errors.some(e => err.message.includes(e));
+    const errors = ['READONLY', 'ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'SOCKET_CLOSED'];
+    const shouldReconnect = errors.some(e => err.message.includes(e));
+    if (shouldReconnect) {
+        console.warn(`⚠️ Redis: Reconnecting due to error: ${err.message}`);
+    }
+    return shouldReconnect;
 }
+
 export const client = createClient({
     username: 'default',
     password: process.env.REDIS_PASSWORD,
@@ -17,8 +34,8 @@ export const client = createClient({
         port: process.env.REDIS_PORT,
         retryStrategy,
         reconnectOnError,
-        keepAlive: 30000, // 30 seconds
-        connectTimeout: 10000,
+        keepAlive: 15000, // Reduced for faster detection
+        connectTimeout: 5000, // Faster failover
     }
 });
 
@@ -27,34 +44,52 @@ client.on('ready', () => console.log('✅ Redis Client Ready'));
 client.on('end', () => console.log('❌ Redis Client End'));
 client.on('reconnecting', () => console.log('🔄 Redis Client Reconnecting'));
 client.on('reconnect', () => console.log('🔄 Redis Client Reconnect'));
-client.on('reconnect_failed', () => console.log('❌ Redis Client Reconnect Failed'));
-client.on('error', err => console.log('❌ Redis Client Error', err));
+client.on('error', err => {
+    // Avoid spamming logs for certain errors
+    if (err.code !== 'ECONNREFUSED' && err.code !== 'ECONNRESET') {
+        console.error('❌ Redis Client Error:', err);
+    }
+});
 
 export const redisConnect = async () => {
     try {
-        await client.connect();
-        redisCheckStatus();
-        console.log('✅ Redis Client Connected');
+        if (!client.isOpen) {
+            await client.connect();
+        }
     } catch (err) {
-        console.log('❌ Redis Client Error', err);
+        console.error('❌ Redis Initial Connection Error:', err.message);
     }
 }
-const redisCheckStatus = (timeout = 30000) => {
+
+// Improved health check with fail-fast
+let isRedisHealthy = true;
+export const getRedisHealth = () => isRedisHealthy;
+
+const redisCheckStatus = (interval = 10000) => {
     setInterval(async () => {
-        try {
-            if (!client.isOpen) {
-                console.log("🔄 [Redis] Connection lost, attempting to reconnect...");
-                await client.connect();
-            } else if (client.isReady) {
-                // Heartbeat ping to keep the connection alive
-                await client.ping();
-                // console.log("💓 [Redis] Heartbeat sent");
-            }
-        } catch (err) {
-            console.error("❌ [Redis] Health check failed:", err.message);
+        if (!client.isOpen) {
+            isRedisHealthy = false;
+            return;
         }
-    }, timeout);
+
+        try {
+            const start = Date.now();
+            await client.ping();
+            const latency = Date.now() - start;
+
+            if (latency > 1000) {
+                console.warn(`⚠️ Redis: High latency detected (${latency}ms)`);
+            }
+
+            isRedisHealthy = true;
+        } catch (err) {
+            isRedisHealthy = false;
+            console.error("❌ Redis: Health check failed:", err.message);
+        }
+    }, interval);
 }
+
+redisCheckStatus();
 
 // process.on("SIGINT", async () => {
 //     console.log("🚦 Shutting down Redis clients...");

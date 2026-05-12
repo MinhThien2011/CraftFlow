@@ -6,12 +6,29 @@ export function useProductionOrdersModule() {
   const [activeFilter, setActiveFilter] = useState("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [isCreateOpen, setIsCreateOpen] = useState(false)
-  
+
   // Form state
-  const [selectedProduct, setSelectedProduct] = useState("")
-  const [quantity, setQuantity] = useState("")
+  const [selectedItems, setSelectedItems] = useState<{ productId: string, quantity: string }[]>([
+    { productId: "", quantity: "" }
+  ])
   const [deadline, setDeadline] = useState("")
   const [note, setNote] = useState("")
+
+  const addProductItem = () => {
+    setSelectedItems([...selectedItems, { productId: "", quantity: "" }])
+  }
+
+  const removeProductItem = (index: number) => {
+    if (selectedItems.length > 1) {
+      setSelectedItems(selectedItems.filter((_, i) => i !== index))
+    }
+  }
+
+  const updateProductItem = (index: number, field: 'productId' | 'quantity', value: string) => {
+    const newItems = [...selectedItems]
+    newItems[index] = { ...newItems[index], [field]: value }
+    setSelectedItems(newItems)
+  }
 
   // Fetch orders
   const { data: ordersResponse, isLoading, isError, refetch } = useProductionOrders({
@@ -21,27 +38,30 @@ export function useProductionOrdersModule() {
 
   // Fetch products for create modal
   const { data: productsResponse } = useProducts({ isActive: true, limit: 100 })
-  const products = productsResponse?.data?.items || []
+  const products = useMemo(() => productsResponse?.data?.products || productsResponse?.data?.items || [], [productsResponse])
 
   const createMutation = useCreateProductionOrder()
 
   const orders = useMemo(() => ordersResponse?.data?.items || (ordersResponse?.data as any)?.orders || [], [ordersResponse])
 
   const resetForm = () => {
-    setSelectedProduct("")
-    setQuantity("")
+    setSelectedItems([{ productId: "", quantity: "" }])
     setDeadline("")
     setNote("")
   }
 
   const handleCreateOrder = async () => {
-    if (!selectedProduct || !quantity || Number(quantity) <= 0) return
+    const validItems = selectedItems.filter(item => item.productId && Number(item.quantity) > 0)
+    if (validItems.length === 0 || !deadline) return
 
     createMutation.mutate({
-      productId: selectedProduct,
-      quantity: Number(quantity),
-      deadline,
+      products: validItems.map(item => ({
+        productId: item.productId,
+        quantity: Number(item.quantity),
+      })),
+      deadline: new Date(deadline).toISOString(),
       notes: note,
+      priority: 'medium' // Default priority
     }, {
       onSuccess: () => {
         setIsCreateOpen(false)
@@ -57,10 +77,10 @@ export function useProductionOrdersModule() {
     setSearchQuery,
     isCreateOpen,
     setIsCreateOpen,
-    selectedProduct,
-    setSelectedProduct,
-    quantity,
-    setQuantity,
+    selectedItems,
+    addProductItem,
+    removeProductItem,
+    updateProductItem,
     deadline,
     setDeadline,
     note,

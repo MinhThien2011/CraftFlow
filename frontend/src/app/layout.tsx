@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'CRAFTFLOW - Quản lý Kho Len',
-  description: 'Hệ thống quản lý kho nguyên liệu cho đồ thủ công đan/móc len',
+  title: 'CRAFTFLOW - Inventory Management System',
+  description: 'Inventory Management System for Handmade Products',
   generator: 'CRAFTFLOW.web',
   icons: {
     icon: [

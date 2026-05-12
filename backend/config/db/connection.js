@@ -7,17 +7,18 @@ const URIS = [
 ];
 
 const BASE_OPTIONS = {
-    serverSelectionTimeoutMS: 5000,
-    socketTimeoutMS: 45000,
+    serverSelectionTimeoutMS: 10000, // Increased for stability
+    socketTimeoutMS: 60000,         // Increased for long-running operations
     dbName: process.env.DB_NAME,
-    maxPoolSize: 10,
-    minPoolSize: 2,
+    maxPoolSize: 100,               // Significantly increased for high load
+    minPoolSize: 10,                // Maintain a base set of connections
     maxIdleTimeMS: 30000,
     heartbeatFrequencyMS: 10000,
+    connectTimeoutMS: 10000,
 };
 
 const ATLAS_OPTIONS = {
-    serverApi: { version: "1", strict: true, deprecationErrors: true },
+    serverApi: { version: "1", strict: false, deprecationErrors: true },
 };
 
 const MAX_RETRIES = 5;
@@ -63,7 +64,7 @@ const connectWithFallback = async () => {
     return false;
 };
 
-const connectWithRetry = async (attempt = 0) => {
+const connectWithRetry = async (attempt = 1) => {
     if (_connectionPromise) return _connectionPromise;
 
     _connectionPromise = (async () => {
@@ -72,16 +73,17 @@ const connectWithRetry = async (attempt = 0) => {
             if (ok) return true;
             throw new Error("All MongoDB URIs exhausted");
         } catch (err) {
-            console.error(`❌ Attempt ${attempt + 1}/${MAX_RETRIES}: ${err.message}`);
+            console.error(`❌ MongoDB Attempt ${attempt}/${MAX_RETRIES}: ${err.message}`);
 
-            if (attempt < MAX_RETRIES - 1) {
-                console.log(`⏳ Retrying in ${RETRY_DELAY_MS / 1000}s...`);
-                await new Promise(r => { _retryTimer = setTimeout(r, RETRY_DELAY_MS); });
+            if (attempt < MAX_RETRIES) {
+                const delay = RETRY_DELAY_MS * Math.pow(1.5, attempt - 1); // Exponential backoff
+                console.log(`⏳ Retrying MongoDB in ${delay / 1000}s...`);
+                await new Promise(r => { _retryTimer = setTimeout(r, delay); });
                 _connectionPromise = null;
                 return connectWithRetry(attempt + 1);
             }
 
-            console.error("❌ Max retries reached. Giving up.");
+            console.error("❌ MongoDB: Max retries reached. Giving up.");
             return false;
         } finally {
             _connectionPromise = null;

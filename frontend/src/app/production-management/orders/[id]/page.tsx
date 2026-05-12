@@ -27,8 +27,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { useProductionOrder, useUpdateOrderStatus } from "@/features/production/hooks/use-production"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { useProductionOrder, useUpdateOrderStatus, useAssignOrder, useStaffSuggestions, useSuggestedAssignments, useReassignTask } from "@/features/production/hooks/use-production"
 import { format } from "date-fns"
+import { Plus, Trash2, Sparkles, RefreshCw } from "lucide-react"
 
 const statusConfig = {
   pending: { label: "Chờ duyệt", color: "bg-[#F4C542] text-[#2C2C2C]", icon: Clock },
@@ -45,16 +53,116 @@ export default function OrderDetailPage() {
 
   const { data: orderResponse, isLoading: orderLoading } = useProductionOrder(id)
   const updateStatusMutation = useUpdateOrderStatus()
+  const assignMutation = useAssignOrder()
+  const reassignMutation = useReassignTask()
+  const { data: staffSuggestions } = useStaffSuggestions()
+  const { data: suggestionData, refetch: refetchSuggestions } = useSuggestedAssignments(id)
 
   const order = orderResponse?.data as any
 
   const [isCompleteOpen, setIsCompleteOpen] = useState(false)
   const [isCancelOpen, setIsCancelOpen] = useState(false)
+  const [isAssignOpen, setIsAssignOpen] = useState(false)
+  const [isReassignOpen, setIsReassignOpen] = useState(false)
 
   const [completeNote, setCompleteNote] = useState("")
   const [cancelReason, setCancelReason] = useState("")
 
+  // Assignment state
+  const [assignments, setAssignments] = useState<{ staffId: string, productId: string, assignedQuantity: number }[]>([])
+  const [selectedAssignment, setSelectedAssignment] = useState<any>(null)
+  const [newStaffId, setNewStaffId] = useState("")
+  const [reassignReason, setReassignReason] = useState("")
+
   const isCompletedOrder = order?.status === "completed"
+
+  const handleOpenAssign = () => {
+    if (order?.products) {
+      // Pre-fill with existing assignments if any, otherwise empty
+      if (order.assignments && order.assignments.length > 0) {
+        setAssignments(order.assignments.map((a: any) => ({
+          staffId: a.staff?._id || a.staff,
+          productId: a.product?._id || a.product,
+          assignedQuantity: a.assignedQuantity || a.quantity
+        })))
+      } else {
+        const staffList = (staffSuggestions as any)?.data?.suggestions || []
+        const topStaffId = staffList.length > 0 ? staffList[0]._id : ""
+
+        const initialAssignments = order.products.map((p: any) => ({
+          staffId: topStaffId,
+          productId: p.product?._id || p.product,
+          assignedQuantity: p.quantity
+        }))
+        setAssignments(initialAssignments)
+      }
+      setIsAssignOpen(true)
+    }
+  }
+
+  const handleAutoSuggest = async () => {
+    const { data } = await refetchSuggestions()
+    if (data?.data?.suggestions) {
+      setAssignments(data.data.suggestions)
+    }
+  }
+
+  const handleAddStaffRow = (productId: string) => {
+    const staffList = (staffSuggestions as any)?.data?.suggestions || []
+    const topStaffId = staffList.length > 0 ? staffList[0]._id : ""
+
+    setAssignments([...assignments, {
+      staffId: topStaffId,
+      productId,
+      assignedQuantity: 0
+    }])
+  }
+
+  const handleRemoveStaffRow = (index: number) => {
+    setAssignments(assignments.filter((_, i) => i !== index))
+  }
+
+  const handleConfirmAssign = () => {
+    const validAssignments = assignments.filter(a => a.staffId && a.assignedQuantity > 0)
+    if (validAssignments.length === 0) return
+
+    assignMutation.mutate({
+      orderId: id,
+      assignments: validAssignments
+    }, {
+      onSuccess: () => {
+        setIsAssignOpen(false)
+      }
+    })
+  }
+
+  const handleOpenReassign = (assign: any) => {
+    setSelectedAssignment(assign)
+    setNewStaffId(assign.staff?._id || "")
+    setReassignReason("")
+    setIsReassignOpen(true)
+  }
+
+  const handleConfirmReassign = () => {
+    if (!selectedAssignment || !newStaffId) return
+
+    reassignMutation.mutate({
+      assignmentId: selectedAssignment._id,
+      newStaffId,
+      reason: reassignReason
+    }, {
+      onSuccess: () => {
+        setIsReassignOpen(false)
+        setSelectedAssignment(null)
+      }
+    })
+  }
+
+  const handleUpdateAssignment = (index: number, field: string, value: any) => {
+    const newAssignments = [...assignments]
+    newAssignments[index] = { ...newAssignments[index], [field]: value }
+    setAssignments(newAssignments)
+  }
 
   const handleConfirmComplete = () => {
     updateStatusMutation.mutate({
@@ -264,23 +372,34 @@ export default function OrderDetailPage() {
                               {assign.staff?.fullName || assign.staff?.username}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              Sản phẩm: {assign.product?.name}
+                              Sản phẩm: {assign.product?.name || (order.products.find((p: any) => (p.product?._id || p.product) === (assign.product?._id || assign.product))?.productName || "Sản phẩm")}
                             </p>
                           </div>
                         </div>
-                        <Badge variant="outline" className="capitalize">
-                          {assign.status?.replace('_', ' ') || 'Pending'}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs text-primary hover:text-primary hover:bg-primary/10 gap-1"
+                            onClick={() => handleOpenReassign(assign)}
+                          >
+                            <RefreshCw className="h-3 w-3" />
+                            Thay đổi
+                          </Button>
+                          <Badge variant="outline" className="capitalize">
+                            {assign.status?.replace('_', ' ') || 'Pending'}
+                          </Badge>
+                        </div>
                       </div>
                       <div className="space-y-2">
                         <div className="flex justify-between text-xs">
-                          <span>Tiến độ: {assign.completedQuantity} / {assign.quantity}</span>
-                          <span>{Math.round((assign.completedQuantity / assign.quantity) * 100)}%</span>
+                          <span>Tiến độ: {assign.completedQuantity} / {assign.assignedQuantity}</span>
+                          <span>{Math.round((assign.completedQuantity / assign.assignedQuantity) * 100)}%</span>
                         </div>
                         <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                           <div
                             className="h-full bg-primary"
-                            style={{ width: `${(assign.completedQuantity / assign.quantity) * 100}%` }}
+                            style={{ width: `${(assign.completedQuantity / assign.assignedQuantity) * 100}%` }}
                           />
                         </div>
                       </div>
@@ -291,7 +410,7 @@ export default function OrderDetailPage() {
                 <div className="text-center py-12 border-2 border-dashed border-border rounded-xl">
                   <User className="h-12 w-12 text-muted-foreground mx-auto mb-2 opacity-20" />
                   <p className="text-muted-foreground">Chưa có phân công nhân sự</p>
-                  <Button variant="outline" size="sm" className="mt-4" onClick={() => router.push(`/production-management/orders/${id}/assign`)}>
+                  <Button variant="outline" size="sm" className="mt-4" onClick={handleOpenAssign}>
                     Phân công ngay
                   </Button>
                 </div>
@@ -384,6 +503,172 @@ export default function OrderDetailPage() {
               >
                 {updateStatusMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <XCircle className="mr-2 h-4 w-4" />}
                 Xác nhận hủy đơn
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Assignment Dialog */}
+      <Dialog open={isAssignOpen} onOpenChange={setIsAssignOpen}>
+        <DialogContent size="lg">
+          <DialogHeader className="flex flex-row items-center justify-between space-y-0 pb-4 border-b">
+            <DialogTitle className="text-xl font-bold">Phân công nhân sự</DialogTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-emerald-600 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 gap-2"
+              onClick={handleAutoSuggest}
+            >
+              <Sparkles className="h-4 w-4" />
+              Gợi ý phân công
+            </Button>
+          </DialogHeader>
+          <div className="space-y-6 py-4 max-h-[70vh] overflow-y-auto pr-2">
+            {order?.products?.map((product: any) => {
+              const productId = product.product?._id || product.product;
+              const productAssignments = assignments.filter(a => a.productId === productId);
+              const totalAssigned = productAssignments.reduce((sum, a) => sum + a.assignedQuantity, 0);
+              const isOverAssigned = totalAssigned > product.quantity;
+
+              return (
+                <div key={productId} className="space-y-3">
+                  <div className="flex justify-between items-center bg-muted/30 p-3 rounded-lg border border-dashed">
+                    <div>
+                      <span className="font-semibold text-sm">{product.productName || (product.product as any)?.name}</span>
+                      <p className="text-xs text-muted-foreground mt-0.5">Số lượng yêu cầu: {product.quantity}</p>
+                    </div>
+                    <div className="text-right">
+                      <Badge variant={isOverAssigned ? "destructive" : totalAssigned === product.quantity ? "secondary" : "outline"} className="text-[10px]">
+                        Đã chia: {totalAssigned} / {product.quantity}
+                      </Badge>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-[10px] ml-2 gap-1"
+                        onClick={() => handleAddStaffRow(productId)}
+                      >
+                        <Plus className="h-3 w-3" /> Thêm nhân viên
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3">
+                    {assignments.map((assign, index) => {
+                      if (assign.productId !== productId) return null;
+                      return (
+                        <div key={index} className="flex items-end gap-3 p-3 rounded-lg border bg-card shadow-sm group">
+                          <div className="flex-1 space-y-2">
+                            <Label className="text-[10px] uppercase text-muted-foreground font-bold">Nhân viên</Label>
+                            <Select value={assign.staffId} onValueChange={(val) => handleUpdateAssignment(index, 'staffId', val)}>
+                              <SelectTrigger className="h-9">
+                                <SelectValue placeholder="Chọn nhân viên..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {((staffSuggestions as any)?.data?.suggestions || []).map((staff: any, idx: number) => (
+                                  <SelectItem key={staff._id} value={staff._id}>
+                                    <div className="flex items-center justify-between w-full gap-2">
+                                      <span>{staff.fullName} ({staff.currentAssignedQuantity || 0} task)</span>
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="w-32 space-y-2">
+                            <Label className="text-[10px] uppercase text-muted-foreground font-bold">Số lượng</Label>
+                            <Input
+                              className="h-9"
+                              type="number"
+                              value={assign.assignedQuantity}
+                              onChange={(e) => handleUpdateAssignment(index, 'assignedQuantity', Number(e.target.value))}
+                            />
+                          </div>
+
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-9 w-9 text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => handleRemoveStaffRow(index)}
+                            disabled={productAssignments.length <= 1}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <Button variant="outline" onClick={() => setIsAssignOpen(false)}>Hủy</Button>
+            <Button
+              onClick={handleConfirmAssign}
+              className="bg-primary text-primary-foreground"
+              disabled={assignMutation.isPending}
+            >
+              {assignMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+              Xác nhận phân công
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reassign Staff Dialog */}
+      <Dialog open={isReassignOpen} onOpenChange={setIsReassignOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold">Thay đổi nhân sự</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {selectedAssignment && (
+              <div className="p-3 bg-muted/30 rounded-lg border border-dashed text-sm">
+                <p><span className="text-muted-foreground">Sản phẩm:</span> <span className="font-semibold">{selectedAssignment.product?.name || (order.products.find((p: any) => (p.product?._id || p.product) === (selectedAssignment.product?._id || selectedAssignment.product))?.productName)}</span></p>
+                <p><span className="text-muted-foreground">Số lượng:</span> <span className="font-semibold">{selectedAssignment.assignedQuantity}</span></p>
+                <p><span className="text-muted-foreground">Nhân viên hiện tại:</span> <span className="font-semibold text-primary">{selectedAssignment.staff?.fullName || selectedAssignment.staff?.username}</span></p>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label>Chọn nhân viên mới</Label>
+              <Select value={newStaffId} onValueChange={setNewStaffId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Chọn nhân viên thay thế..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {((staffSuggestions as any)?.data?.suggestions || []).map((staff: any) => (
+                    <SelectItem key={staff._id} value={staff._id} disabled={staff._id === selectedAssignment?.staff?._id}>
+                      {staff.fullName} ({staff.currentAssignedQuantity || 0} task)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="reassign-reason">Lý do thay đổi (tùy chọn)</Label>
+              <Textarea
+                id="reassign-reason"
+                placeholder="Nhập lý do thay đổi nhân sự..."
+                value={reassignReason}
+                onChange={(e) => setReassignReason(e.target.value)}
+                rows={2}
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4 border-t">
+              <Button variant="outline" onClick={() => setIsReassignOpen(false)}>Hủy</Button>
+              <Button
+                onClick={handleConfirmReassign}
+                className="bg-primary text-primary-foreground"
+                disabled={reassignMutation.isPending || !newStaffId || newStaffId === selectedAssignment?.staff?._id}
+              >
+                {reassignMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                Xác nhận thay đổi
               </Button>
             </div>
           </div>

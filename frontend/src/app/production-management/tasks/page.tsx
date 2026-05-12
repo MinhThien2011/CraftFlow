@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { DashboardLayout } from "@/features/production/components/dashboard-layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,6 +15,9 @@ import {
   Package,
   AlertTriangle,
   Bell,
+  ChevronLeft,
+  ChevronRight,
+  Loader2
 } from "lucide-react"
 import {
   Dialog,
@@ -23,180 +26,148 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import Link from "next/link"
+import { toast } from "sonner"
+import { productionApi } from "@/api/production.api"
+
+const CustomPagination = ({ page, total, pageSize, onChange }: { page: number; total: number; pageSize: number; onChange: (p: number) => void }) => {
+  const totalPages = Math.ceil(total / pageSize)
+  if (totalPages <= 1) return null
+  return (
+    <div className="flex items-center justify-between border-t p-4 bg-background">
+      <p className="text-sm text-muted-foreground">
+        Hiển thị {Math.min((page - 1) * pageSize + 1, total)}–{Math.min(page * pageSize, total)} / {total}
+      </p>
+      <div className="flex items-center gap-1">
+        <Button variant="outline" size="icon" className="h-8 w-8" disabled={page === 1} onClick={() => onChange(page - 1)}>
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+          <Button key={p} variant={p === page ? 'default' : 'outline'} size="icon" className="h-8 w-8" onClick={() => onChange(p)}>{p}</Button>
+        ))}
+        <Button variant="outline" size="icon" className="h-8 w-8" disabled={page === totalPages} onClick={() => onChange(page + 1)}>
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  )
+}
 
 const filters = [
   { id: "all", label: "Tất cả" },
   { id: "pending", label: "Chờ thực hiện" },
-  { id: "in-progress", label: "Đang thực hiện" },
-  { id: "complete", label: "Hoàn thành" },
-  { id: "delayed", label: "Chậm tiến độ" },
-]
-
-const staffMembers = [
-  { id: "NV001", name: "Trần Văn B", role: "Thợ đan", avatar: "TB" },
-  { id: "NV002", name: "Lê Thị C", role: "Thợ đan", avatar: "LC" },
-  { id: "NV003", name: "Phạm Văn D", role: "Thợ hoàn thiện", avatar: "PD" },
-  { id: "NV004", name: "Hoàng Thị E", role: "Thợ sơn", avatar: "HE" },
-  { id: "NV005", name: "Vũ Văn F", role: "Kiểm tra chất lượng", avatar: "VF" },
-  { id: "NV006", name: "Nguyễn Thị G", role: "Thợ đan", avatar: "NG" },
-  { id: "NV007", name: "Đặng Văn H", role: "Thợ hoàn thiện", avatar: "DH" },
-]
-
-const allTasks = [
-  {
-    id: "T001",
-    stageName: "Đan chi tiết & hoàn thiện",
-    orderId: "PO-2024-001",
-    product: "Giỏ tre đan tay",
-    staffId: "NV003",
-    staffName: "Phạm Văn D",
-    status: "in-progress",
-    progress: 70,
-    startDate: "16/04/2026",
-    endDate: "20/04/2026",
-    isDelayed: false,
-  },
-  {
-    id: "T002",
-    stageName: "Sơn bảo vệ",
-    orderId: "PO-2024-001",
-    product: "Giỏ tre đan tay",
-    staffId: "NV004",
-    staffName: "Hoàng Thị E",
-    status: "pending",
-    progress: 0,
-    startDate: "20/04/2026",
-    endDate: "22/04/2026",
-    isDelayed: false,
-  },
-  {
-    id: "T003",
-    stageName: "Kiểm tra chất lượng",
-    orderId: "PO-2024-001",
-    product: "Giỏ tre đan tay",
-    staffId: "NV005",
-    staffName: "Vũ Văn F",
-    status: "pending",
-    progress: 0,
-    startDate: "22/04/2026",
-    endDate: "25/04/2026",
-    isDelayed: false,
-  },
-  {
-    id: "T004",
-    stageName: "Chạm khắc hoa văn",
-    orderId: "PO-2024-004",
-    product: "Khay gỗ chạm khắc",
-    staffId: "NV003",
-    staffName: "Phạm Văn D",
-    status: "in-progress",
-    progress: 40,
-    startDate: "18/04/2026",
-    endDate: "26/04/2026",
-    isDelayed: true,
-  },
-  {
-    id: "T005",
-    stageName: "Tạo hình bình",
-    orderId: "PO-2024-006",
-    product: "Bình gốm men xanh",
-    staffId: "NV002",
-    staffName: "Lê Thị C",
-    status: "in-progress",
-    progress: 60,
-    startDate: "19/04/2026",
-    endDate: "24/04/2026",
-    isDelayed: false,
-  },
-  {
-    id: "T006",
-    stageName: "Nung sơ bộ",
-    orderId: "PO-2024-006",
-    product: "Bình gốm men xanh",
-    staffId: "NV001",
-    staffName: "Trần Văn B",
-    status: "pending",
-    progress: 0,
-    startDate: "24/04/2026",
-    endDate: "26/04/2026",
-    isDelayed: false,
-  },
-  {
-    id: "T007",
-    stageName: "Chuẩn bị khung sắt",
-    orderId: "PO-2024-002",
-    product: "Đèn mây thủ công",
-    staffId: "NV006",
-    staffName: "Nguyễn Thị G",
-    status: "pending",
-    progress: 0,
-    startDate: "16/04/2026",
-    endDate: "18/04/2026",
-    isDelayed: true,
-  },
-  {
-    id: "T008",
-    stageName: "Đan khung cơ bản",
-    orderId: "PO-2024-001",
-    product: "Giỏ tre đan tay",
-    staffId: "NV002",
-    staffName: "Lê Thị C",
-    status: "complete",
-    progress: 100,
-    startDate: "12/04/2026",
-    endDate: "16/04/2026",
-    isDelayed: false,
-  },
+  { id: "in_production", label: "Đang thực hiện" },
+  { id: "completed", label: "Hoàn thành" },
+  { id: "overdue", label: "Chậm tiến độ / Quá hạn" },
 ]
 
 const statusConfig = {
   pending: { label: "Chờ thực hiện", color: "bg-[#F4C542] text-[#2C2C2C]" },
-  "in-progress": { label: "Đang thực hiện", color: "bg-[#2B8BE8] text-white" },
-  complete: { label: "Hoàn thành", color: "bg-[#4A9C6B] text-white" },
-  delayed: { label: "Chậm tiến độ", color: "bg-[#E04E4E] text-white" },
+  in_production: { label: "Đang thực hiện", color: "bg-[#2B8BE8] text-white" },
+  completed: { label: "Hoàn thành", color: "bg-[#4A9C6B] text-white" },
+  overdue: { label: "Chậm tiến độ", color: "bg-[#E04E4E] text-white" },
 }
 
 export default function TasksPage() {
+  const [tasks, setTasks] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [activeFilter, setActiveFilter] = useState("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [isReminderOpen, setIsReminderOpen] = useState(false)
-  const [selectedTask, setSelectedTask] = useState<typeof allTasks[0] | null>(null)
+  const [selectedTask, setSelectedTask] = useState<any | null>(null)
   const [reminderMessage, setReminderMessage] = useState("")
+  const [page, setPage] = useState(1)
+  const ITEMS_PER_PAGE = 10
 
-  const getFilterCount = (filterId: string) => {
-    if (filterId === "all") return allTasks.length
-    if (filterId === "delayed") return allTasks.filter(t => t.isDelayed).length
-    return allTasks.filter(t => t.status === filterId).length
-  }
+  // ─── Lấy dữ liệu (Thực tế từ API BE) ───
+  const fetchTasks = useCallback(async () => {
+    setIsLoading(true)
+    try {
+      // Gọi API lấy danh sách Đơn sản xuất (orders)
+      const res: any = await productionApi.getOrders({ limit: 1000 })
 
-  const filteredTasks = allTasks.filter((task) => {
-    let matchesFilter = activeFilter === "all"
-    if (activeFilter === "delayed") {
-      matchesFilter = task.isDelayed
-    } else if (activeFilter !== "all") {
-      matchesFilter = task.status === activeFilter
+      if (res && (res.success || res.status === 'success')) {
+        const rawData = res.data?.orders || res.data?.items || res.data
+        const data = Array.isArray(rawData) ? rawData : []
+        let parsedTasks: any[] = []
+
+        data.forEach((order: any) => {
+          if (order.assignments && Array.isArray(order.assignments)) {
+            order.assignments.forEach((task: any) => {
+              parsedTasks.push({
+                id: task._id || task.id,
+                orderId: order.orderCode || order._id,
+                product: task.product?.name || order.products?.[0]?.productName || (order.products?.[0]?.product as any)?.name || "Sản phẩm không xác định",
+                staffId: task.staff?._id || task.assignee?._id || task.assignedTo?._id,
+                staffName: task.staff?.fullName || task.staff?.username || task.assignee?.fullName || task.assignee?.username || "Chưa phân công",
+                status: task.status || "pending",
+                progress: task.assignedQuantity > 0 ? Math.round(((task.completedQuantity || 0) / task.assignedQuantity) * 100) : 0,
+                startDate: task.startDate || order.startDate,
+                endDate: task.endDate || order.deadline || order.expectedEndDate,
+              })
+            })
+          }
+        })
+
+        setTasks(parsedTasks)
+      } else {
+        setTasks([])
+      }
+    } catch (error) {
+      console.error("Fetch tasks error:", error)
+      toast.error("Không thể tải danh sách công việc")
+      setTasks([])
+    } finally {
+      setIsLoading(false)
     }
-    const matchesSearch =
-      task.stageName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      task.staffName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      task.orderId.toLowerCase().includes(searchQuery.toLowerCase())
-    return matchesFilter && matchesSearch
-  })
+  }, [])
 
-  const handleSendReminder = () => {
+  useEffect(() => {
+    fetchTasks()
+  }, [fetchTasks])
+
+  // Đặt lại trang khi đổi filter
+  useEffect(() => { setPage(1) }, [activeFilter, searchQuery])
+
+  // ─── Tính toán Filters bằng Memoization ───
+  const filterCounts = useMemo(() => {
+    return {
+      all: tasks.length,
+      pending: tasks.filter(t => t.status === "pending").length,
+      in_production: tasks.filter(t => t.status === "in_production").length,
+      completed: tasks.filter(t => t.status === "completed").length,
+      overdue: tasks.filter(t => t.status === "overdue").length,
+    }
+  }, [tasks])
+
+  const filteredTasks = useMemo(() => {
+    return tasks.filter((task) => {
+      const matchesFilter = activeFilter === "all" || task.status === activeFilter
+      const matchesSearch =
+        task.staffName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        task.orderId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        task.product?.toLowerCase().includes(searchQuery.toLowerCase())
+      return matchesFilter && matchesSearch
+    })
+  }, [tasks, activeFilter, searchQuery])
+
+  const paginatedTasks = useMemo(() => {
+    return filteredTasks.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE)
+  }, [filteredTasks, page])
+
+  const handleSendReminder = useCallback(() => {
     if (selectedTask && reminderMessage) {
       alert(`Đã gửi nhắc nhở đến ${selectedTask.staffName}:\n${reminderMessage}`)
       setIsReminderOpen(false)
       setReminderMessage("")
       setSelectedTask(null)
     }
-  }
+  }, [selectedTask, reminderMessage])
 
-  const openReminderDialog = (task: typeof allTasks[0]) => {
+  const openReminderDialog = useCallback((task: any) => {
     setSelectedTask(task)
-    setReminderMessage(`Nhắc nhở về công đoạn "${task.stageName}" (${task.orderId}):\nTiến độ hiện tại: ${task.progress}%\nVui lòng cập nhật tiến độ công việc.`)
+    setReminderMessage(`Nhắc nhở về công việc đơn hàng (${task.orderId}):\nTiến độ hiện tại: ${task.progress || 0}%\nVui lòng cập nhật tiến độ công việc.`)
     setIsReminderOpen(true)
-  }
+  }, [])
 
   return (
     <DashboardLayout title="Quản lý công việc">
@@ -209,7 +180,7 @@ export default function TasksPage() {
                 <Clock className="h-5 w-5 text-[#7A5C43]" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-card-foreground">{allTasks.filter(t => t.status === "pending").length}</p>
+                <p className="text-2xl font-bold text-card-foreground">{filterCounts.pending}</p>
                 <p className="text-sm text-muted-foreground">Chờ thực hiện</p>
               </div>
             </div>
@@ -220,7 +191,7 @@ export default function TasksPage() {
                 <Package className="h-5 w-5 text-[#7A5C43]" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-card-foreground">{allTasks.filter(t => t.status === "in-progress").length}</p>
+                <p className="text-2xl font-bold text-card-foreground">{filterCounts.in_production}</p>
                 <p className="text-sm text-muted-foreground">Đang thực hiện</p>
               </div>
             </div>
@@ -231,7 +202,7 @@ export default function TasksPage() {
                 <CheckCircle className="h-5 w-5 text-[#7A5C43]" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-card-foreground">{allTasks.filter(t => t.status === "complete").length}</p>
+                <p className="text-2xl font-bold text-card-foreground">{filterCounts.completed}</p>
                 <p className="text-sm text-muted-foreground">Hoàn thành</p>
               </div>
             </div>
@@ -242,7 +213,7 @@ export default function TasksPage() {
                 <AlertTriangle className="h-5 w-5 text-[#7A5C43]" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-card-foreground">{allTasks.filter(t => t.isDelayed).length}</p>
+                <p className="text-2xl font-bold text-card-foreground">{filterCounts.overdue}</p>
                 <p className="text-sm text-muted-foreground">Chậm tiến độ</p>
               </div>
             </div>
@@ -274,7 +245,7 @@ export default function TasksPage() {
                 }`}
             >
               {filter.label}
-              <span className="ml-2 opacity-70">({getFilterCount(filter.id)})</span>
+              <span className="ml-2 opacity-70">({filterCounts[filter.id as keyof typeof filterCounts]})</span>
             </button>
           ))}
         </div>
@@ -286,10 +257,7 @@ export default function TasksPage() {
               <thead>
                 <tr className="border-b border-border bg-muted/50">
                   <th className="px-6 py-4 text-left text-xs font-medium uppercase text-muted-foreground">
-                    Công đoạn
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase text-muted-foreground">
-                    Đơn sản xuất
+                    Đơn sản xuất / Sản phẩm
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-medium uppercase text-muted-foreground">
                     Nhân viên
@@ -309,26 +277,38 @@ export default function TasksPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredTasks.map((task) => (
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground">
+                      <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-primary" />
+                      Đang tải dữ liệu...
+                    </td>
+                  </tr>
+                ) : paginatedTasks.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground">
+                      Không tìm thấy công việc nào.
+                    </td>
+                  </tr>
+                ) : paginatedTasks.map((task) => (
                   <tr
                     key={task.id}
                     className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
                   >
                     <td className="px-6 py-4">
                       <div>
-                        <p className="font-medium text-card-foreground">{task.stageName}</p>
-                        <p className="text-sm text-muted-foreground">{task.product}</p>
+                        <Link href={`/production-management/orders/${task.orderId}`} className="font-medium text-primary hover:underline">
+                          {task.orderId}
+                        </Link>
+                        <p className="text-sm text-muted-foreground">{task.product || "Sản phẩm không xác định"}</p>
                       </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <Link href={`/production-management/orders/${task.orderId}`} className="text-primary hover:underline">
-                        {task.orderId}
-                      </Link>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-                          {staffMembers.find(s => s.id === task.staffId)?.avatar}
+                          {task.staffName && task.staffName !== "Chưa phân công"
+                            ? task.staffName.substring(0, 2).toUpperCase()
+                            : "NV"}
                         </div>
                         <span className="text-card-foreground">{task.staffName}</span>
                       </div>
@@ -337,28 +317,30 @@ export default function TasksPage() {
                       <div className="flex items-center gap-3">
                         <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden max-w-[100px]">
                           <div
-                            className={`h-full rounded-full transition-all ${task.isDelayed ? "bg-[#E04E4E]" : "bg-[#4A9C6B]"
+                            className={`h-full rounded-full transition-all ${task.status === "overdue" ? "bg-[#E04E4E]" : "bg-[#4A9C6B]"
                               }`}
-                            style={{ width: `${task.progress}%` }}
+                            style={{ width: `${task.progress || 0}%` }}
                           />
                         </div>
                         <span className="text-sm text-muted-foreground w-10">
-                          {task.progress}%
+                          {task.progress || 0}%
                         </span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <Badge
-                        className={`${task.isDelayed ? statusConfig.delayed.color : statusConfig[task.status as keyof typeof statusConfig].color} border-0`}
+                        className={`${statusConfig[task.status as keyof typeof statusConfig]?.color || "bg-muted text-muted-foreground"} border-0`}
                       >
-                        {task.isDelayed ? statusConfig.delayed.label : statusConfig[task.status as keyof typeof statusConfig].label}
+                        {statusConfig[task.status as keyof typeof statusConfig]?.label || task.status}
                       </Badge>
                     </td>
                     <td className="px-6 py-4 text-card-foreground">
-                      {task.endDate}
+                      {task.endDate
+                        ? new Date(task.endDate).toLocaleDateString("vi-VN")
+                        : "Chưa xác định"}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      {(task.status !== "complete" && task.isDelayed) && (
+                      {(task.status === "overdue") && (
                         <Button
                           variant="outline"
                           size="sm"
@@ -375,11 +357,12 @@ export default function TasksPage() {
               </tbody>
             </table>
           </div>
+          <CustomPagination page={page} total={filteredTasks.length} pageSize={ITEMS_PER_PAGE} onChange={setPage} />
         </Card>
 
         {/* Reminder Dialog */}
         <Dialog open={isReminderOpen} onOpenChange={setIsReminderOpen}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="sm:max-w-md w-[95vw] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="text-xl font-bold text-primary">
                 Nhắc nhở nhân viên
@@ -390,11 +373,13 @@ export default function TasksPage() {
                 <div className="p-4 bg-muted/50 rounded-lg">
                   <div className="flex items-center gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-                      {staffMembers.find(s => s.id === selectedTask.staffId)?.avatar}
+                      {selectedTask.staffName && selectedTask.staffName !== "Chưa phân công"
+                        ? selectedTask.staffName.substring(0, 2).toUpperCase()
+                        : "NV"}
                     </div>
                     <div>
                       <p className="font-medium text-card-foreground">{selectedTask.staffName}</p>
-                      <p className="text-sm text-muted-foreground">{selectedTask.stageName}</p>
+                      <p className="text-sm text-muted-foreground">{selectedTask.product}</p>
                     </div>
                   </div>
                 </div>
@@ -428,5 +413,3 @@ export default function TasksPage() {
     </DashboardLayout>
   )
 }
-
-

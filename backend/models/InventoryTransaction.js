@@ -42,5 +42,6 @@ const transactionSchema = new mongoose.Schema({
 transactionSchema.index({ material: 1, createdAt: -1 });
 transactionSchema.index({ product: 1, createdAt: -1 });
 transactionSchema.index({ type: 1, createdAt: -1 });
+transactionSchema.index({ createdAt: -1 });
 
 export default mongoose.model('InventoryTransaction', transactionSchema);

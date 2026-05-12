@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { DashboardLayout } from "@/features/production/components/dashboard-layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,6 +15,8 @@ import {
   MessageSquare,
   Package,
   User,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react"
 import {
   Dialog,
@@ -23,6 +25,29 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+
+const CustomPagination = ({ page, total, pageSize, onChange }: { page: number; total: number; pageSize: number; onChange: (p: number) => void }) => {
+  const totalPages = Math.ceil(total / pageSize)
+  if (totalPages <= 1) return null
+  return (
+    <div className="flex items-center justify-between pt-4 mt-4">
+      <p className="text-sm text-muted-foreground">
+        Hiển thị {Math.min((page - 1) * pageSize + 1, total)}–{Math.min(page * pageSize, total)} / {total}
+      </p>
+      <div className="flex items-center gap-1">
+        <Button variant="outline" size="icon" className="h-8 w-8" disabled={page === 1} onClick={() => onChange(page - 1)}>
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+          <Button key={p} variant={p === page ? 'default' : 'outline'} size="icon" className="h-8 w-8" onClick={() => onChange(p)}>{p}</Button>
+        ))}
+        <Button variant="outline" size="icon" className="h-8 w-8" disabled={page === totalPages} onClick={() => onChange(page + 1)}>
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  )
+}
 
 const filters = [
   { id: "all", label: "Tất cả" },
@@ -324,29 +349,45 @@ export default function IssuesPage() {
   const [processStatus, setProcessStatus] = useState("")
   const [processNote, setProcessNote] = useState("")
 
+  const [page, setPage] = useState(1)
+  const ITEMS_PER_PAGE = 10
+
   // Calculate dynamic counts
-  const getFilterCount = (filterId: string) => {
-    if (filterId === "all") return issues.length
-    return issues.filter(i => i.status === filterId).length
-  }
+  const filterCounts = useMemo(() => {
+    return {
+      all: issues.length,
+      pending: issues.filter(i => i.status === "pending").length,
+      processing: issues.filter(i => i.status === "processing").length,
+      resolved: issues.filter(i => i.status === "resolved").length,
+    }
+  }, [])
 
-  const filteredIssues = issues.filter((issue) => {
-    const matchesFilter = activeFilter === "all" || issue.status === activeFilter
-    const matchesSearch =
-      issue.product.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      issue.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      issue.reporter.toLowerCase().includes(searchQuery.toLowerCase())
-    return matchesFilter && matchesSearch
-  })
+  const filteredIssues = useMemo(() => {
+    return issues.filter((issue) => {
+      const matchesFilter = activeFilter === "all" || issue.status === activeFilter
+      const matchesSearch =
+        issue.product.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        issue.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        issue.reporter.toLowerCase().includes(searchQuery.toLowerCase())
+      return matchesFilter && matchesSearch
+    })
+  }, [activeFilter, searchQuery])
 
-  const handleOpenProcessDialog = (issue: typeof issues[0]) => {
+  const paginatedIssues = useMemo(() => {
+    return filteredIssues.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE)
+  }, [filteredIssues, page])
+
+  // Reset page when filter or search changes
+  useEffect(() => { setPage(1) }, [activeFilter, searchQuery])
+
+  const handleOpenProcessDialog = useCallback((issue: typeof issues[0]) => {
     setSelectedIssue(issue)
     setProcessStatus(issue.status)
     setProcessNote(issue.note)
     setIsProcessDialogOpen(true)
-  }
+  }, [])
 
-  const handleSaveProcess = () => {
+  const handleSaveProcess = useCallback(() => {
     if (selectedIssue) {
       alert(`Đã cập nhật vấn đề ${selectedIssue.id}:\nTrạng thái: ${statusConfig[processStatus as keyof typeof statusConfig]?.label}\nGhi chú: ${processNote || "Không có"}`)
       setIsProcessDialogOpen(false)
@@ -354,7 +395,7 @@ export default function IssuesPage() {
       setProcessStatus("")
       setProcessNote("")
     }
-  }
+  }, [selectedIssue, processStatus, processNote])
 
   return (
     <DashboardLayout title="Báo cáo hao hụt & Vấn đề">
@@ -367,7 +408,7 @@ export default function IssuesPage() {
                 <Clock className="h-5 w-5 text-[#7A5C43]" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-card-foreground">{getFilterCount("pending")}</p>
+                <p className="text-2xl font-bold text-card-foreground">{filterCounts.pending}</p>
                 <p className="text-sm text-muted-foreground">Chờ xử lý</p>
               </div>
             </div>
@@ -378,7 +419,7 @@ export default function IssuesPage() {
                 <Package className="h-5 w-5 text-[#7A5C43]" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-card-foreground">{getFilterCount("processing")}</p>
+                <p className="text-2xl font-bold text-card-foreground">{filterCounts.processing}</p>
                 <p className="text-sm text-muted-foreground">Đang xử lý</p>
               </div>
             </div>
@@ -389,7 +430,7 @@ export default function IssuesPage() {
                 <CheckCircle className="h-5 w-5 text-[#7A5C43]" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-card-foreground">{getFilterCount("resolved")}</p>
+                <p className="text-2xl font-bold text-card-foreground">{filterCounts.resolved}</p>
                 <p className="text-sm text-muted-foreground">Đã giải quyết</p>
               </div>
             </div>
@@ -413,21 +454,20 @@ export default function IssuesPage() {
             <button
               key={filter.id}
               onClick={() => setActiveFilter(filter.id)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeFilter === filter.id
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeFilter === filter.id
                   ? "bg-primary text-primary-foreground"
                   : "bg-card text-muted-foreground hover:bg-muted"
-              }`}
+                }`}
             >
               {filter.label}
-              <span className="ml-2 opacity-70">({getFilterCount(filter.id)})</span>
+              <span className="ml-2 opacity-70">({filterCounts[filter.id as keyof typeof filterCounts]})</span>
             </button>
           ))}
         </div>
 
         {/* Issues List */}
         <div className="space-y-4">
-          {filteredIssues.map((issue) => (
+          {paginatedIssues.map((issue) => (
             <Card key={issue.id} className="p-6 bg-card border-border">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex-1 space-y-3">
@@ -471,8 +511,8 @@ export default function IssuesPage() {
                   )}
                 </div>
 
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="border-border shrink-0"
                   onClick={() => handleOpenProcessDialog(issue)}
                 >
@@ -482,12 +522,13 @@ export default function IssuesPage() {
               </div>
             </Card>
           ))}
+          <CustomPagination page={page} total={filteredIssues.length} pageSize={ITEMS_PER_PAGE} onChange={setPage} />
         </div>
       </div>
 
       {/* Process Dialog */}
       <Dialog open={isProcessDialogOpen} onOpenChange={setIsProcessDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="sm:max-w-md w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold text-primary">
               Xử lý vấn đề {selectedIssue?.id}
@@ -505,7 +546,7 @@ export default function IssuesPage() {
 
               <div className="space-y-2">
                 <Label>Cập nhật trạng thái</Label>
-                <select 
+                <select
                   className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm"
                   value={processStatus}
                   onChange={(e) => setProcessStatus(e.target.value)}
@@ -530,7 +571,7 @@ export default function IssuesPage() {
                 <Button variant="outline" onClick={() => setIsProcessDialogOpen(false)}>
                   Hủy
                 </Button>
-                <Button 
+                <Button
                   className="bg-primary hover:bg-primary/90 text-primary-foreground"
                   onClick={handleSaveProcess}
                 >
@@ -544,5 +585,3 @@ export default function IssuesPage() {
     </DashboardLayout>
   )
 }
-
-

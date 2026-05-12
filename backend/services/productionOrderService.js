@@ -43,11 +43,24 @@ export const getAllProductionOrders = async (queryParams) => {
       ProductionOrder.countDocuments(filter)
     ]);
 
+    // Fetch assignments for these orders
+    const orderIds = orders.map(o => o._id);
+    const assignments = await ProductionOrderAssignment.find({ productionOrder: { $in: orderIds } })
+      .populate('staff', 'fullName username currentAssignedQuantity')
+      .populate('product', 'name code unit')
+      .lean();
+
+    // Map assignments to their respective orders
+    const ordersWithAssignments = orders.map(order => ({
+      ...order,
+      assignments: assignments.filter(a => a.productionOrder.toString() === order._id.toString())
+    }));
+
     return {
-      status: 'success',
+      success: true,
       message: 'Production orders retrieved successfully.',
       data: {
-        orders,
+        orders: ordersWithAssignments,
         pagination: {
           total,
           page: parseInt(page),
@@ -58,7 +71,7 @@ export const getAllProductionOrders = async (queryParams) => {
     };
   } catch (error) {
     console.error('[ProductionOrderService] getAllProductionOrders error:', error);
-    return { status: 'error', message: error.message, data: null };
+    return { success: false, message: error.message, data: null };
   }
 };
 
@@ -90,11 +103,26 @@ export const getStaffProductionOrders = async (staffId, queryParams) => {
       ProductionOrder.countDocuments(filter)
     ]);
 
+    // Fetch assignments for these orders for THIS staff member
+    const orderIdsRetrieved = orders.map(o => o._id);
+    const orderAssignments = await ProductionOrderAssignment.find({
+      productionOrder: { $in: orderIdsRetrieved },
+      staff: staffId
+    })
+      .populate('staff', 'fullName username currentAssignedQuantity')
+      .lean();
+
+    // Map assignments to their respective orders
+    const ordersWithAssignments = orders.map(order => ({
+      ...order,
+      assignments: orderAssignments.filter(a => a.productionOrder.toString() === order._id.toString())
+    }));
+
     return {
-      status: 'success',
+      success: true,
       message: 'Staff production orders retrieved successfully.',
       data: {
-        orders,
+        orders: ordersWithAssignments,
         pagination: {
           total,
           page: parseInt(page),
@@ -105,7 +133,7 @@ export const getStaffProductionOrders = async (staffId, queryParams) => {
     };
   } catch (error) {
     console.error('[ProductionOrderService] getStaffProductionOrders error:', error);
-    return { status: 'error', message: error.message, data: null };
+    return { success: false, message: error.message, data: null };
   }
 };
 
@@ -125,17 +153,18 @@ export const getProductionOrderById = async (orderIdentifier) => {
         .populate('createdBy', 'fullName username')
         .lean();
 
-    if (!order) throw new Error('Production order not found.');
+    if (!order) return { success: false, message: 'Production order not found.', data: null };
 
     const orderId = order._id;
 
     // Also get assignments for this order
     const assignments = await ProductionOrderAssignment.find({ productionOrder: orderId })
       .populate('staff', 'fullName username currentAssignedQuantity')
+      .populate('product', 'name code unit')
       .lean();
 
     return {
-      status: 'success',
+      success: true,
       message: 'Production order details retrieved.',
       data: {
         ...order,
@@ -144,7 +173,7 @@ export const getProductionOrderById = async (orderIdentifier) => {
     };
   } catch (error) {
     console.error('[ProductionOrderService] getProductionOrderById error:', error);
-    return { status: 'error', message: error.message, data: null };
+    return { success: false, message: error.message, data: null };
   }
 };
 
@@ -445,6 +474,84 @@ export const getStaffSuggestions = async () => {
 };
 
 /**
+ * Suggest an assignment distribution for a production order based on staff workload.
+ * Scales the number of assigned staff based on order quantity to prevent overload.
+ */
+export const suggestOrderAssignments = async (orderId) => {
+  try {
+    const order = await ProductionOrder.findById(orderId).populate('products.product').lean();
+    if (!order) throw new Error('Order not found.');
+
+    const staffResult = await getStaffSuggestions();
+    const staffList = staffResult.data.suggestions; // Already sorted by currentAssignedQuantity ASC
+
+    if (staffList.length === 0) throw new Error('No staff members available for assignment.');
+
+    const suggestedAssignments = [];
+
+    for (const p of order.products) {
+      const quantity = p.quantity;
+      const productId = p.product?._id || p.product;
+
+      // 1. Determine how many staff we need based on quantity
+      // Logic: 1 person for every ~200 items, but at least 1 and at most all available staff.
+      // For very large orders (e.g. 100k), it will naturally use all staff.
+      const IDEAL_QTY_PER_PERSON = 200;
+      let targetStaffCount = Math.min(staffList.length, Math.max(1, Math.ceil(quantity / IDEAL_QTY_PER_PERSON)));
+
+      // If it's a "large" order for the current workforce, ensure we use at least 50% of staff if available
+      if (quantity > 1000 && staffList.length > 5) {
+        targetStaffCount = Math.max(targetStaffCount, Math.floor(staffList.length * 0.5));
+      }
+
+      const selectedStaff = staffList.slice(0, targetStaffCount);
+
+      // 2. Distribute quantity among selected staff
+      // We want to give slightly more to those with 0 workload, but keep it balanced.
+      let remainingQty = quantity;
+
+      // Calculate weights based on "free capacity"
+      // Since we don't have a fixed max capacity, we use a relative score:
+      // Score = 1 / (1 + currentWorkload)
+      const scores = selectedStaff.map(s => 1 / (1 + (s.currentAssignedQuantity || 0)));
+      const totalScore = scores.reduce((a, b) => a + b, 0);
+
+      for (let i = 0; i < selectedStaff.length; i++) {
+        let share = 0;
+        if (i === selectedStaff.length - 1) {
+          // Last person gets the remainder to avoid rounding issues
+          share = remainingQty;
+        } else {
+          // Proportionate share based on score
+          share = Math.floor(quantity * (scores[i] / totalScore));
+
+          // Ensure we don't assign 0 if there's quantity left, unless it's really tiny
+          if (share === 0 && remainingQty > 0) share = 1;
+        }
+
+        if (share > 0) {
+          suggestedAssignments.push({
+            staffId: selectedStaff[i]._id,
+            productId,
+            assignedQuantity: share
+          });
+          remainingQty -= share;
+        }
+      }
+    }
+
+    return {
+      status: 'success',
+      message: 'Assignment suggestions generated with dynamic scaling.',
+      data: { suggestions: suggestedAssignments }
+    };
+  } catch (error) {
+    console.log('[ProductionOrderService] suggestOrderAssignments error:', error);
+    return { status: 'error', message: error.message, data: null };
+  }
+};
+
+/**
  * Automatically check and update all INSUFFICIENT_MATERIALS orders.
  * Triggered when inventory is replenished.
  */
@@ -530,10 +637,10 @@ export const assignProductionOrder = async (orderId, assignments) => {
   session.startTransaction();
   try {
     const order = await ProductionOrder.findById(orderId).session(session);
-    if (!order) throw new Error('Order not found.');
+    if (!order) return { status: 'error', message: 'Order not found.' };
 
     if (order.status !== ORDER_STATUS.READY_TO_ASSIGN && order.status !== ORDER_STATUS.ASSIGNED) {
-      throw new Error(`Order must be in ${ORDER_STATUS.READY_TO_ASSIGN} or ${ORDER_STATUS.ASSIGNED} status before assigning.`);
+      return { status: 'error', message: `Order must be in ${ORDER_STATUS.READY_TO_ASSIGN} or ${ORDER_STATUS.ASSIGNED} status before assigning.` };
     }
 
     const staffIds = assignments.map(a => a.staffId);
@@ -557,18 +664,18 @@ export const assignProductionOrder = async (orderId, assignments) => {
       const { staffId, productId, assignedQuantity } = assign;
 
       if (!staffMap.has(staffId)) {
-        throw new Error(`Staff member with ID ${staffId} not found.`);
+        return { status: 'error', message: `Staff member with ID ${staffId} not found.` };
       }
 
       if (!productMap.has(productId)) {
-        throw new Error(`Product ${productId} is not part of production order ${order.orderCode}.`);
+        return { status: 'error', message: `Product ${productId} is not part of production order ${order.orderCode}.` };
       }
 
       const totalProductQty = productMap.get(productId);
       const currentlyAssignedQty = assignedPerProduct.get(productId) || 0;
 
       if (currentlyAssignedQty + assignedQuantity > totalProductQty) {
-        throw new Error(`Total assigned quantity (${currentlyAssignedQty + assignedQuantity}) for product ${productId} exceeds order quantity (${totalProductQty}).`);
+        return { status: 'error', message: `Total assigned quantity (${currentlyAssignedQty + assignedQuantity}) for product ${productId} exceeds order quantity (${totalProductQty}).` };
       }
 
       const newAssign = new ProductionOrderAssignment({
@@ -609,7 +716,7 @@ export const assignProductionOrder = async (orderId, assignments) => {
   } catch (error) {
     if (session.inTransaction()) await session.abortTransaction();
     console.error('[ProductionOrderService] assignProductionOrder error:', error);
-    return { status: 'error', message: error.message, data: null };
+    return { success: false, message: error.message, data: null };
   } finally {
     session.endSession();
   }
@@ -624,7 +731,7 @@ export const updateProductionOrderStatus = async (orderId, status, notes = '') =
   session.startTransaction();
   try {
     const order = await ProductionOrder.findById(orderId).session(session);
-    if (!order) throw new Error('Production order not found.');
+    if (!order) return { success: false, message: 'Production order not found.', data: null };
 
     const oldStatus = order.status;
     order.status = status;
@@ -638,14 +745,14 @@ export const updateProductionOrderStatus = async (orderId, status, notes = '') =
     await session.commitTransaction();
 
     return {
-      status: 'success',
+      success: true,
       message: `Production order status updated to ${status}.`,
       data: { order }
     };
   } catch (error) {
     if (session.inTransaction()) await session.abortTransaction();
     console.error('[ProductionOrderService] updateProductionOrderStatus error:', error);
-    return { status: 'error', message: error.message, data: null };
+    return { success: false, message: error.message, data: null };
   } finally {
     session.endSession();
   }
@@ -658,11 +765,11 @@ export const reassignProductionOrder = async (assignmentId, newStaffId, reason =
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const assignment = await ProductionOrderAssignment.findById(assignmentId);
-    if (!assignment) throw new Error('Assignment not found.');
+    const assignment = await ProductionOrderAssignment.findById(assignmentId).session(session);
+    if (!assignment) return { success: false, message: 'Assignment not found.', data: null };
 
     if (assignment.status === ORDER_STATUS.COMPLETED) {
-      throw new Error('Cannot reassign a completed assignment.');
+      return { success: false, message: 'Cannot reassign a completed assignment.', data: null };
     }
 
     const oldStaffId = assignment.staff;
@@ -688,14 +795,14 @@ export const reassignProductionOrder = async (assignmentId, newStaffId, reason =
 
     await session.commitTransaction();
     return {
-      status: 'success',
+      success: true,
       message: 'Assignment reassigned successfully.',
       data: { assignment }
     };
   } catch (error) {
-    await session.abortTransaction();
+    if (session.inTransaction()) await session.abortTransaction();
     console.log('[ProductionOrderService] reassignProductionOrder error:', error);
-    return { status: 'error', message: error.message, data: null };
+    return { success: false, message: error.message, data: null };
   } finally {
     session.endSession();
   }
@@ -743,7 +850,11 @@ export const updateAssignmentStatus = async (assignmentId, status, completedQuan
     }
     if (status === ORDER_STATUS.COMPLETED) {
       assignment.finishedAt = new Date();
-      assignment.completedQuantity = assignment.assignedQuantity; // Auto-complete if marked as COMPLETED
+      try {
+        assignment.completedQuantity = assignment.assignedQuantity; // Auto-complete if marked as COMPLETED
+      } catch (error) {
+        throw new Error(`Error updating completed quantity: ${error.message}`);
+      }
     }
 
     // 3. Update Staff Workload if status changes to COMPLETED
@@ -795,14 +906,14 @@ export const updateAssignmentStatus = async (assignmentId, status, completedQuan
     await session.commitTransaction();
 
     return {
-      status: 'success',
+      success: true,
       message: 'Assignment updated successfully.',
       data: { assignment, orderStatus: order.status }
     };
   } catch (error) {
     if (session.inTransaction()) await session.abortTransaction();
     console.error('[ProductionOrderService] updateAssignmentStatus error:', error);
-    return { status: 'error', message: error.message, data: null };
+    return { success: false, message: error.message, data: null };
   } finally {
     session.endSession();
   }
@@ -898,7 +1009,7 @@ export const createStockInSlip = async (orderIdentifier, managerId, slipData = {
       data: { slip: newSlip }
     };
   } catch (error) {
-    await session.abortTransaction();
+    if (session.inTransaction()) await session.abortTransaction();
     console.log('[ProductionOrderService] createStockInSlip error:', error);
     return { success: false, message: error.message, data: null };
   } finally {
@@ -946,6 +1057,47 @@ export const getBomByOrderId = async (orderIdentifier) => {
     };
   } catch (error) {
     console.log('[ProductionOrderService] getBomByOrderId error:', error);
-    return { status: 'error', message: error.message, data: null };
+    return { success: false, message: error.message, data: null };
+  }
+};
+
+/**
+ * Get list of material alerts for Production Manager.
+ */
+export const getMaterialAlerts = async (queryParams) => {
+  try {
+    const { status = 'pending', page = 1, limit = 20 } = queryParams;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const filter = {};
+    if (status !== 'all') filter.status = status;
+
+    const [alerts, total] = await Promise.all([
+      MaterialAlert.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .populate('material', 'name code unit currentStock threshold')
+        .populate('productionOrder', 'orderCode status')
+        .lean(),
+      MaterialAlert.countDocuments(filter)
+    ]);
+
+    return {
+      success: true,
+      message: 'Material alerts retrieved successfully.',
+      data: {
+        alerts,
+        pagination: {
+          total,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          pages: Math.ceil(total / parseInt(limit))
+        }
+      }
+    };
+  } catch (error) {
+    console.error('[ProductionOrderService] getMaterialAlerts error:', error);
+    return { success: false, message: error.message, data: null };
   }
 };

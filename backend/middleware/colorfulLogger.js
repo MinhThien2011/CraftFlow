@@ -200,7 +200,7 @@ const superLogger = {
 
         const terminalWidth = process.stdout.columns || 80;
         const dividerLine = '═'.repeat(Math.min(70, terminalWidth));
-        
+
         const info1 = `${chalk.hex(COLORS.cyan)('🚀 PROJECT:')} ${chalk.bold.white(this.projectName)} ${chalk.hex(COLORS.purple)(' | ⚡ VERSION:')} ${chalk.white('3.1.0')}`;
         const info2 = `${chalk.hex(COLORS.cyan)('🕒 STARTED:')} ${chalk.white(new Date().toLocaleString())} ${chalk.hex(COLORS.green)(' | ✅ STATUS:')} ${chalk.bgGreen.black.bold(' ONLINE ')}`;
 
@@ -209,7 +209,7 @@ const superLogger = {
         console.log(this.alignText(info2));
         console.log(this.alignText(chalk.hex(COLORS.gray)(dividerLine)) + '\n');
 
-        return this; 
+        return this;
     },
 
     getTime: () => chalk.hex(COLORS.gray)(`[${new Date().toLocaleTimeString()}]`),
@@ -278,7 +278,13 @@ const superLogger = {
 
     handler: (req, res, next) => {
         const start = Date.now();
-        res.on('finish', () => {
+        // Skip logging for internal health checks to save resources
+        if (req.originalUrl === '/api/health') {
+            return next();
+        }
+
+        // Use setImmediate to defer logging, preventing it from blocking the event loop
+        res.on('finish', () => setImmediate(() => {
             const duration = Date.now() - start;
             const status = res.statusCode;
             const statusColor = status >= 500 ? chalk.red : status >= 400 ? chalk.yellow : chalk.green;
@@ -291,7 +297,7 @@ const superLogger = {
                 chalk.hex(COLORS.cyan)(duration + 'ms')
             ].join(' ');
             process.stdout.write(logLine + '\n');
-        });
+        }));
         next();
     }
 };

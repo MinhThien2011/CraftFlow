@@ -73,7 +73,9 @@ export function AppShell({ children, title, subtitle }: AppShellProps) {
         router.push("/dashboard_warehouse")
       }
     } else if (role === "production_manager") {
-      if (!isProductionManagerPath && pathname !== "/settings") {
+      // Cho phép PM truy cập các trang production-management, alerts, và settings
+      const isAllowedPMPath = isProductionManagerPath || pathname === "/alerts" || pathname.startsWith("/alerts/") || pathname === "/settings";
+      if (!isAllowedPMPath) {
         router.push("/production-management/dashboard")
       }
     } else {

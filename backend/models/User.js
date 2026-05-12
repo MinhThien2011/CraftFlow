@@ -53,16 +53,16 @@ userSchema.index({ isActive: 1 });
 userSchema.index({ role: 1 });
 userSchema.index({ isActive: 1, role: 1, createdAt: -1 });
 // extensions 
-userSchema.statics.comparePassword = function (candidatePassword, userPassword) {
-  return bcrypt.compareSync(candidatePassword, userPassword);
+userSchema.statics.comparePassword = async function (candidatePassword, userPassword) {
+  return await bcrypt.compare(candidatePassword, userPassword);
 };
 userSchema.pre('save', async function () {
   const user = this;
   if (!user.isModified('password')) {
     return;
   }
-  const salt = bcrypt.genSaltSync(10);
-  user.password = bcrypt.hashSync(user.password, salt);
+  const salt = await bcrypt.genSalt(10);
+  user.password = await bcrypt.hash(user.password, salt);
 });
 
 

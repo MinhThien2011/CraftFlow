@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation'
 import { useProductionOrdersModule } from '@/features/production/hooks/use-production-orders'
 import { OrdersTable } from '@/features/production/components/orders-table'
 import { CreateOrderModal } from '@/features/production/components/create-order-modal'
+import { withPermission } from '@/components/guards/permission-guard'
 
 const filters = [
   { id: "all", label: "Tất cả" },
@@ -18,7 +19,7 @@ const filters = [
   { id: "cancelled", label: "Đã hủy" },
 ]
 
-export default function OrdersPage() {
+function OrdersPage() {
   const router = useRouter()
   const {
     activeFilter,
@@ -27,10 +28,10 @@ export default function OrdersPage() {
     setSearchQuery,
     isCreateOpen,
     setIsCreateOpen,
-    selectedProduct,
-    setSelectedProduct,
-    quantity,
-    setQuantity,
+    selectedItems,
+    addProductItem,
+    removeProductItem,
+    updateProductItem,
     deadline,
     setDeadline,
     note,
@@ -83,8 +84,8 @@ export default function OrdersPage() {
               key={filter.id}
               onClick={() => setActiveFilter(filter.id)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeFilter === filter.id
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-card text-muted-foreground hover:bg-muted"
+                ? "bg-primary text-primary-foreground"
+                : "bg-card text-muted-foreground hover:bg-muted"
                 }`}
             >
               {filter.label}
@@ -106,10 +107,10 @@ export default function OrdersPage() {
         isOpen={isCreateOpen}
         onOpenChange={setIsCreateOpen}
         products={products}
-        selectedProduct={selectedProduct}
-        onProductChange={setSelectedProduct}
-        quantity={quantity}
-        onQuantityChange={setQuantity}
+        selectedItems={selectedItems}
+        onAddItem={addProductItem}
+        onRemoveItem={removeProductItem}
+        onUpdateItem={updateProductItem}
         deadline={deadline}
         onDeadlineChange={setDeadline}
         note={note}
@@ -120,3 +121,5 @@ export default function OrdersPage() {
     </DashboardLayout>
   )
 }
+
+export default withPermission(OrdersPage, ['admin', 'production_manager'])

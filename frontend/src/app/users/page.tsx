@@ -54,6 +54,7 @@ import type { User, PaginationData } from "@/lib/types"
 import { toast } from "sonner"
 import { Spinner } from "@/components/ui/spinner"
 import { getAvatarUrl } from "@/lib/utils"
+import { withPermission } from "@/components/guards/permission-guard"
 
 const roleFilters = ["Tất cả", "Quản trị viên", "Quản lý sản xuất", "Quản lý kho", "Nhân viên"] as const
 type RoleFilter = (typeof roleFilters)[number]
@@ -111,7 +112,7 @@ function getAvatarColor(name: string): string {
   return colors[index]
 }
 
-export default function UsersPage() {
+function UsersPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("Tất cả")
   const [currentPage, setCurrentPage] = useState(1)
@@ -778,3 +779,5 @@ export default function UsersPage() {
     </AppShell>
   )
 }
+
+export default withPermission(UsersPage, ["admin"])

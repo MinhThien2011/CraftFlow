@@ -1,7 +1,7 @@
 import rateLimit from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
 import jwt from 'jsonwebtoken';
-import { client } from '../config/redisClient.js';
+import { client, getRedisHealth } from '../config/redisClient.js';
 
 /**
  * Rate Limit Configuration
@@ -24,39 +24,75 @@ const CONFIG = {
 };
 
 /**
- * Waits for the Redis client to be ready before executing commands.
- * This prevents 'ClientClosedError' during server startup.
+ * Optimized command sender with Circuit Breaker pattern.
  */
-const safeSendCommand = async (...args) => {
+const fastSendCommand = async (...args) => {
+    // Wait for connection if it's currently connecting
+    if (!client.isOpen && getRedisHealth()) {
+        try {
+            // node-redis v4 throw ClientClosedError if not connected.
+            // We'll catch and wait or skip if it's during startup
+            if (args[0] === 'SCRIPT') {
+                // For SCRIPT LOAD during startup, wait for ready
+                let waitTime = 0;
+                while (!client.isOpen && waitTime < 2000) {
+                    await new Promise(r => setTimeout(r, 200));
+                    waitTime += 200;
+                }
+            }
+        } catch (e) {
+            // Silently ignore waiting errors
+        }
+    }
+
+    // Final check before sending
+    if (!client.isOpen) {
+        // Return safe default instead of throwing
+        if (args[0] === 'INCR' || args[0] === 'HINCRBY') return 1;
+        return null;
+    }
+
     try {
-        // Wait up to 5 seconds for Redis to connect and be ready if it's not
-        let attempts = 0;
-        while (!client.isReady && attempts < 50) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-            attempts++;
-        }
-
-        if (!client.isReady) {
-            console.error('❌ Redis RateLimit: Client not ready after 5s. Falling back to memory.');
-            throw new Error('Redis not ready');
-        }
-
-        return await client.sendCommand(args);
+        return await Promise.race([
+            client.sendCommand(args),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Redis timeout')), 1000))
+        ]);
     } catch (error) {
-        throw error;
+        if (!global._lastRedisErrorLog || Date.now() - global._lastRedisErrorLog > 10000) {
+            console.error(`⚠️ Redis Command Error (RateLimit): ${error.message}`);
+            global._lastRedisErrorLog = Date.now();
+        }
+
+        // Return a safe default instead of throwing to avoid UNHANDLED REJECTION
+        // For rate-limit-redis, returning 1 for INCR or similar safe values 
+        // will effectively bypass the limit or at least not crash.
+        // However, it's better to return null/undefined and let the caller handle it if possible,
+        // but since we want to avoid rejections, we'll return a resolved promise with a safe value.
+        if (args[0] === 'INCR' || args[0] === 'HINCRBY') return 1;
+        return null;
     }
 };
 
 /**
- * Extracts User ID from JWT in cookies
+ * Extracts User ID from JWT in cookies. 
+ * Using jwt.decode for performance as full verification is handled in jwtAuth middleware.
  */
 const getUserId = (req) => {
+    // Check if we already extracted it in this request
+    if (req._rateLimitUserId !== undefined) return req._rateLimitUserId;
+
     const token = req.cookies?.accessToken;
-    if (!token) return null;
+    if (!token) {
+        req._rateLimitUserId = null;
+        return null;
+    }
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        return decoded?.id;
+        // Use decode instead of verify for rate limiting to save CPU
+        const decoded = jwt.decode(token);
+        req._rateLimitUserId = decoded?.id || null;
+        return req._rateLimitUserId;
     } catch {
+        req._rateLimitUserId = null;
         return null;
     }
 };
@@ -71,19 +107,21 @@ const commonOptions = {
 };
 
 /**
- * Base configuration for Redis-backed rate limiters
+ * Base configuration for Redis-backed rate limiters with memory fallback
  */
-const createRedisStore = (prefix) => new RedisStore({
-    sendCommand: safeSendCommand,
-    prefix: `rl:${prefix}:`,
-});
+const createStore = (prefix) => {
+    return new RedisStore({
+        sendCommand: fastSendCommand,
+        prefix: `rl:${prefix}:`,
+    });
+};
 
 /**
  * Main API Limiter
  */
 export const apiLimiter = rateLimit({
     ...commonOptions,
-    store: createRedisStore('api'),
+    store: createStore('api'),
     windowMs: CONFIG.api.windowMs,
     max: (req) => {
         const userId = getUserId(req);
@@ -91,9 +129,13 @@ export const apiLimiter = rateLimit({
     },
     keyGenerator: (req) => {
         const userId = getUserId(req);
-        return userId ? `user:${userId}` : `ip:${req.ip}`;
+        // Optimize key length for Redis RAM
+        return userId ? `u:${userId}` : `i:${req.ip}`;
     },
     skip: (req) => {
+        // Skip rate limiting if Redis is down to prevent blocking legitimate traffic
+        if (!getRedisHealth() || !client.isOpen) return true;
+
         const whitelist = process.env.IP_WHITELIST?.split(',') || [];
         return whitelist.includes(req.ip) || req.path.startsWith('/public');
     },
@@ -111,12 +153,13 @@ export const apiLimiter = rateLimit({
  */
 export const strictLimiter = rateLimit({
     ...commonOptions,
-    store: createRedisStore('strict'),
+    store: createStore('strict'),
     windowMs: CONFIG.strict.windowMs,
     max: CONFIG.strict.max,
+    skip: (req) => !getRedisHealth() || !client.isOpen,
     keyGenerator: (req) => {
         const userId = getUserId(req);
-        return userId ? `user:${userId}` : `ip:${req.ip}`;
+        return userId ? `u:${userId}` : `i:${req.ip}`;
     },
     message: {
         success: false,
@@ -129,12 +172,13 @@ export const strictLimiter = rateLimit({
  */
 export const loginLimiter = rateLimit({
     ...commonOptions,
-    store: createRedisStore('login'),
+    store: createStore('login'),
     windowMs: CONFIG.login.windowMs,
     max: CONFIG.login.max,
+    skip: (req) => !getRedisHealth() || !client.isOpen,
     keyGenerator: (req) => {
         const identifier = req.body.username || req.body.email || req.ip;
-        return `login:${identifier}`;
+        return `l:${identifier}`;
     },
     skipSuccessfulRequests: true,
     handler: (req, res) => {

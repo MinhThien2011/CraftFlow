@@ -68,6 +68,7 @@ export const getMaterialByIdOrCode = async ({ id, code }) => {
   try {
     const query = id ? { _id: id } : { code: code.toUpperCase() };
     const material = await Material.findOne(query)
+      .select('-__v')
       .populate('shelf', 'shelfCode warehouseSection')
       .lean();
 

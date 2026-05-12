@@ -244,7 +244,7 @@ function DetailDialog({ item }: { item: ScrapItem }) {
           <Eye className="size-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[560px]">
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>Chi tiết — {item.code}</DialogTitle>
           <DialogDescription>Thông tin phiếu xử lý phế liệu</DialogDescription>

@@ -50,6 +50,7 @@ import { CurrencyDisplay } from "@/components/ui/currency-display"
 import { inventoryApi } from "@/api/inventory.api"
 import { toast } from "sonner"
 import { Spinner } from "@/components/ui/spinner"
+import { PermissionGuard } from "@/components/guards/permission-guard"
 
 type TabType = "materials" | "products" | "history-import" | "history-export"
 
@@ -287,10 +288,12 @@ export default function InventoryPage() {
             <Button variant="outline" size="icon" onClick={handleRefresh} disabled={isRefreshing}>
               <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
             </Button>
-            <Button className="gap-2">
-              <Plus className="h-4 w-4" />
-              Tạo phiếu nhập
-            </Button>
+            <PermissionGuard allowedRoles={['admin', 'kho_manager']}>
+              <Button className="gap-2">
+                <Plus className="h-4 w-4" />
+                Tạo phiếu nhập
+              </Button>
+            </PermissionGuard>
           </div>
         </div>
 

@@ -5,11 +5,24 @@ import InventoryTransaction from '../models/InventoryTransaction.js';
 import { ORDER_STATUS, TRANSACTION_TYPE } from '../utils/constants.js';
 import mongoose from 'mongoose';
 
+import { client, getRedisHealth } from '../config/redisClient.js';
+
+const DASHBOARD_CACHE_KEY = 'cache:dashboard:overview';
+const DASHBOARD_CACHE_TTL = 300; // 5 minutes
+
 /**
  * Service to get overview statistics for the dashboard.
  */
 export const getOverviewStats = async () => {
     try {
+        // Try to get from cache first
+        if (getRedisHealth() && client.isOpen) {
+            const cachedData = await client.get(DASHBOARD_CACHE_KEY);
+            if (cachedData) {
+                return { success: true, data: JSON.parse(cachedData), fromCache: true };
+            }
+        }
+
         const [materialStats, productStats, orderStats] = await Promise.all([
             // 1. Material stats: Total items, Total value, Low stock items, Stock percentage
             Material.aggregate([
@@ -82,13 +95,22 @@ export const getOverviewStats = async () => {
             return acc;
         }, {});
 
+        const resultData = {
+            materials: materialStats[0] || { totalItems: 0, totalValue: 0, lowStockItems: 0, stockPercentage: 0 },
+            products: productStats[0] || { totalItems: 0, totalValue: 0, lowStockItems: 0, stockPercentage: 0 },
+            orders: formattedOrderStats
+        };
+
+        // Save to cache asynchronously
+        if (getRedisHealth() && client.isOpen) {
+            client.setEx(DASHBOARD_CACHE_KEY, DASHBOARD_CACHE_TTL, JSON.stringify(resultData)).catch(err => {
+                console.error('⚠️ Dashboard Cache Set Error:', err.message);
+            });
+        }
+
         return {
             success: true,
-            data: {
-                materials: materialStats[0] || { totalItems: 0, totalValue: 0, lowStockItems: 0, stockPercentage: 0 },
-                products: productStats[0] || { totalItems: 0, totalValue: 0, lowStockItems: 0, stockPercentage: 0 },
-                orders: formattedOrderStats
-            }
+            data: resultData
         };
     } catch (error) {
         console.log('[DashboardService] getOverviewStats error:', error);
@@ -106,18 +128,18 @@ export const getRecentAlerts = async (limit = 5) => {
                 isActive: true,
                 $expr: { $lte: ['$currentStock', '$threshold'] }
             })
-            .sort({ currentStock: 1 })
-            .limit(limit)
-            .select('name currentStock threshold unit')
-            .lean(),
+                .sort({ currentStock: 1 })
+                .limit(limit)
+                .select('name currentStock threshold unit')
+                .lean(),
             Product.find({
                 isActive: true,
                 $expr: { $lte: ['$currentStock', '$threshold'] }
             })
-            .sort({ currentStock: 1 })
-            .limit(limit)
-            .select('name currentStock threshold unit category')
-            .lean()
+                .sort({ currentStock: 1 })
+                .limit(limit)
+                .select('name currentStock threshold unit category')
+                .lean()
         ]);
 
         const alerts = [

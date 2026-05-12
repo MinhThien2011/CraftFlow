@@ -11,30 +11,50 @@ import { setupGracefulShutdown } from './utils/processHandler.js';
 import { connectToDatabase } from './config/db/mongoDB.js';
 
 const app = express();
-redisConnect();
-connectToDatabase();
-setupGracefulShutdown();
-// logger.init('PET RESCUE').batch([
-//     { cmd: 'step', args: [1, 5, 'Connect DB'] },
-//     { cmd: 'step', args: [3, 5, 'Load Models'] },
-//     { cmd: 'divider', args: ['Config'] },
-//     { cmd: 'table', args: [[{ Port: 3000, Env: 'Dev' }], 'System Info'] },
-//     { cmd: 'success', args: ['Server ready to fly!'] }
-// ]);
 
-// app.use(logger.handler);
-superLogger.init('CRAB FLOW','Supreme System', 'left')
-  .hook(true, true, true)
-  .step(1, 3, 'Connecting to MongoDB...')
-  .step(2, 3, 'Setting up Redis Cache...')
-  .step(3, 3, 'Loading Routes...')
-  .divider('System Online')
-  .success('Server is ready to fly! 🚀');
-app.use(superLogger.handler);
+// Handle Uncaught Exceptions
+process.on('uncaughtException', (err) => {
+  console.error('🔥 UNCAUGHT EXCEPTION! Shutting down...');
+  console.error(err.name, err.message);
+  process.exit(1);
+});
+
+// Handle Unhandled Rejections
+process.on('unhandledRejection', (err) => {
+  console.error('🔥 UNHANDLED REJECTION!');
+  console.error(err);
+});
+
+// Connect to external services
+const initializeServices = async () => {
+  try {
+    // superLogger.init('CRAB FLOW', 'Supreme System', 'left')
+    //   .hook(true, true, true)
+    //   .step(1, 3, 'Connecting to MongoDB...')
+    //   .step(2, 3, 'Setting up Redis Cache...')
+    //   .step(3, 3, 'Loading Routes...')
+    //   .divider('System Online')
+    //   .success('Server is ready to fly! 🚀');
+
+    await redisConnect();
+    await connectToDatabase();
+    setupGracefulShutdown();
+  } catch (err) {
+    console.error('❌ Failed to initialize services:', err);
+  }
+};
+
+initializeServices().catch(err => {
+  console.error('🔥 CRITICAL: Failed to initialize services:', err);
+});
+// app.use(superLogger.handler);
 
 app.set('port', process.env.PORT || 4000);
 app.set('env', process.env.NODE_ENV || 'development');
-app.set("json spaces", 2);
+
+if (process.env.NODE_ENV === 'development') {
+  app.set("json spaces", 2);
+}
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
