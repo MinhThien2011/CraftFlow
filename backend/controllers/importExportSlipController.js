@@ -8,18 +8,18 @@ export const createImportExportSlip = async (req, res) => {
         const userId = req.userId;
         const { error, value } = slipValidatior(req.body);
         if (error) {
-            return res.status(400).json({ 
+            return res.status(400).json({
                 status: 'error',
                 message: 'Dữ liệu không hợp lệ.',
-                details: error.details.map(d => d.message) 
+                details: error.details.map(d => d.message)
             });
         }
 
         const slipResult = await importExportSlipService.createSlipService(value, userId);
         if (!slipResult.success) {
-            return res.status(400).json({ 
+            return res.status(400).json({
                 status: 'error',
-                message: slipResult.message 
+                message: slipResult.message
             });
         }
 
@@ -34,9 +34,9 @@ export const createImportExportSlip = async (req, res) => {
             metadata: { status: slipResult.data.status }
         }, req, true);
     } catch (error) {
-        res.status(500).json({ 
+        res.status(500).json({
             status: 'error',
-            message: 'Lỗi hệ thống khi tạo phiếu: ' + error.message 
+            message: 'Lỗi hệ thống khi tạo phiếu: ' + error.message
         });
     }
 };
@@ -138,7 +138,8 @@ export const getAllSlips = async (req, res) => {
             endDate,
             creator,
             materialId,
-            productId
+            productId,
+            category
         } = req.query;
 
         const query = {
@@ -153,6 +154,7 @@ export const getAllSlips = async (req, res) => {
             creator,
             materialId,
             productId,
+            category,
             page: parseInt(page) || 1,
             limit: parseInt(limit) || 10,
         }

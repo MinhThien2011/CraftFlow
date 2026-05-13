@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { authApi } from "../api/auth.api";
 import { User } from "@/lib/types";
 import { toast } from "sonner";
@@ -34,6 +35,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const queryClient = useQueryClient();
+    const router = useRouter();
 
     const {
         data: authResponse,
@@ -76,10 +78,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             queryClient.setQueryData(['auth-user'], null);
             queryClient.clear();
             toast.success("Đăng xuất thành công");
+            router.push("/");
         } catch (err) {
             console.log("Logout failed:", err);
+            // Vẫn redirect về login kể cả khi API logout lỗi (ví dụ do session đã hết hạn)
+            queryClient.setQueryData(['auth-user'], null);
+            queryClient.clear();
+            router.push("/");
         }
-    }, [queryClient]);
+    }, [queryClient, router]);
 
     const role = getRoleName(user)
 

@@ -5,13 +5,14 @@ import { updateRequisitionStatusValidator } from '../validations/requisitionVali
 
 export const getRequisitions = async (req, res) => {
   try {
-    const { status, productionOrderId, search, page, limit } = req.query;
+    const { status, productionOrderId, search, page, limit, type } = req.query;
     const result = await requisitionService.getRequisitions({
       status,
       productionOrderId,
       search,
       page,
-      limit
+      limit,
+      type
     });
 
     return res.status(StatusCodes.OK).json(result);
@@ -52,7 +53,7 @@ export const requestMaterials = async (req, res) => {
 
     if (result.status === 'error') {
       return res.status(StatusCodes.BAD_REQUEST).json({
-        status: 'error',
+        success: false,
         message: result.message,
         data: null
       });
@@ -74,7 +75,7 @@ export const requestMaterials = async (req, res) => {
   } catch (error) {
     console.log("Error submitting material requisition:", error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      status: 'error',
+      success: false,
       message: 'Failed to submit material requisition.',
       data: null
     });
@@ -107,7 +108,7 @@ export const requestSupplementaryMaterials = async (req, res) => {
   } catch (error) {
     console.log("[RequisitionController] requestSupplementaryMaterials error:", error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      status: 'error',
+      success: false,
       message: 'Failed to request supplementary materials.',
       data: null
     });
@@ -139,7 +140,7 @@ export const requestReturnMaterials = async (req, res) => {
   } catch (error) {
     console.log("[RequisitionController] requestReturnMaterials error:", error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      status: 'error',
+      success: false,
       message: 'Failed to request material return.',
       data: null
     });
@@ -169,38 +170,8 @@ export const approveReturnRequisition = async (req, res) => {
   } catch (error) {
     console.log("[RequisitionController] approveReturnRequisition error:", error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      status: 'error',
+      success: false,
       message: 'Failed to approve material return.',
-      data: null
-    });
-  }
-};
-
-export const approveRequisition = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const adminId = req.userId;
-    const result = await requisitionService.approveRequisition(id, adminId);
-
-    if (result.status === 'error') {
-      return res.status(StatusCodes.BAD_REQUEST).json(result);
-    }
-
-    await logActivity({
-      author: adminId,
-      action: 'APPROVE_MATERIAL_REQUISITION',
-      module: 'MATERIAL_REQUISITION',
-      details: `Approved material requisition: ${id}. Auto-created slip: ${result.data.slip.slipNumber}`,
-      targetId: id,
-      metadata: { slipId: result.data.slip._id }
-    }, req);
-
-    return res.status(StatusCodes.OK).json(result);
-  } catch (error) {
-    console.log("[RequisitionController] approveRequisition error:", error);
-    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      status: 'error',
-      message: 'Failed to approve material requisition.',
       data: null
     });
   }
@@ -230,7 +201,7 @@ export const updateRequisitionDetails = async (req, res) => {
   } catch (error) {
     console.log("[RequisitionController] updateRequisitionDetails error:", error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      status: 'error',
+      success: false,
       message: 'Failed to update material requisition details.',
       data: null
     });
@@ -243,7 +214,7 @@ export const updateRequisitionStatus = async (req, res) => {
     const { error, value } = updateRequisitionStatusValidator(req.body);
     if (error) {
       return res.status(StatusCodes.BAD_REQUEST).json({
-        status: 'error',
+        success: false,
         message: `Validation failed: ${error.details.map(d => d.message).join(', ')}`,
         data: null
       });
@@ -252,9 +223,9 @@ export const updateRequisitionStatus = async (req, res) => {
     const { status, notes, evidenceImage } = value;
     const result = await requisitionService.updateRequisitionStatus(id, req.userId, status, { notes, evidenceImage });
 
-    if (result.status === 'error') {
+    if (!result.success) {
       return res.status(StatusCodes.BAD_REQUEST).json({
-        status: 'error',
+        success: false,
         message: result.message,
         data: null
       });
@@ -276,7 +247,7 @@ export const updateRequisitionStatus = async (req, res) => {
   } catch (error) {
     console.log("Error updating requisition status:", error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      status: 'error',
+      success: false,
       message: 'Failed to update requisition status.',
       data: null
     });

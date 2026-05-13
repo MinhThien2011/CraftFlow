@@ -326,54 +326,6 @@ export default function PurchaseOrdersPage() {
           </div>
         </div>
 
-        {/* Stats Summary */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardContent className="p-4 flex items-center gap-4">
-              <div className="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center">
-                <Clock className="h-5 w-5 text-amber-600" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Chờ duyệt</p>
-                <p className="text-xl font-bold">{orders.filter(o => o.status === 'pending').length}</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 flex items-center gap-4">
-              <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
-                <CheckCircle2 className="h-5 w-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Đã duyệt</p>
-                <p className="text-xl font-bold">{orders.filter(o => o.status === 'accepted').length}</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 flex items-center gap-4">
-              <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center">
-                <PackagePlus className="h-5 w-5 text-emerald-600" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Hoàn thành</p>
-                <p className="text-xl font-bold">{orders.filter(o => o.status === 'completed').length}</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 flex items-center gap-4">
-              <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
-                <XCircle className="h-5 w-5 text-red-600" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Từ chối</p>
-                <p className="text-xl font-bold">{orders.filter(o => o.status === 'rejected').length}</p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
         {/* Orders Table */}
         <Card>
           <CardContent className="p-0">

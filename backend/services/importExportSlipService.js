@@ -258,8 +258,14 @@ export const updateSlipStatusService = async (slipId, newStatus, updateData, use
         let warnings = [];
         const updatesMap = new Map();
         inputItems.forEach(item => {
-            const qty = item.actualQuantity ?? item.provisionalQuantity;
-            const itemData = { quantity: qty, itemNote: item.itemNote, batchNumber: item.batchNumber, expirationDate: item.expirationDate, shelf: item.shelf };
+            const itemData = {
+                provisionalQuantity: item.provisionalQuantity,
+                actualQuantity: item.actualQuantity,
+                itemNote: item.itemNote,
+                batchNumber: item.batchNumber,
+                expirationDate: item.expirationDate,
+                shelf: item.shelf
+            };
             if (item.itemCode) updatesMap.set(item.itemCode.toString(), itemData);
             if (item.material) updatesMap.set(item.material.toString(), itemData);
             if (item.product) updatesMap.set(item.product.toString(), itemData);
@@ -268,24 +274,26 @@ export const updateSlipStatusService = async (slipId, newStatus, updateData, use
         for (const slipItem of slip.items) {
             const updateInfo = updatesMap.get(slipItem.itemCode) ?? updatesMap.get(slipItem.material?.toString()) ?? updatesMap.get(slipItem.product?.toString());
             if (updateInfo) {
-                if (targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.RECEIVED) slipItem.quantity.provisional = updateInfo.quantity;
-                else if (targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.INSPECTED || targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.INSPECTING) {
-                    slipItem.quantity.actual = updateInfo.quantity;
-                    if (slipItem.quantity.actual !== slipItem.quantity.requested) warnings.push(`Số lượng lệch cho mã ${slipItem.itemCode}: Yêu cầu ${slipItem.quantity.requested}, Thực tế ${slipItem.quantity.actual}`);
+                // Always update quantities if provided to ensure data consistency across all steps
+                if (updateInfo.provisionalQuantity !== undefined && updateInfo.provisionalQuantity !== null) {
+                    slipItem.quantity.provisional = updateInfo.provisionalQuantity;
                 }
-                if (updateInfo.itemNote) slipItem.itemNote = updateInfo.itemNote;
-                if (isImport && (targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.INSPECTED)) {
-                    slipItem.batchNumber = updateInfo.batchNumber || slipItem.batchNumber || await generateBatchNumber(slipItem.itemCode);
-                    if (updateInfo.expirationDate) slipItem.expirationDate = updateInfo.expirationDate;
-                    if (updateInfo.shelf) slipItem.shelf = updateInfo.shelf;
-                    else if (!slipItem.shelf) {
-                        const Model = slipItem.material ? Material : (slipItem.product ? Product : null);
-                        if (Model) {
-                            const doc = await Model.findById(slipItem.material || slipItem.product).select('shelf');
-                            if (doc?.shelf) slipItem.shelf = doc.shelf;
+
+                if (updateInfo.actualQuantity !== undefined && updateInfo.actualQuantity !== null) {
+                    slipItem.quantity.actual = updateInfo.actualQuantity;
+
+                    // Add warning for discrepancies only during inspection phases
+                    if (targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.INSPECTED || targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.INSPECTING) {
+                        if (slipItem.quantity.actual !== slipItem.quantity.requested) {
+                            warnings.push(`Số lượng lệch cho mã ${slipItem.itemCode}: Yêu cầu ${slipItem.quantity.requested}, Thực tế ${slipItem.quantity.actual}`);
                         }
                     }
                 }
+
+                if (updateInfo.itemNote) slipItem.itemNote = updateInfo.itemNote;
+                if (updateInfo.batchNumber) slipItem.batchNumber = updateInfo.batchNumber;
+                if (updateInfo.expirationDate) slipItem.expirationDate = updateInfo.expirationDate;
+                if (updateInfo.shelf) slipItem.shelf = updateInfo.shelf;
             }
         }
 
@@ -330,19 +338,24 @@ export const updateSlipStatusService = async (slipId, newStatus, updateData, use
                     else if (item.product) await processProductUpdate(item, slip, userId, session, transactionDocs, warnings);
                 }
 
-                if (transactionDocs.length > 0) await InventoryTransaction.create(transactionDocs, { session });
-
-                inventoryEvents.emit('inventory_finalized', { slip, userId, session });
+                if (transactionDocs.length > 0) await InventoryTransaction.create(transactionDocs, { session, ordered: true });
 
                 slip.finalizedAt = new Date();
                 if (isImport) slip.inStockAt = slip.finalizedAt;
+
+                await slip.save({ session , ordered: true });
+                await session.commitTransaction();
+
+                inventoryEvents.emit('inventory_finalized', { slip, userId });
+
+                return ServiceResponse(true, `Slip updated to ${targetStatus}`, { slip, warnings });
             }
 
-            await slip.save({ session });
+            await slip.save({ session});
             await session.commitTransaction();
             return ServiceResponse(true, `Slip updated to ${targetStatus}`, { slip, warnings });
         } catch (error) {
-            await session.abortTransaction();
+            if (session.inTransaction()) await session.abortTransaction();
             throw error;
         } finally {
             session.endSession();
@@ -387,10 +400,11 @@ export const uploadSlipImagesService = async (slipId, imageUrls, userId) => {
         slip.images = [...new Set([...slip.images, ...imageUrls])];
         slip.imageUploadedAt = uploadTime;
 
-        // Automatically change status to VERIFIED for completed export slips upon image upload
-        if (slip.type === INVENTORY_IMPORT_EXPORT_SLIP_TYPE.EXPORT && slip.status === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.COMPLETED) {
+        // Automatically change status to VERIFIED for both Import and Export slips upon image upload
+        if (slip.status === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.IN_STOCK ||
+            (slip.type === INVENTORY_IMPORT_EXPORT_SLIP_TYPE.EXPORT && slip.status === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.COMPLETED)) {
             slip.status = INVENTORY_IMPORT_EXPORT_SLIP_STATUS.VERIFIED;
-            console.log(`[ImportExportSlip] Slip ${slip.slipNumber} marked as VERIFIED after image upload.`);
+            console.log(`[ImportExportSlip] Slip ${slip.slipNumber} automatically marked as VERIFIED after image upload.`);
         }
 
         await slip.save();
@@ -700,7 +714,8 @@ export const getAllSlipsService = async (query = {}) => {
             endDate,
             creator,
             materialId,
-            productId
+            productId,
+            category // 'material' or 'product'
         } = query;
         const skip = (page - 1) * limit;
 
@@ -710,6 +725,13 @@ export const getAllSlipsService = async (query = {}) => {
         if (type) filter.type = type;
         if (status) filter.status = status;
         if (creator) filter['signatures.creator'] = creator;
+
+        // Filter by category (material or product slips)
+        if (category === 'material') {
+            filter['items.material'] = { $exists: true, $ne: null };
+        } else if (category === 'product') {
+            filter['items.product'] = { $exists: true, $ne: null };
+        }
 
         // Partial text search (regex)
         if (slipNumber) filter.slipNumber = { $regex: slipNumber, $options: 'i' };

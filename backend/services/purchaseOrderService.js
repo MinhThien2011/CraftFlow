@@ -13,7 +13,8 @@ export const createPurchaseOrderService = async (data, userId) => {
             orderReason,
             priority = PRIORITY.MEDIUM,
             productionOrder,
-            materialAlert
+            materialAlert,
+            materialAlerts = []
         } = data;
 
         const consolidatedRequirements = new Map(); // materialId -> quantity
@@ -25,25 +26,37 @@ export const createPurchaseOrderService = async (data, userId) => {
             consolidatedRequirements.set(matId, (consolidatedRequirements.get(matId) || 0) + item.quantity);
         });
 
-        // 2. Fetch all relevant alerts in one go to optimize performance
+        // 2. Fetch relevant alerts
+        // Priority: specific alerts list > production order alerts > single material alert
         const alertQuery = { status: 'pending', purchaseOrder: { $exists: false } };
-        if (productionOrder) {
+
+        if (materialAlerts && materialAlerts.length > 0) {
+            alertQuery._id = { $in: materialAlerts };
+        } else if (productionOrder) {
             alertQuery.productionOrder = productionOrder;
         } else if (materialAlert) {
             alertQuery._id = materialAlert;
         }
 
-        if (productionOrder || materialAlert) {
+        if (productionOrder || materialAlert || (materialAlerts && materialAlerts.length > 0)) {
             const relevantAlerts = await MaterialAlert.find(alertQuery).lean();
 
-            if (materialAlert && relevantAlerts.length === 0) {
-                // If a specific alert was requested but not found in 'pending' and 'unlinked' state
-                const checkAlert = await MaterialAlert.findById(materialAlert).select('purchaseOrder status').lean();
-                if (checkAlert?.purchaseOrder) {
-                    throw new Error('This material alert is already linked to another purchase order.');
-                }
-                if (checkAlert?.status !== 'pending') {
-                    throw new Error('This material alert is no longer pending.');
+            // Validation for specifically requested alerts
+            const requestedAlertIds = materialAlerts.length > 0 ? materialAlerts : (materialAlert ? [materialAlert] : []);
+
+            if (requestedAlertIds.length > 0 && relevantAlerts.length < requestedAlertIds.length) {
+                // Find which one is missing/already linked
+                for (const id of requestedAlertIds) {
+                    const found = relevantAlerts.find(a => a._id.toString() === id.toString());
+                    if (!found) {
+                        const checkAlert = await MaterialAlert.findById(id).select('purchaseOrder status').lean();
+                        if (checkAlert?.purchaseOrder) {
+                            throw new Error(`Material alert ${id} is already linked to purchase order ${checkAlert.purchaseOrder}`);
+                        }
+                        if (checkAlert?.status !== 'pending') {
+                            throw new Error(`Material alert ${id} is no longer pending.`);
+                        }
+                    }
                 }
             }
 
@@ -118,7 +131,10 @@ export const createPurchaseOrderService = async (data, userId) => {
         if (alertsToLink.size > 0) {
             await MaterialAlert.updateMany(
                 { _id: { $in: Array.from(alertsToLink) } },
-                { purchaseOrder: purchaseOrder._id }
+                {
+                    purchaseOrder: purchaseOrder._id,
+                    status: 'ordered' // Update status to prevent picking up in other POs
+                }
             );
         }
 
@@ -174,6 +190,16 @@ export const deletePurchaseOrderService = async (orderId) => {
         if (!purchaseOrderDelete) {
             return { success: true, message: 'Purchase order not found', data: null };
         }
+
+        // Unlink any material alerts associated with this PO
+        await MaterialAlert.updateMany(
+            { purchaseOrder: orderId },
+            {
+                $unset: { purchaseOrder: "" },
+                status: 'pending'
+            }
+        );
+
         return { success: true, data: purchaseOrderDelete, message: 'Purchase order deleted successfully' };
     }
     catch (error) {
@@ -190,10 +216,22 @@ export const updatePurchaseOrderStatusService = async (orderId, data, adminId) =
         }
 
         // Update status and notes
+        const oldStatus = purchaseOrder.status;
         purchaseOrder.status = data.status;
         if (data.adminNotes) purchaseOrder.adminNotes = data.adminNotes;
 
         await purchaseOrder.save();
+
+        // If status becomes CANCELLED, unlink alerts
+        if (data.status === PURCHASE_ORDER_STATUS.CANCELLED && oldStatus !== PURCHASE_ORDER_STATUS.CANCELLED) {
+            await MaterialAlert.updateMany(
+                { purchaseOrder: orderId },
+                {
+                    $unset: { purchaseOrder: "" },
+                    status: 'pending'
+                }
+            );
+        }
 
         // If status becomes ACCEPTED, automatically create an Import Slip
         if (data.status === PURCHASE_ORDER_STATUS.ACCEPTED) {

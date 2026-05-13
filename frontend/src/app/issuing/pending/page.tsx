@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Search, Check, X, Eye, Clock, PenTool, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Search, Check, X, Eye, Clock, PenTool, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -17,71 +17,23 @@ import {
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
-
-// ── Types ─────────────────────────────────────────────────────
-type IssueStatus = 'pending' | 'approved' | 'rejected'
-
-interface PendingIssue {
-  id: string
-  requisitionNo: string
-  department: string
-  totalItems: number
-  totalQuantity: number
-  requestedBy: string
-  requestedAt: string
-  priority: 'high' | 'normal'
-  productionOrder: string
-  status: IssueStatus
-  rejectReason?: string
-}
-
-// ── Mock data ─────────────────────────────────────────────────
-const INITIAL_ISSUES: PendingIssue[] = [
-  {
-    id: 'PX-2024-00089',
-    requisitionNo: 'REQ-2024-0045',
-    department: 'Xưởng sản xuất A',
-    totalItems: 5,
-    totalQuantity: 120,
-    requestedBy: 'Nguyễn Văn A',
-    requestedAt: '2024-01-15 10:30',
-    priority: 'high',
-    productionOrder: 'LSX-2024-001',
-    status: 'pending'
-  },
-  {
-    id: 'PX-2024-00088',
-    requisitionNo: 'REQ-2024-0044',
-    department: 'Xưởng sản xuất B',
-    totalItems: 3,
-    totalQuantity: 80,
-    requestedBy: 'Trần Văn B',
-    requestedAt: '2024-01-15 09:15',
-    priority: 'normal',
-    productionOrder: 'LSX-2024-002',
-    status: 'pending'
-  },
-  {
-    id: 'PX-2024-00087',
-    requisitionNo: 'REQ-2024-0043',
-    department: 'Xưởng đóng gói',
-    totalItems: 8,
-    totalQuantity: 500,
-    requestedBy: 'Lê Thị C',
-    requestedAt: '2024-01-14 16:45',
-    priority: 'normal',
-    productionOrder: 'LSX-2024-003',
-    status: 'pending'
-  }
-]
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { requisitionApi } from '@/api/requisition.api'
+import { toast } from 'sonner'
+import { format } from 'date-fns'
+import { vi } from 'date-fns/locale'
+import { useAuth } from '@/features/auth/hooks/use-auth'
 
 // ── Main ──────────────────────────────────────────────────────
 export default function IssuingPendingPage() {
-  const [issues, setIssues]         = useState<PendingIssue[]>(INITIAL_ISSUES)
+  const queryClient = useQueryClient()
+  const { isKhoManager } = useAuth()
   const [searchQuery, setSearchQuery] = useState('')
+  const [page, setPage] = useState(1)
+  const [limit] = useState(10)
 
   // detail dialog
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedReq, setSelectedReq] = useState<any>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [actionDone, setActionDone] = useState<'approved' | 'rejected' | null>(null)
 
@@ -89,16 +41,36 @@ export default function IssuingPendingPage() {
   const [signatureConfirmed, setSignatureConfirmed] = useState(false)
 
   // reject state
-  const [rejectReason, setRejectReason]   = useState('')
-  const [rejectError, setRejectError]     = useState(false)
-  const [rejectMode, setRejectMode]       = useState(false) // toggle reject form
+  const [rejectReason, setRejectReason] = useState('')
+  const [rejectError, setRejectError] = useState(false)
+  const [rejectMode, setRejectMode] = useState(false) // toggle reject form
 
-  // luôn lấy bản mới nhất
-  const currentIssue = issues.find((i) => i.id === selectedId) ?? null
+  const { data, isLoading } = useQuery({
+    queryKey: ['requisitions', 'pending', { page, limit, search: searchQuery }],
+    queryFn: () => requisitionApi.getRequisitions({ status: 'pending', page, limit, search: searchQuery })
+  })
+
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ id, status, notes }: { id: string, status: string, notes?: string }) =>
+      requisitionApi.updateStatus(id, { status, notes }),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['requisitions'] })
+      setActionDone(variables.status === 'accepted' ? 'approved' : 'rejected')
+      toast.success(variables.status === 'accepted' ? "Đã tiếp nhận yêu cầu và tạo phiếu xuất" : "Đã từ chối yêu cầu")
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.message || "Lỗi khi cập nhật trạng thái")
+    }
+  })
+
+  const responseData = data?.data?.data || data?.data || data;
+  const requisitions: any[] = responseData?.requisitions || [];
+  const pagination = responseData?.pagination || {};
+  const totalPages = pagination?.totalPages || pagination?.pages || 1;
 
   // ── helpers ───────────────────────────────────────────────
-  const openDetail = (id: string) => {
-    setSelectedId(id)
+  const openDetail = (req: any) => {
+    setSelectedReq(req)
     setActionDone(null)
     setSignatureConfirmed(false)
     setRejectReason('')
@@ -108,36 +80,30 @@ export default function IssuingPendingPage() {
   }
 
   const handleApprove = () => {
-    if (!selectedId) return
-    setIssues((prev) =>
-      prev.map((i) => i.id === selectedId ? { ...i, status: 'approved' } : i)
-    )
-    setActionDone('approved')
+    if (!selectedReq) return
+    updateStatusMutation.mutate({
+      id: selectedReq._id,
+      status: 'accepted'
+    })
   }
 
   const handleReject = () => {
     if (!rejectReason.trim()) { setRejectError(true); return }
-    if (!selectedId) return
-    setIssues((prev) =>
-      prev.map((i) => i.id === selectedId ? { ...i, status: 'rejected', rejectReason } : i)
-    )
-    setActionDone('rejected')
+    if (!selectedReq) return
+    updateStatusMutation.mutate({
+      id: selectedReq._id,
+      status: 'rejected',
+      notes: rejectReason
+    })
   }
 
-  const filteredIssues = issues.filter(
-    (issue) =>
-      issue.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      issue.department.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      issue.requisitionNo.toLowerCase().includes(searchQuery.toLowerCase())
-  )
-
-  const pendingCount = issues.filter((i) => i.status === 'pending').length
+  const pendingCount = requisitions.filter((r) => r.status === 'pending').length
 
   // ── render ────────────────────────────────────────────────
   return (
     <AppShell
       title="Phiếu xuất chờ duyệt"
-      subtitle="Duyệt các phiếu xuất kho trước khi thực hiện xuất"
+      subtitle="Duyệt các yêu cầu vật liệu trước khi thực hiện xuất kho"
     >
       <div className="flex flex-col gap-6 p-6">
 
@@ -145,7 +111,7 @@ export default function IssuingPendingPage() {
         <div className="flex items-center justify-end">
           <Badge variant="outline" className="gap-1 text-amber-600 border-amber-200">
             <Clock className="size-3" />
-            {pendingCount} phiếu chờ duyệt
+            {pagination.total || pendingCount} yêu cầu chờ tiếp nhận
           </Badge>
         </div>
 
@@ -155,7 +121,7 @@ export default function IssuingPendingPage() {
             <div className="relative max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
               <Input
-                placeholder="Tìm theo số phiếu, bộ phận, requisition..."
+                placeholder="Tìm theo mã yêu cầu..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -170,85 +136,77 @@ export default function IssuingPendingPage() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
-                  <TableHead>Số phiếu xuất</TableHead>
-                  <TableHead>Số Requisition</TableHead>
+                  <TableHead className="pl-6">Mã Requisition</TableHead>
                   <TableHead>Lệnh sản xuất</TableHead>
-                  <TableHead>Bộ phận</TableHead>
                   <TableHead className="text-right">Số dòng</TableHead>
-                  <TableHead className="text-right">Tổng SL</TableHead>
+                  <TableHead className="text-right">Tổng SL yêu cầu</TableHead>
                   <TableHead>Độ ưu tiên</TableHead>
                   <TableHead>Người yêu cầu</TableHead>
                   <TableHead>Ngày tạo</TableHead>
                   <TableHead>Trạng thái</TableHead>
-                  <TableHead className="text-right">Thao tác</TableHead>
+                  <TableHead className="text-right pr-6">Thao tác</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredIssues.map((issue) => (
-                  <TableRow key={issue.id}>
-                    <TableCell className="font-medium">{issue.id}</TableCell>
-                    <TableCell>{issue.requisitionNo}</TableCell>
+                {isLoading ? (
+                  <TableRow><TableCell colSpan={9} className="h-32 text-center text-muted-foreground"><Loader2 className="size-6 animate-spin mx-auto mb-2" /> Đang tải dữ liệu...</TableCell></TableRow>
+                ) : requisitions.length === 0 ? (
+                  <TableRow><TableCell colSpan={9} className="h-32 text-center text-muted-foreground">Không có yêu cầu nào đang chờ</TableCell></TableRow>
+                ) : requisitions.map((req) => (
+                  <TableRow key={req._id}>
+                    <TableCell className="pl-6 font-medium text-primary">{req.requisitionCode}</TableCell>
                     <TableCell>
-                      <Badge variant="outline">{issue.productionOrder}</Badge>
+                      <Badge variant="outline">{req.productionOrder?.orderCode || 'N/A'}</Badge>
                     </TableCell>
-                    <TableCell>{issue.department}</TableCell>
-                    <TableCell className="text-right">{issue.totalItems}</TableCell>
-                    <TableCell className="text-right">{issue.totalQuantity}</TableCell>
+                    <TableCell className="text-right">{req.items?.length || 0}</TableCell>
+                    <TableCell className="text-right font-semibold">
+                      {req.items?.reduce((sum: number, item: any) => sum + (item.requestedQuantity || 0), 0).toLocaleString()}
+                    </TableCell>
                     <TableCell>
-                      <Badge className={issue.priority === 'high' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}>
-                        {issue.priority === 'high' ? 'Cao' : 'Bình thường'}
+                      <Badge className={req.productionOrder?.priority === 'high' || req.productionOrder?.priority === 'urgent' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}>
+                        {req.productionOrder?.priority === 'high' ? 'Cao' : req.productionOrder?.priority === 'urgent' ? 'Khẩn cấp' : 'Bình thường'}
                       </Badge>
                     </TableCell>
-                    <TableCell>{issue.requestedBy}</TableCell>
-                    <TableCell>{issue.requestedAt}</TableCell>
-                    <TableCell>
-                      {issue.status === 'approved' && (
-                        <Badge className="bg-emerald-100 text-emerald-700">Đã duyệt</Badge>
-                      )}
-                      {issue.status === 'rejected' && (
-                        <Badge className="bg-red-100 text-red-700">Từ chối</Badge>
-                      )}
-                      {issue.status === 'pending' && (
-                        <Badge className="bg-amber-100 text-amber-700">Chờ duyệt</Badge>
-                      )}
+                    <TableCell>{req.createdBy?.fullName || req.createdBy?.username || 'N/A'}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {format(new Date(req.createdAt), 'HH:mm dd/MM/yyyy', { locale: vi })}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell>
+                      <Badge className="bg-amber-100 text-amber-700">Chờ tiếp nhận</Badge>
+                    </TableCell>
+                    <TableCell className="text-right pr-6">
                       <div className="flex justify-end gap-1">
-                        {/* Nút Xem — mọi trạng thái */}
                         <Button
                           variant="ghost" size="icon" className="size-8"
                           title="Xem chi tiết"
-                          onClick={() => openDetail(issue.id)}
+                          onClick={() => openDetail(req)}
                         >
                           <Eye className="size-4" />
                         </Button>
 
-                        {/* Nút Duyệt — chỉ pending, mở cùng modal */}
-                        {issue.status === 'pending' && (
-                          <Button
-                            variant="ghost" size="icon"
-                            className="size-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
-                            title="Xem & duyệt"
-                            onClick={() => openDetail(issue.id)}
-                          >
-                            <Check className="size-4" />
-                          </Button>
-                        )}
+                        {isKhoManager && (
+                          <>
+                            <Button
+                              variant="ghost" size="icon"
+                              className="size-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                              title="Xem & tiếp nhận"
+                              onClick={() => openDetail(req)}
+                            >
+                              <Check className="size-4" />
+                            </Button>
 
-                        {/* Nút Từ chối — chỉ pending, mở cùng modal */}
-                        {issue.status === 'pending' && (
-                          <Button
-                            variant="ghost" size="icon"
-                            className="size-8 text-red-600 hover:text-red-700 hover:bg-red-50"
-                            title="Xem & từ chối"
-                            onClick={() => {
-                              openDetail(issue.id)
-                              // mở sẵn reject form
-                              setTimeout(() => setRejectMode(true), 50)
-                            }}
-                          >
-                            <X className="size-4" />
-                          </Button>
+                            <Button
+                              variant="ghost" size="icon"
+                              className="size-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                              title="Xem & từ chối"
+                              onClick={() => {
+                                openDetail(req)
+                                setTimeout(() => setRejectMode(true), 50)
+                              }}
+                            >
+                              <X className="size-4" />
+                            </Button>
+                          </>
                         )}
                       </div>
                     </TableCell>
@@ -256,6 +214,18 @@ export default function IssuingPendingPage() {
                 ))}
               </TableBody>
             </Table>
+
+            {pagination && totalPages > 1 && (
+              <div className="flex items-center justify-between px-6 py-4 border-t bg-muted/10">
+                <p className="text-sm text-muted-foreground">
+                  Trang <span className="font-medium">{pagination.page}</span> / {totalPages} • Tổng <span className="font-medium">{pagination.total}</span> mục
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage(p => Math.max(1, p - 1))}>Trước</Button>
+                  <Button variant="outline" size="sm" disabled={page === totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>Sau</Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -270,25 +240,25 @@ export default function IssuingPendingPage() {
       >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Chi tiết phiếu xuất {currentIssue?.id}</DialogTitle>
+            <DialogTitle>Chi tiết yêu cầu {selectedReq?.requisitionCode}</DialogTitle>
             <DialogDescription>
-              Xem thông tin và thực hiện duyệt hoặc từ chối phiếu xuất
+              Xem thông tin và thực hiện tiếp nhận hoặc từ chối yêu cầu vật liệu
             </DialogDescription>
           </DialogHeader>
 
-          {currentIssue && (
+          {selectedReq && (
             <>
               {/* Banner kết quả */}
               {actionDone === 'approved' && (
                 <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm">
                   <CheckCircle2 className="size-4 shrink-0" />
-                  Phiếu đã được duyệt và tạo Pick List thành công
+                  Yêu cầu đã được tiếp nhận và tạo phiếu xuất kho thành công
                 </div>
               )}
               {actionDone === 'rejected' && (
                 <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
                   <X className="size-4 shrink-0" />
-                  Phiếu đã bị từ chối
+                  Yêu cầu đã bị từ chối
                 </div>
               )}
 
@@ -296,13 +266,13 @@ export default function IssuingPendingPage() {
               <div className="space-y-3 py-2">
                 <div className="rounded-lg bg-muted/50 p-4 space-y-2.5">
                   {[
-                    { label: 'Số Requisition', value: currentIssue.requisitionNo },
-                    { label: 'Lệnh sản xuất',  value: currentIssue.productionOrder },
-                    { label: 'Bộ phận',        value: currentIssue.department },
-                    { label: 'Người yêu cầu',  value: currentIssue.requestedBy },
-                    { label: 'Ngày tạo',       value: currentIssue.requestedAt },
-                    { label: 'Tổng số dòng',   value: `${currentIssue.totalItems} dòng` },
-                    { label: 'Tổng số lượng',  value: currentIssue.totalQuantity },
+                    { label: 'Lệnh sản xuất', value: selectedReq.productionOrder?.orderCode || 'N/A' },
+                    { label: 'Người yêu cầu', value: selectedReq.createdBy?.fullName || selectedReq.createdBy?.username || 'N/A' },
+                    { label: 'Ngày tạo', value: format(new Date(selectedReq.createdAt), 'HH:mm dd/MM/yyyy', { locale: vi }) },
+                    { label: 'Số mặt hàng', value: `${selectedReq.items?.length || 0} mục` },
+                    {
+                      label: 'Tổng số lượng', value: selectedReq.items?.reduce((sum: number, item: any) => sum + (item.requestedQuantity || 0), 0).toLocaleString()
+                    },
                   ].map(({ label, value }) => (
                     <div key={label} className="flex justify-between text-sm">
                       <span className="text-muted-foreground">{label}:</span>
@@ -311,22 +281,30 @@ export default function IssuingPendingPage() {
                   ))}
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Độ ưu tiên:</span>
-                    <Badge className={currentIssue.priority === 'high' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}>
-                      {currentIssue.priority === 'high' ? 'Cao' : 'Bình thường'}
+                    <Badge className={selectedReq.productionOrder?.priority === 'high' || selectedReq.productionOrder?.priority === 'urgent' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}>
+                      {selectedReq.productionOrder?.priority === 'high' ? 'Cao' : selectedReq.productionOrder?.priority === 'urgent' ? 'Khẩn cấp' : 'Bình thường'}
                     </Badge>
                   </div>
                 </div>
 
-                {/* Lý do từ chối (nếu đã bị từ chối trước đó) */}
-                {currentIssue.status === 'rejected' && currentIssue.rejectReason && (
-                  <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm">
-                    <p className="text-red-700 font-medium mb-1">Lý do từ chối:</p>
-                    <p className="text-red-600">{currentIssue.rejectReason}</p>
-                  </div>
-                )}
+                {/* Danh sách vật liệu */}
+                <div className="border rounded-md divide-y max-h-[200px] overflow-y-auto">
+                  {selectedReq.items?.map((item: any, idx: number) => (
+                    <div key={idx} className="flex justify-between items-center p-2 text-xs">
+                      <div className="flex flex-col">
+                        <span className="font-medium">{item.material?.name}</span>
+                        <span className="text-muted-foreground text-[10px]">{item.material?.code}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-bold">{item.requestedQuantity}</span>
+                        <span className="ml-1 text-muted-foreground">{item.material?.unit}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
                 {/* Approve form */}
-                {currentIssue.status === 'pending' && !rejectMode && !actionDone && (
+                {selectedReq.status === 'pending' && !rejectMode && !actionDone && (
                   <div className="flex items-center gap-2 p-3 rounded-lg border border-primary/20 bg-primary/5">
                     <Checkbox
                       id="signature"
@@ -335,13 +313,13 @@ export default function IssuingPendingPage() {
                     />
                     <label htmlFor="signature" className="text-sm cursor-pointer flex items-center gap-2">
                       <PenTool className="size-4 text-primary" />
-                      Ký xác nhận bằng chữ ký điện tử
+                      Ký xác nhận tiếp nhận yêu cầu
                     </label>
                   </div>
                 )}
 
                 {/* Reject form */}
-                {currentIssue.status === 'pending' && rejectMode && !actionDone && (
+                {selectedReq.status === 'pending' && rejectMode && !actionDone && (
                   <div className="space-y-2">
                     <Label>
                       Lý do từ chối <span className="text-destructive">*</span>
@@ -363,11 +341,10 @@ export default function IssuingPendingPage() {
               </div>
 
               {/* Footer */}
-              {currentIssue.status === 'pending' && !actionDone && (
+              {selectedReq.status === 'pending' && !actionDone && (
                 <DialogFooter className="gap-2 flex-wrap">
                   {!rejectMode ? (
                     <>
-                      {/* Switch sang reject mode */}
                       <Button
                         variant="outline"
                         className="text-red-600 border-red-200 hover:bg-red-50"
@@ -375,13 +352,13 @@ export default function IssuingPendingPage() {
                       >
                         <X className="size-4 mr-2" /> Từ chối
                       </Button>
-                      {/* Duyệt */}
                       <Button
-                        disabled={!signatureConfirmed}
+                        disabled={!signatureConfirmed || updateStatusMutation.isPending}
                         onClick={handleApprove}
                         className="bg-emerald-600 hover:bg-emerald-700 text-white"
                       >
-                        <Check className="size-4 mr-2" /> Duyệt và tạo Pick List
+                        {updateStatusMutation.isPending ? <Loader2 className="size-4 animate-spin mr-2" /> : <Check className="size-4 mr-2" />}
+                        Tiếp nhận & Tạo phiếu xuất
                       </Button>
                     </>
                   ) : (
@@ -389,8 +366,13 @@ export default function IssuingPendingPage() {
                       <Button variant="outline" onClick={() => setRejectMode(false)}>
                         Quay lại
                       </Button>
-                      <Button variant="destructive" onClick={handleReject}>
-                        <X className="size-4 mr-2" /> Xác nhận từ chối
+                      <Button
+                        variant="destructive"
+                        onClick={handleReject}
+                        disabled={updateStatusMutation.isPending}
+                      >
+                        {updateStatusMutation.isPending ? <Loader2 className="size-4 animate-spin mr-2" /> : <X className="size-4 mr-2" />}
+                        Xác nhận từ chối
                       </Button>
                     </>
                   )}

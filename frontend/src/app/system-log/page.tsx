@@ -326,72 +326,11 @@ export default function SystemLogPage() {
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-2xl font-semibold text-foreground">Nhật ký hệ thống</h2>
-            <p className="text-sm text-muted-foreground">
-              Dữ liệu được tải từ API backend và làm mới mượt khi thay đổi bộ lọc.
-            </p>
           </div>
           <Button onClick={handleExport} variant="outline">
             <Download className="mr-2 h-4 w-4" />
             Xuất nhật ký
           </Button>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Tổng hoạt động</p>
-                  <p className="text-2xl font-bold text-foreground">
-                    {isInitialLoading ? "-" : stats.total}
-                  </p>
-                </div>
-                <Activity className="h-8 w-8 text-primary" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Thành công</p>
-                  <p className="text-2xl font-bold text-green-600">
-                    {isInitialLoading ? "-" : stats.success}
-                  </p>
-                </div>
-                <Activity className="h-8 w-8 text-green-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Cảnh báo</p>
-                  <p className="text-2xl font-bold text-amber-600">
-                    {isInitialLoading ? "-" : stats.warning}
-                  </p>
-                </div>
-                <Activity className="h-8 w-8 text-amber-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Lỗi</p>
-                  <p className="text-2xl font-bold text-red-600">
-                    {isInitialLoading ? "-" : stats.error}
-                  </p>
-                </div>
-                <Activity className="h-8 w-8 text-red-600" />
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
         <Card>

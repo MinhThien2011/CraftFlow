@@ -20,79 +20,6 @@ import { autoUpdateInsufficientOrders } from './productionOrderService.js';
 import mongoose from 'mongoose';
 
 /**
- * Admin approves a material requisition.
- * This automatically creates an Inventory Export Slip.
- */
-export const approveRequisition = async (requisitionId, adminId) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-  try {
-    const requisition = await MaterialRequisition.findById(requisitionId)
-      .populate('items.material')
-      .populate('createdBy', 'fullName')
-      .session(session);
-
-    if (!requisition) throw new Error('Requisition not found.');
-    if (requisition.status !== REQUISITION_STATUS.PENDING) {
-      throw new Error(`Requisition cannot be approved. Current status: ${requisition.status}`);
-    }
-
-    // 1. Update requisition status
-    requisition.status = REQUISITION_STATUS.APPROVED;
-    requisition.adminApprovedBy = adminId;
-
-    // 2. Prepare data for Export Slip
-    const slipItems = requisition.items.map(item => ({
-      material: item.material._id,
-      itemName: item.material.name,
-      itemCode: item.material.code,
-      unit: item.material.unit,
-      quantity: {
-        requested: item.requestedQuantity,
-        actual: 0 // Will be filled by Kho Manager
-      },
-      unitPrice: item.material.price || 0,
-      amount: 0
-    }));
-
-    const slipData = {
-      type: INVENTORY_IMPORT_EXPORT_SLIP_TYPE.EXPORT,
-      reason: `Xuất kho theo yêu cầu ${requisition.requisitionCode}`,
-      personName: requisition.createdBy?.fullName || 'Người yêu cầu',
-      relatedProductionOrder: requisition.productionOrder,
-      relatedRequisition: requisition._id,
-      items: slipItems,
-      date: new Date(),
-      status: INVENTORY_IMPORT_EXPORT_SLIP_STATUS.PENDING
-    };
-
-    // 3. Create the Export Slip
-    const slipResult = await createSlipService(slipData, adminId);
-    if (!slipResult.success) {
-      throw new Error(`Failed to create export slip: ${slipResult.message}`);
-    }
-
-    const createdSlip = slipResult.data;
-    requisition.relatedSlip = createdSlip._id;
-
-    await requisition.save({ session });
-    await session.commitTransaction();
-
-    return {
-      success: true,
-      message: 'Requisition approved and export slip created.',
-      data: { requisition, slip: createdSlip }
-    };
-  } catch (error) {
-    await session.abortTransaction();
-    console.log('[MaterialRequisitionService] approveRequisition error:', error);
-    return { status: 'error', message: error.message, data: null };
-  } finally {
-    session.endSession();
-  }
-};
-
-/**
  * Production Manager requests materials for a production order.
  */
 export const requestMaterials = async (productionOrderId, managerId, items) => {
@@ -288,7 +215,7 @@ export const approveReturnRequisition = async (requisitionId, managerId) => {
   } catch (error) {
     await session.abortTransaction();
     console.log('[MaterialRequisitionService] approveReturnRequisition error:', error);
-    return { status: 'error', message: error.message, data: null };
+    return { success: false, message: error.message, data: null };
   } finally {
     session.endSession();
   }
@@ -297,7 +224,7 @@ export const approveReturnRequisition = async (requisitionId, managerId) => {
 /**
  * Get all material requisitions with filtering, searching and pagination.
  */
-export const getRequisitions = async ({ status, productionOrderId, search, page = 1, limit = 10 }) => {
+export const getRequisitions = async ({ status, productionOrderId, search, page = 1, limit = 10, type }) => {
   try {
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.max(1, parseInt(limit));
@@ -306,6 +233,11 @@ export const getRequisitions = async ({ status, productionOrderId, search, page 
     const query = {};
     if (status) query.status = status;
     if (productionOrderId) query.productionOrder = productionOrderId;
+
+    if (type) {
+      const types = type.split(',');
+      query.type = { $in: types };
+    }
 
     if (search) {
       const searchRegex = { $regex: search, $options: 'i' };
@@ -343,7 +275,7 @@ export const getRequisitions = async ({ status, productionOrderId, search, page 
     };
   } catch (error) {
     console.log('[MaterialRequisitionService] getRequisitions error:', error);
-    return { status: 'error', message: error.message, data: null };
+    return { success: false, message: error.message, data: null };
   }
 };
 
@@ -367,7 +299,7 @@ export const getRequisitionById = async (id) => {
       data: requisition
     };
   } catch (error) {
-    return { status: 'error', message: error.message, data: null };
+    return { success: false, message: error.message, data: null };
   }
 };
 
@@ -444,7 +376,7 @@ export const updateRequisitionByManager = async (requisitionId, updateData, mana
     };
   } catch (error) {
     console.log('[MaterialRequisitionService] updateRequisitionByManager error:', error);
-    return { status: 'error', message: error.message, data: null };
+    return { success: false, message: error.message, data: null };
   }
 };
 
@@ -455,61 +387,99 @@ export const updateRequisitionStatus = async (requisitionId, managerId, status, 
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const requisition = await MaterialRequisition.findById(requisitionId).populate('items.material');
-    if (!requisition) throw new Error('Requisition not found.');
+    const requisition = await MaterialRequisition.findById(requisitionId)
+      .populate('items.material')
+      .populate('createdBy', 'fullName');
+    if (!requisition) return { success: false, message: 'Requisition not found.', data: null };
 
+    const oldStatus = requisition.status;
     requisition.status = status;
     requisition.khoManager = managerId;
     if (updateData.notes) requisition.notes = updateData.notes;
     if (updateData.evidenceImage) requisition.evidenceImage = updateData.evidenceImage;
 
+    // Handle specific status logic
     if (status === REQUISITION_STATUS.ACCEPTED) {
+      if (oldStatus !== REQUISITION_STATUS.PENDING) {
+        throw new Error('Can only accept a pending requisition.');
+      }
       requisition.acceptedAt = new Date();
 
-      // Check stock availability before accepting
-      // Kho Manager can only accept if stock is sufficient OR if there's an approved Purchase Order
+      // 1. Check stock availability before accepting
       const stockCheck = await checkStockAvailability(requisition.items, session);
       if (!stockCheck.allAvailable) {
         await session.abortTransaction();
         return {
           success: false,
-          message: `Insufficient stock for: ${stockCheck.insufficientItems.map(i => i.material).join(', ')}. Stock is available but not enough. Wait for purchase orders to arrive or reject this requisition.`,
-          data: {
-            insufficientItems: stockCheck.insufficientItems.map(i => ({
-              material: i.material,
-              needed: i.needed,
-              available: i.available
-            }))
-          }
+          message: `Không đủ tồn kho cho: ${stockCheck.insufficientItems.map(i => i.material).join(', ')}. Vui lòng kiểm tra lại tồn kho hoặc chờ nhập hàng.`,
+          data: { insufficientItems: stockCheck.insufficientItems }
         };
       }
-      else if (status === REQUISITION_STATUS.PREPARING) {
-        requisition.preparingAt = new Date();
-      }
 
-      else if (status === REQUISITION_STATUS.PREPARED) {
-        requisition.preparedAt = new Date();
+      // 2. Create Export Slip (if not already created)
+      if (!requisition.relatedSlip) {
+        const slipItems = requisition.items.map(item => ({
+          material: item.material._id,
+          itemName: item.material.name,
+          itemCode: item.material.code,
+          unit: item.material.unit,
+          quantity: {
+            requested: item.requestedQuantity,
+            actual: 0 // Will be filled during export process
+          },
+          unitPrice: item.material.price || 0,
+          amount: 0
+        }));
+
+        const slipData = {
+          type: INVENTORY_IMPORT_EXPORT_SLIP_TYPE.EXPORT,
+          reason: `Xuất kho theo yêu cầu ${requisition.requisitionCode}`,
+          personName: requisition.createdBy?.fullName || 'Người yêu cầu',
+          relatedProductionOrder: requisition.productionOrder,
+          relatedRequisition: requisition._id,
+          items: slipItems,
+          date: new Date(),
+          status: INVENTORY_IMPORT_EXPORT_SLIP_STATUS.PENDING
+        };
+
+        const slipResult = await createSlipService(slipData, managerId, session);
+        if (!slipResult.success) {
+          throw new Error(`Failed to create export slip: ${slipResult.message}`);
+        }
+        requisition.relatedSlip = slipResult.data._id;
       }
-      else if (status === REQUISITION_STATUS.CANCELLED) {
-        requisition.cancelledAt = new Date();
-      }
-      else if (status === REQUISITION_STATUS.COMPLETED) {
+    }
+    else if (status === REQUISITION_STATUS.PREPARING) {
+      requisition.preparingAt = new Date();
+    }
+    else if (status === REQUISITION_STATUS.PREPARED) {
+      requisition.preparedAt = new Date();
+    }
+    else if (status === REQUISITION_STATUS.CANCELLED) {
+      requisition.cancelledAt = new Date();
+    }
+    else if (status === REQUISITION_STATUS.COMPLETED) {
+      // If requisition is completed manually without slip finalizing it
+      if (oldStatus !== REQUISITION_STATUS.COMPLETED) {
         requisition.completedAt = new Date();
-        // Deduct stock and record transactions using FIFO
+
+        // Only perform manual deduction if there's no slip or slip is not completed
+        // (Usually the slip's finalizeInventoryUpdate will handle this and set status to COMPLETED)
+        // Here we add a safety check or just let it proceed if they really want to complete it manually
+
         for (const item of requisition.items) {
           const material = await Material.findById(item.material._id).session(session);
           if (!material) throw new Error(`Material ${item.material._id} not found.`);
 
           const beforeStock = material.currentStock;
-          // Allocate from batches using FIFO
           const fifoResult = await allocateBatchesForMaterial(item.material._id, item.requestedQuantity, session);
           if (!fifoResult.success) {
             throw new Error(`FIFO allocation failed for ${material.name}: ${fifoResult.message}`);
           }
+
           const batchAllocations = fifoResult.data;
-          // Update batch allocations in requisition item
           item.batchAllocations = batchAllocations;
-          // Deduct from each batch and record transactions
+
           for (const allocation of batchAllocations) {
             await InventoryTransaction.create([{
               material: material._id,
@@ -520,53 +490,36 @@ export const updateRequisitionStatus = async (requisitionId, managerId, status, 
               requisition: requisition._id,
               batch: allocation.batch,
               performedBy: managerId,
-              khoManager: managerId,
-              note: `Issued for requisition ${requisition.requisitionCode}. Batch: ${allocation.batchNumber}. FIFO allocation.`
-            }], { session, ordered: true });
+              note: `Xuất kho cho yêu cầu ${requisition.requisitionCode}. Lô: ${allocation.batchNumber}.`
+            }], { session });
           }
 
-          // Update material's total stock
           material.currentStock = beforeStock - item.requestedQuantity;
           await material.save({ session });
-
-          // Update shelf load if assigned
-          if (material.shelf) {
-            await updateShelfLoad(material.shelf);
-          }
-
+          if (material.shelf) await updateShelfLoad(material.shelf);
           item.actualQuantity = item.requestedQuantity;
         }
 
-        // Update Production Order tracking and status
+        // Update Production Order status
         const productionOrder = await ProductionOrder.findById(requisition.productionOrder).session(session);
         if (productionOrder) {
-          // Update issued quantities in BOM
           for (const item of requisition.items) {
-            const materialIndex = productionOrder.materials.findIndex(m => m.material.toString() === item.material._id.toString());
-            if (materialIndex > -1) {
-              productionOrder.materials[materialIndex].issuedQuantity += item.requestedQuantity;
-            } else {
-              // This shouldn't happen for ISSUE type, but might for SUPPLEMENTARY if not added during request
-              productionOrder.materials.push({
-                material: item.material._id,
-                issuedQuantity: item.requestedQuantity,
-                unit: item.material.unit
-              });
+            const bomIndex = productionOrder.materials.findIndex(m => m.material.toString() === item.material._id.toString());
+            if (bomIndex > -1) {
+              productionOrder.materials[bomIndex].issuedQuantity += item.requestedQuantity;
             }
           }
-
-          // Update status if it was waiting for materials
           if (productionOrder.status === ORDER_STATUS.INSUFFICIENT_MATERIALS || productionOrder.status === ORDER_STATUS.PENDING) {
             productionOrder.status = ORDER_STATUS.READY_TO_ASSIGN;
           }
           await productionOrder.save({ session });
         }
       }
-
-      await requisition.save({ session });
-      await session.commitTransaction();
-      return ServiceResponse(true, `Requisition status updated to ${status}.`, requisition);
     }
+
+    await requisition.save({ session });
+    await session.commitTransaction();
+    return ServiceResponse(true, `Requisition status updated to ${status}.`, requisition);
   } catch (error) {
     await session.abortTransaction();
     console.log('[MaterialRequisitionService] updateRequisitionStatus error:', error);

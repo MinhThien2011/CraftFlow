@@ -18,14 +18,14 @@ const userRouter = Router();
 userRouter.use(jwtAuth);
 
 // Profile management
-userRouter.patch('/profile', imageUploader('avatars'), updateUser);
+userRouter.patch('/profile', imageUploader('avatars', 'avatar'), updateUser);
 
 // --- Administrative Access (Admin Only) ---
 userRouter.use(rolePermission([ROLES.ADMIN]));
 
 userRouter.get('/', getAllUsers);
 userRouter.get('/:id', getUserById);
-userRouter.post('/', imageUploader('avatars'), createUser);
+userRouter.post('/', imageUploader('avatars', 'avatar'), createUser);
 userRouter.patch('/:id/status', updateUserStatus);
 userRouter.delete('/:id', deleteUser);
 

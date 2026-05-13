@@ -1,5 +1,6 @@
 import InventoryBatch from '../models/InventoryBatch.js';
 import Material from '../models/Material.js';
+import Product from '../models/Product.js';
 import InventoryTransaction from '../models/InventoryTransaction.js';
 import { TRANSACTION_TYPE } from '../utils/constants.js';
 import mongoose from 'mongoose';
@@ -34,7 +35,7 @@ export const generateBatchNumber = async (materialCode = 'MAT') => {
 export const createBatch = async (batchData) => {
     try {
         const batchNumber = batchData.batchNumber || await generateBatchNumber(batchData.materialCode);
-        
+
         const batch = new InventoryBatch({
             ...batchData,
             batchNumber
@@ -126,7 +127,7 @@ export const createBatchesFromImport = async (importData, session) => {
         for (const item of items) {
             const isMaterial = !!item.material;
             const isProduct = !!item.product;
-            
+
             if ((!isMaterial && !isProduct) || !item.quantity?.actual || item.quantity.actual <= 0) continue;
 
             let code = item.itemCode;
@@ -198,9 +199,9 @@ export const getExpiringBatches = async (daysAhead = 30) => {
                 $lte: futureDate
             }
         })
-        .populate('material', 'name code threshold')
-        .sort({ expirationDate: 1 })
-        .lean();
+            .populate('material', 'name code threshold')
+            .sort({ expirationDate: 1 })
+            .lean();
 
         return { success: true, data: batches, message: 'Expiring batches retrieved successfully' };
     } catch (error) {
@@ -259,5 +260,62 @@ export const reconcileMaterialStock = async (materialId, session) => {
     } catch (error) {
         console.error('[FIFOService] reconcileMaterialStock error:', error);
         return { success: false, message: error.message, data: null };
+    }
+};
+
+/**
+ * Emergency function to backfill batches for items that have currentStock 
+ * but no corresponding active batches.
+ */
+export const backfillInitialBatches = async () => {
+    try {
+        const materials = await Material.find({ currentStock: { $gt: 0 } });
+        let matCount = 0;
+
+        for (const mat of materials) {
+            const batchCount = await InventoryBatch.countDocuments({ material: mat._id, isExhausted: false });
+            if (batchCount === 0) {
+                await InventoryBatch.create({
+                    batchNumber: `BATCH-${mat.code}-BACKFILL-${Date.now()}`,
+                    material: mat._id,
+                    quantityReceived: mat.currentStock,
+                    quantityRemaining: mat.currentStock,
+                    unit: mat.unit,
+                    receivedDate: new Date(),
+                    shelf: mat.shelf,
+                    notes: 'Auto-backfilled due to stock discrepancy'
+                });
+                matCount++;
+            }
+        }
+
+        const products = await Product.find({ currentStock: { $gt: 0 } });
+        let prodCount = 0;
+
+        for (const prod of products) {
+            const batchCount = await InventoryBatch.countDocuments({ product: prod._id, isExhausted: false });
+            if (batchCount === 0) {
+                await InventoryBatch.create({
+                    batchNumber: `BATCH-${prod.code}-BACKFILL-${Date.now()}`,
+                    product: prod._id,
+                    quantityReceived: prod.currentStock,
+                    quantityRemaining: prod.currentStock,
+                    unit: prod.unit,
+                    receivedDate: new Date(),
+                    shelf: prod.shelf,
+                    notes: 'Auto-backfilled due to stock discrepancy'
+                });
+                prodCount++;
+            }
+        }
+
+        return {
+            success: true,
+            message: `Backfilled ${matCount} materials and ${prodCount} products.`,
+            data: { matCount, prodCount }
+        };
+    } catch (error) {
+        console.error('[FIFOService] backfillInitialBatches error:', error);
+        return { success: false, message: error.message };
     }
 };

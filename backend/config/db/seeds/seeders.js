@@ -9,9 +9,10 @@ import Product from "../../../models/Product.js";
 import Shelf from "../../../models/Shelf.js";
 import Bom from "../../../models/BOM.js";
 import ProductionOrder from "../../../models/ProductionOrder.js";
+import InventoryBatch from "../../../models/InventoryBatch.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SEEDS_DIR = path.join(__dirname, "..", "seeds");
+const SEEDS_DIR = path.join(__dirname, "..", "..", "..", "seeds");
 
 const readSeedFile = (filename) => {
     const filepath = path.join(SEEDS_DIR, filename);
@@ -67,8 +68,28 @@ export const seedMaterials = async () => {
         return { ...m, shelf: shelfId };
     });
 
-    await Material.insertMany(docs);
-    console.log(`✅ Seeded ${docs.length} materials`);
+    const createdMaterials = await Material.insertMany(docs);
+    console.log(`✅ Seeded ${createdMaterials.length} materials`);
+
+    // Create initial batches for materials with stock
+    const batchDocs = createdMaterials
+        .filter(m => m.currentStock > 0)
+        .map(m => ({
+            batchNumber: `BATCH-${m.code}-INIT`,
+            material: m._id,
+            quantityReceived: m.currentStock,
+            quantityRemaining: m.currentStock,
+            unit: m.unit,
+            unitCost: m.price,
+            receivedDate: new Date(),
+            shelf: m.shelf,
+            isExhausted: false
+        }));
+
+    if (batchDocs.length > 0) {
+        await InventoryBatch.insertMany(batchDocs);
+        console.log(`✅ Seeded ${batchDocs.length} initial material batches`);
+    }
 };
 
 export const seedProducts = async () => {
@@ -109,8 +130,28 @@ export const seedProducts = async () => {
         return { ...product, estimateMaterialCost, baseCost, shelf: shelfId };
     });
 
-    await Product.insertMany(docs);
-    console.log(`✅ Seeded ${docs.length} products`);
+    const createdProducts = await Product.insertMany(docs);
+    console.log(`✅ Seeded ${createdProducts.length} products`);
+
+    // Create initial batches for products with stock
+    const batchDocs = createdProducts
+        .filter(p => p.currentStock > 0)
+        .map(p => ({
+            batchNumber: `BATCH-${p.code}-INIT`,
+            product: p._id,
+            quantityReceived: p.currentStock,
+            quantityRemaining: p.currentStock,
+            unit: p.unit,
+            unitCost: p.baseCost || 0,
+            receivedDate: new Date(),
+            shelf: p.shelf,
+            isExhausted: false
+        }));
+
+    if (batchDocs.length > 0) {
+        await InventoryBatch.insertMany(batchDocs);
+        console.log(`✅ Seeded ${batchDocs.length} initial product batches`);
+    }
 };
 
 export const seedProductionOrders = async () => {

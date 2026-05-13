@@ -138,5 +138,12 @@ export const productionApi = {
      */
     reassignTask: async (data: { assignmentId: string; newStaffId: string; reason?: string }): Promise<ApiResponse<any>> => {
         return axiosInstance.post("/production/reassign", data);
+    },
+
+    /**
+     * Create a stock-in slip for a completed production order
+     */
+    createStockInSlip: async (id: string, data: { notes?: string, personInOut?: string, images?: string[] } = {}): Promise<ApiResponse<any>> => {
+        return axiosInstance.post(`/production/${id}/stock-in`, data);
     }
 };

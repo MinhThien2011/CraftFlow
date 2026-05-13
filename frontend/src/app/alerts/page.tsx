@@ -245,9 +245,6 @@ function AlertsPage() {
     return filteredOrders.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE)
   }, [filteredOrders, page])
 
-  const criticalCount = allMaterials.filter((m) => m.currentStock === 0).length
-  const lowStockCount = allMaterials.filter((m) => m.currentStock > 0 && m.currentStock <= m.threshold).length
-
   // ── Multi-Select ───────────────────────────────────────────
   const currentList = activeTab === 'inventory' ? filteredInventory : filteredOrders
   const allSelected = currentList.length > 0 && currentList.every(m => selectedAlertIds.has(m.alertId!))
@@ -526,27 +523,6 @@ function AlertsPage() {
           </TabsList>
 
           <div className="mt-6 space-y-6">
-            {/* Stats (Dùng chung) */}
-            <div className="grid gap-4 md:grid-cols-3">
-              {[
-                { label: 'Cảnh báo Khẩn cấp', value: criticalCount, color: 'text-[#DC3545]', bg: 'bg-[#FFEBEE]', iconColor: 'text-[#DC3545]' },
-                { label: 'Cảnh báo Sắp hết', value: lowStockCount, color: 'text-[#FFA500]', bg: 'bg-[#FFF3E0]', iconColor: 'text-[#FFA500]' },
-                { label: 'Tổng cảnh báo', value: allMaterials.length, color: 'text-foreground', bg: 'bg-[#F5F0EB]', iconColor: 'text-[#8B7355]' },
-              ].map(({ label, value, color, bg, iconColor }) => (
-                <Card key={label}>
-                  <CardContent className="flex items-center gap-4 p-5">
-                    <div className={cn("flex h-12 w-12 items-center justify-center rounded-lg", bg)}>
-                      <AlertTriangle className={cn("h-6 w-6", iconColor)} />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">{label}</p>
-                      <p className={cn("text-2xl font-bold", color)}>{value}</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-
             {/* Filters */}
             <Card>
               <CardContent className="p-4">

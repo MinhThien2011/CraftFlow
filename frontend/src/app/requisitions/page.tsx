@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
 
-export default function RequisitionsPendingRedirect() {
+export default function RequisitionsRedirect() {
     redirect('/requisitions/materials')
 }

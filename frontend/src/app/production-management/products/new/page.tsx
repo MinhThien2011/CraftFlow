@@ -146,7 +146,7 @@ export default function NewProductPage() {
     payload.append("estimateMaterialCost", JSON.stringify(materialCosts))
 
     if (imageFile) {
-      payload.append("productImage", imageFile)
+      payload.append("image", imageFile)
     }
 
     createProductMutation.mutate(payload, {

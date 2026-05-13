@@ -57,6 +57,8 @@ export function AppShell({ children, title, subtitle }: AppShellProps) {
   useEffect(() => {
     if (loading || !isAuthenticated || !role || !pathname) return
 
+    console.log("[AppShell] Checking permissions:", { role, pathname, pathConfig });
+
     const {
       isKhoManagerOnlyPath, isAdminPath, isProductionManagerPath,
       isAdminReportsPath, isInventoryRootPath, isKhoInventoryAllowedPath,
@@ -66,22 +68,27 @@ export function AppShell({ children, title, subtitle }: AppShellProps) {
     // Unified redirection logic
     if (role === "admin") {
       if (isKhoManagerOnlyPath) {
+        console.log("[AppShell] Admin redirecting to dashboard");
         router.push("/dashboard")
       }
     } else if (role === "kho_manager") {
       if ((isAdminPath || isAdminReportsPath || isInventoryRootPath || isProductionManagerPath) && !isKhoInventoryAllowedPath) {
+        console.log("[AppShell] Kho Manager redirecting to dashboard_warehouse");
         router.push("/dashboard_warehouse")
       }
     } else if (role === "production_manager") {
       // Cho phép PM truy cập các trang production-management, alerts, và settings
       const isProductsPath = pathname === "/products" || pathname.startsWith("/products/")
-      const isAllowedPMPath = isProductionManagerPath || isProductsPath || pathname === "/alerts" || pathname.startsWith("/alerts/") || pathname === "/settings";
+      const isRequisitionsPath = pathname.startsWith("/requisitions")
+      const isAllowedPMPath = isProductionManagerPath || isProductsPath || isRequisitionsPath || pathname === "/alerts" || pathname.startsWith("/alerts/") || pathname === "/settings";
       if (!isAllowedPMPath) {
+        console.log("[AppShell] PM redirecting to dashboard");
         router.push("/production-management/dashboard")
       }
     } else {
       // Handle other roles or restricted access
       if (isProductionManagerPath || isAdminPath || isWarehouseFeaturePath) {
+        console.log("[AppShell] Other role redirecting to dashboard");
         router.push("/dashboard")
       }
     }

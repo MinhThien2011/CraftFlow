@@ -4,9 +4,12 @@ import React, { useState, useEffect, useMemo } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Save } from "lucide-react"
+import { Save, CheckCircle2, Image as ImageIcon, Upload, X, AlertTriangle, CheckCircle } from "lucide-react"
 import { format } from "date-fns"
-import { Slip, SlipItem } from "@/api/slip.api"
+import { vi } from "date-fns/locale"
+import { slipApi, Slip, SlipItem } from "@/api/slip.api"
+import { cn } from "@/lib/utils"
+import { toast } from "sonner"
 
 /**
  * Chuyển đổi số thành chữ tiếng Việt
@@ -69,6 +72,8 @@ export interface SlipDetailDialogProps {
     type: 'import' | 'export'
     statusConfig: Record<string, { label: string, color: string }>
     onSave?: (slipInfo: any, items: SlipItem[]) => void
+    onStatusUpdate?: (status: string, items: any[]) => void
+    isUpdating?: boolean
 }
 
 export function SlipDetailDialog({
@@ -77,7 +82,9 @@ export function SlipDetailDialog({
     slip,
     type,
     statusConfig,
-    onSave
+    onSave,
+    onStatusUpdate,
+    isUpdating = false
 }: SlipDetailDialogProps) {
     const [editableItems, setEditableItems] = useState<SlipItem[]>([])
     const [editableSlipInfo, setEditableSlipInfo] = useState({
@@ -89,10 +96,66 @@ export function SlipDetailDialog({
         warehouse: { name: '', location: '' },
         originalDocsCount: ''
     })
+    const [uploading, setUploading] = useState(false)
+    const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+
+    const currentStatus = slip?.status || 'pending'
+    const isImport = type === 'import'
+
+    // Xác định các quyền chỉnh sửa dựa trên trạng thái
+    const canEditProvisional = isImport && currentStatus === 'pending'
+    const canEditActual = (isImport && currentStatus === 'received') || (!isImport && currentStatus === 'received')
+    const canEditInfo = isImport
+        ? ['pending', 'received', 'inspected'].includes(currentStatus)
+        : ['pending', 'received', 'inspecting'].includes(currentStatus)
 
     useEffect(() => {
         if (slip) {
-            setEditableItems(JSON.parse(JSON.stringify(slip.items || [])))
+            const items = JSON.parse(JSON.stringify(slip.items || []))
+
+            // Tự động điền số lượng tạm nhập = yêu cầu nếu đang ở bước pending và chưa có số liệu
+            if (isImport && currentStatus === 'pending') {
+                items.forEach((item: any) => {
+                    if (!item.quantity.provisional || item.quantity.provisional === 0) {
+                        item.quantity.provisional = item.quantity.requested || 0
+                    }
+                })
+            }
+            // Tự động điền số lượng thực nhập = tạm nhập nếu đang ở bước received và chưa có số liệu
+            else if (isImport && currentStatus === 'received') {
+                items.forEach((item: any) => {
+                    if (!item.quantity.actual || item.quantity.actual === 0) {
+                        item.quantity.actual = item.quantity.provisional || item.quantity.requested || 0
+                    }
+                })
+            }
+            // Tự động điền số lượng thực xuất = yêu cầu nếu đang ở bước received
+            else if (!isImport && currentStatus === 'received') {
+                items.forEach((item: any) => {
+                    if (!item.quantity.actual || item.quantity.actual === 0) {
+                        item.quantity.actual = item.quantity.requested || 0
+                    }
+                })
+            }
+            // Fallback cho dữ liệu cũ hoặc bị lỗi (nếu provisional hoặc actual là 0 ở các bước sau)
+            else if (isImport && ['inspected', 'in_stock', 'verified'].includes(currentStatus)) {
+                items.forEach((item: any) => {
+                    if (!item.quantity.provisional || item.quantity.provisional === 0) {
+                        item.quantity.provisional = item.quantity.actual || item.quantity.requested || 0
+                    }
+                    if (!item.quantity.actual || item.quantity.actual === 0) {
+                        item.quantity.actual = item.quantity.provisional || item.quantity.requested || 0
+                    }
+                })
+            }
+
+            // Cập nhật lại amount cho tất cả các item dựa trên số lượng mới nhất
+            items.forEach((item: any) => {
+                const finalQty = item.quantity.actual || item.quantity.provisional || item.quantity.requested || 0
+                item.amount = finalQty * (item.unitPrice || 0)
+            })
+
+            setEditableItems(items)
             setEditableSlipInfo({
                 personName: slip.personName || '',
                 unit: slip.unit || '',
@@ -131,23 +194,96 @@ export function SlipDetailDialog({
         return editableItems.reduce((sum, item) => sum + (item.amount || 0), 0)
     }, [editableItems])
 
+    const totalRequested = useMemo(() => {
+        return editableItems.reduce((sum, item) => sum + (item.quantity?.requested || 0), 0)
+    }, [editableItems])
+
+    const totalProvisional = useMemo(() => {
+        return editableItems.reduce((sum, item) => sum + (item.quantity?.provisional || 0), 0)
+    }, [editableItems])
+
+    const totalActual = useMemo(() => {
+        return editableItems.reduce((sum, item) => sum + (item.quantity?.actual || 0), 0)
+    }, [editableItems])
+
     const totalAmountInWords = useMemo(() => {
         return numberToVietnameseWords(totalAmount)
     }, [totalAmount])
 
-    const handleQuantityChange = (idx: number, value: string) => {
-        let actual = Number(value)
-        if (isNaN(actual) || actual < 0) actual = 0 // Ngăn chặn số âm
+    const handleProvisionalChange = (idx: number, value: string) => {
+        let val = Number(value)
+        if (isNaN(val) || val < 0) val = 0
         const newItems = [...editableItems]
-        const item = newItems[idx]
-        if (item) {
-            item.quantity.actual = actual
-            item.amount = actual * (item.unitPrice || 0)
+        if (newItems[idx]) {
+            newItems[idx].quantity.provisional = val
+            // Khi ở bước pending, tạm tính amount theo provisional
+            newItems[idx].amount = val * (newItems[idx].unitPrice || 0)
             setEditableItems(newItems)
         }
     }
 
-    const isImport = type === 'import'
+    const handleActualChange = (idx: number, value: string) => {
+        let val = Number(value)
+        if (isNaN(val) || val < 0) val = 0
+        const newItems = [...editableItems]
+        if (newItems[idx]) {
+            newItems[idx].quantity.actual = val
+            newItems[idx].amount = val * (newItems[idx].unitPrice || 0)
+            setEditableItems(newItems)
+        }
+    }
+
+    // Logic xác định bước tiếp theo và nhãn nút
+    const getNextStepAction = () => {
+        if (isImport) {
+            switch (currentStatus) {
+                case 'pending':
+                    return { label: 'Xác nhận nhận hàng', nextStatus: 'received', color: 'bg-blue-600' }
+                case 'received':
+                    return { label: 'Hoàn tất kiểm tra', nextStatus: 'inspected', color: 'bg-purple-600' }
+                case 'inspected':
+                    return { label: 'Nhập kho chính thức', nextStatus: 'in_stock', color: 'bg-emerald-600' }
+                default:
+                    return null
+            }
+        } else {
+            switch (currentStatus) {
+                case 'pending':
+                    return { label: 'Bắt đầu soạn hàng', nextStatus: 'received', color: 'bg-blue-600' }
+                case 'received':
+                    return { label: 'Bắt đầu kiểm kê', nextStatus: 'inspecting', color: 'bg-indigo-600' }
+                case 'inspecting':
+                    return { label: 'Hoàn tất xuất kho', nextStatus: 'completed', color: 'bg-emerald-600' }
+                default:
+                    return null
+            }
+        }
+    }
+
+    const nextStep = getNextStepAction()
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files) {
+            setSelectedFiles(Array.from(e.target.files))
+        }
+    }
+
+    const handleUploadImages = async () => {
+        if (!slip || selectedFiles.length === 0) return
+        setUploading(true)
+        try {
+            await slipApi.uploadSlipImages(slip._id, selectedFiles)
+            toast.success("Tải lên ảnh chứng từ thành công")
+            setSelectedFiles([])
+            // Có thể cần refresh lại dữ liệu slip ở đây hoặc báo cho component cha
+            if (onOpenChange) onOpenChange(false)
+        } catch (error: any) {
+            toast.error(error?.response?.data?.error || "Lỗi khi tải lên ảnh")
+        } finally {
+            setUploading(false)
+        }
+    }
+
     const formTitle = isImport ? "Phiếu nhập kho" : "Phiếu xuất kho"
     const formNumber = isImport ? "Mẫu số 01 - VT" : "Mẫu số 02 - VT"
     const actionLabel = isImport ? "- Nhập tại kho:" : "- Xuất tại kho:"
@@ -311,13 +447,14 @@ export function SlipDetailDialog({
                                         <th className="border border-black p-2 min-w-[200px] text-center" rowSpan={2}>Tên, nhãn hiệu, quy cách, phẩm chất vật tư, dụng cụ sản phẩm, hàng hóa</th>
                                         <th className="border border-black p-2 w-20 text-center" rowSpan={2}>Mã số</th>
                                         <th className="border border-black p-2 w-20 text-center" rowSpan={2}>ĐVT</th>
-                                        <th className="border border-black p-1 text-center" colSpan={2}>Số lượng</th>
+                                        <th className="border border-black p-1 text-center" colSpan={3}>Số lượng</th>
                                         <th className="border border-black p-2 w-24 text-center" rowSpan={2}>Đơn giá</th>
                                         <th className="border border-black p-2 w-28 text-center" rowSpan={2}>Thành tiền</th>
                                     </tr>
                                     <tr className="bg-gray-50/50">
-                                        <th className="border border-black p-1 w-20 text-center">Theo chứng từ</th>
-                                        <th className="border border-black p-1 w-20 text-center">{actualLabel}</th>
+                                        <th className="border border-black p-1 w-20 text-center text-[11px]">Chứng từ</th>
+                                        <th className="border border-black p-1 w-20 text-center text-[11px]">{isImport ? 'Tạm nhập' : 'Tạm xuất'}</th>
+                                        <th className="border border-black p-1 w-20 text-center text-[11px]">{actualLabel}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -328,23 +465,41 @@ export function SlipDetailDialog({
                                             <td className="border border-black px-2 text-center">{item.itemCode}</td>
                                             <td className="border border-black px-2 text-center">{item.unit}</td>
                                             <td className="border border-black px-2 text-right">{item.quantity?.requested || 0}</td>
-                                            <td className="border border-black p-0 text-center min-w-[90px]">
-                                                <input
-                                                    type="number"
-                                                    min="0"
-                                                    placeholder="0"
-                                                    value={item.quantity?.actual === 0 ? '' : item.quantity?.actual}
-                                                    onChange={(e) => handleQuantityChange(idx, e.target.value)}
-                                                    onKeyDown={(e) => {
-                                                        if (['-', '+', 'e', 'E'].includes(e.key)) e.preventDefault();
-                                                    }}
-                                                    className="w-full min-h-[38px] bg-emerald-50/50 text-right px-2 font-bold text-emerald-700 outline-none focus:bg-emerald-100 transition-colors print:bg-transparent"
-                                                />
+
+                                            {/* Provisional Quantity */}
+                                            <td className="border border-black p-0 text-center min-w-[80px]">
+                                                {canEditProvisional ? (
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        value={item.quantity?.provisional === 0 ? '' : item.quantity?.provisional}
+                                                        onChange={(e) => handleProvisionalChange(idx, e.target.value)}
+                                                        className="w-full h-full bg-blue-50/50 text-right px-2 font-bold text-blue-700 outline-none focus:bg-blue-100"
+                                                    />
+                                                ) : (
+                                                    <span className="px-2 text-right block">{item.quantity?.provisional || 0}</span>
+                                                )}
                                             </td>
-                                            <td className="border border-black px-2 text-right font-mono truncate max-w-[100px]" title={new Intl.NumberFormat('vi-VN').format(item.unitPrice || 0)}>
+
+                                            {/* Actual Quantity */}
+                                            <td className="border border-black p-0 text-center min-w-[80px]">
+                                                {canEditActual ? (
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        value={item.quantity?.actual === 0 ? '' : item.quantity?.actual}
+                                                        onChange={(e) => handleActualChange(idx, e.target.value)}
+                                                        className="w-full h-full bg-emerald-50/50 text-right px-2 font-bold text-emerald-700 outline-none focus:bg-emerald-100"
+                                                    />
+                                                ) : (
+                                                    <span className="px-2 text-right block font-medium">{item.quantity?.actual || 0}</span>
+                                                )}
+                                            </td>
+
+                                            <td className="border border-black px-2 text-right font-mono truncate max-w-[100px]">
                                                 {new Intl.NumberFormat('vi-VN').format(item.unitPrice || 0)}
                                             </td>
-                                            <td className="border border-black px-2 text-right font-bold font-mono truncate max-w-[120px]" title={new Intl.NumberFormat('vi-VN').format(item.amount || 0)}>
+                                            <td className="border border-black px-2 text-right font-bold font-mono truncate max-w-[120px]">
                                                 {new Intl.NumberFormat('vi-VN').format(item.amount || 0)}
                                             </td>
                                         </tr>
@@ -360,14 +515,16 @@ export function SlipDetailDialog({
                                             <td className="border border-black px-2"></td>
                                             <td className="border border-black px-2"></td>
                                             <td className="border border-black px-2"></td>
+                                            <td className="border border-black px-2"></td>
                                         </tr>
                                     ))}
                                     <tr className="h-10 font-bold bg-gray-50/30">
                                         <td className="border border-black px-4 text-center" colSpan={4}>Cộng</td>
+                                        <td className="border border-black px-2 text-right text-xs font-mono">{totalRequested}</td>
+                                        <td className="border border-black px-2 text-right text-xs font-mono text-blue-700">{totalProvisional}</td>
+                                        <td className="border border-black px-2 text-right text-xs font-mono text-emerald-700">{totalActual}</td>
                                         <td className="border border-black px-2 text-center text-gray-400 italic font-normal text-xs">x</td>
-                                        <td className="border border-black px-2 text-center text-gray-400 italic font-normal text-xs">x</td>
-                                        <td className="border border-black px-2 text-center text-gray-400 italic font-normal text-xs">x</td>
-                                        <td className="border border-black px-2 text-right font-mono text-base truncate max-w-[120px]" title={new Intl.NumberFormat('vi-VN').format(totalAmount)}>
+                                        <td className="border border-black px-2 text-right font-mono text-base min-w-[140px]" title={new Intl.NumberFormat('vi-VN').format(totalAmount)}>
                                             {new Intl.NumberFormat('vi-VN').format(totalAmount)}
                                         </td>
                                     </tr>
@@ -392,6 +549,101 @@ export function SlipDetailDialog({
                                 />
                             </div>
                         </div>
+
+                        {/* Evidence Images Section */}
+                        {slip?.images && slip.images.length > 0 && (
+                            <div className="mb-8 p-6 rounded-2xl border bg-gray-50/30 print:hidden">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="text-sm font-bold flex items-center gap-2">
+                                        <ImageIcon className="size-4 text-blue-600" />
+                                        Ảnh chứng từ thực tế:
+                                    </h3>
+                                    <div className="flex gap-2">
+                                        <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 gap-1.5 py-1 px-3">
+                                            <CheckCircle className="size-3.5" />
+                                            Confirmed
+                                        </Badge>
+                                        {slip.isImageUploadLate && (
+                                            <Badge className="bg-red-100 text-red-700 border-red-200 gap-1.5 py-1 px-3">
+                                                <AlertTriangle className="size-3.5" />
+                                                LATE (Quá hạn 3 ngày)
+                                            </Badge>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {slip.imageUploadedAt && (
+                                    <p className="text-xs text-muted-foreground mb-4 italic">
+                                        Đã tải lên vào lúc: {format(new Date(slip.imageUploadedAt), 'HH:mm, dd/MM/yyyy', { locale: vi })}
+                                    </p>
+                                )}
+
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    {slip.images.map((img, idx) => (
+                                        <div key={idx} className="group relative aspect-video rounded-xl overflow-hidden border-2 border-white shadow-sm bg-muted ring-1 ring-gray-200">
+                                            <img
+                                                src={img}
+                                                alt={`Evidence ${idx + 1}`}
+                                                className="w-full h-full object-cover cursor-pointer group-hover:scale-110 transition-all duration-300"
+                                                onClick={() => window.open(img, '_blank')}
+                                            />
+                                            <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none flex items-center justify-center">
+                                                <ImageIcon className="size-6 text-white" />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Upload Evidence Section (Warehouse Only) */}
+                        {((isImport && currentStatus === 'in_stock') || (!isImport && currentStatus === 'completed')) && (
+                            <div className="mb-10 p-4 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50 print:hidden">
+                                <h3 className="text-sm font-bold mb-3 flex items-center gap-2">
+                                    <Upload className="size-4 text-blue-600" />
+                                    Cập nhật ảnh chứng từ (Ký nhận thực tế):
+                                </h3>
+                                <div className="flex flex-col gap-4">
+                                    <div className="flex items-center gap-4">
+                                        <input
+                                            type="file"
+                                            multiple
+                                            accept="image/*"
+                                            onChange={handleFileChange}
+                                            id="evidence-upload"
+                                            className="hidden"
+                                        />
+                                        <label
+                                            htmlFor="evidence-upload"
+                                            className="flex items-center gap-2 px-4 py-2 bg-white border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors text-sm"
+                                        >
+                                            <Upload className="size-4" />
+                                            Chọn ảnh ({selectedFiles.length} đã chọn)
+                                        </label>
+                                        {selectedFiles.length > 0 && (
+                                            <Button
+                                                size="sm"
+                                                onClick={handleUploadImages}
+                                                disabled={uploading}
+                                                className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
+                                            >
+                                                {uploading ? "Đang tải lên..." : "Tải lên ngay"}
+                                            </Button>
+                                        )}
+                                    </div>
+                                    {selectedFiles.length > 0 && (
+                                        <div className="flex flex-wrap gap-2">
+                                            {selectedFiles.map((file, i) => (
+                                                <div key={i} className="flex items-center gap-2 bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs">
+                                                    <span className="truncate max-w-[150px]">{file.name}</span>
+                                                    <X className="size-3 cursor-pointer" onClick={() => setSelectedFiles(prev => prev.filter((_, idx) => idx !== i))} />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
 
                         {/* Signatures */}
                         <div className="grid grid-cols-4 gap-4 text-center text-[13px] mb-8">
@@ -443,21 +695,48 @@ export function SlipDetailDialog({
                                     size="sm"
                                     onClick={() => window.print()}
                                     className="gap-2"
+                                    disabled={isUpdating}
                                 >
                                     In phiếu
                                 </Button>
-                                <Button
-                                    size="sm"
-                                    className="gap-2 bg-emerald-600 hover:bg-emerald-700"
-                                    onClick={() => {
-                                        if (onSave) {
-                                            onSave(editableSlipInfo, editableItems)
-                                        }
-                                    }}
-                                >
-                                    <Save className="size-4" />
-                                    Lưu thay đổi
-                                </Button>
+
+                                {nextStep && (
+                                    <Button
+                                        size="sm"
+                                        className={cn("gap-2 text-white shadow-sm transition-all hover:scale-105 active:scale-95", nextStep.color)}
+                                        onClick={() => {
+                                            if (onStatusUpdate) {
+                                                const itemsToUpdate = editableItems.map(item => ({
+                                                    itemCode: item.itemCode,
+                                                    provisionalQuantity: item.quantity.provisional,
+                                                    actualQuantity: item.quantity.actual,
+                                                    itemNote: ""
+                                                }))
+                                                onStatusUpdate(nextStep.nextStatus, itemsToUpdate)
+                                            }
+                                        }}
+                                        disabled={isUpdating}
+                                    >
+                                        <CheckCircle2 className="size-4" />
+                                        {nextStep.label}
+                                    </Button>
+                                )}
+
+                                {canEditInfo && (
+                                    <Button
+                                        size="sm"
+                                        className="gap-2 bg-emerald-600 hover:bg-emerald-700 shadow-sm transition-all hover:scale-105 active:scale-95"
+                                        onClick={() => {
+                                            if (onSave) {
+                                                onSave(editableSlipInfo, editableItems)
+                                            }
+                                        }}
+                                        disabled={isUpdating}
+                                    >
+                                        <Save className="size-4" />
+                                        Lưu thay đổi
+                                    </Button>
+                                )}
                             </div>
                         </div>
                     </div>

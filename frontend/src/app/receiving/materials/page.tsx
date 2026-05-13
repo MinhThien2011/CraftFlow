@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { AppShell } from "@/components/app-shell"
 import { Card, CardContent } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -14,19 +14,21 @@ import { format } from "date-fns"
 import { vi } from "date-fns/locale"
 import { CurrencyDisplay } from "@/components/ui/currency-display"
 import { SlipDetailDialog } from "@/components/shared/slip-detail-dialog"
+import { toast } from "sonner"
 
 const statusConfig: Record<string, { label: string, color: string }> = {
   pending: { label: "Đang chờ", color: "bg-amber-100 text-amber-700 hover:bg-amber-200" },
   received: { label: "Đã nhận hàng", color: "bg-blue-100 text-blue-700 hover:bg-blue-200" },
   inspected: { label: "Đã kiểm tra", color: "bg-purple-100 text-purple-700 hover:bg-purple-200" },
   inspecting: { label: "Đang kiểm kê", color: "bg-purple-100 text-purple-700 hover:bg-purple-200" },
-  in_stock: { label: "Đã vào kho", color: "bg-emerald-100 text-emerald-700 hover:bg-emerald-200" },
+  in_stock: { label: "Đã vào kho - Chưa xác minh", color: "bg-emerald-100 text-emerald-700 hover:bg-emerald-200" },
   completed: { label: "Đã hoàn tất", color: "bg-emerald-100 text-emerald-700 hover:bg-emerald-200" },
-  verified: { label: "Đã xác thực", color: "bg-teal-100 text-teal-700 hover:bg-teal-200" },
+  verified: { label: "Đã vào kho - Đã xác minh", color: "bg-teal-100 text-teal-700 hover:bg-teal-200" },
   cancelled: { label: "Đã hủy", color: "bg-red-100 text-red-700 hover:bg-red-200" },
 }
 
 export default function ReceivingPage() {
+  const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
   const [limit] = useState(10)
   const [searchQuery, setSearchQuery] = useState("")
@@ -41,21 +43,77 @@ export default function ReceivingPage() {
     queryFn: () => slipApi.getSlips({ type: 'import', page, limit, search: searchQuery })
   })
 
+  // Mutation cập nhật trạng thái nhập kho
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ id, status, items }: { id: string, status: string, items: any[] }) =>
+      slipApi.updateSlipStatus(id, { status, items }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['slips', 'import'] })
+      toast.success("Đã cập nhật trạng thái nhập kho thành công")
+      setIsDialogOpen(false)
+      setSelectedSlip(null)
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.message || "Lỗi khi cập nhật trạng thái nhập kho")
+    }
+  })
+
+  // Mutation cập nhật thông tin chi tiết (Manager)
+  const updateDetailsMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string, data: Partial<Slip> }) =>
+      slipApi.updateSlipDetails(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['slips', 'import-materials'] })
+      toast.success("Đã lưu thay đổi thông tin phiếu thành công")
+      setIsDialogOpen(false)
+      setSelectedSlip(null)
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.message || "Lỗi khi lưu thay đổi thông tin phiếu")
+    }
+  })
+
   // Trích xuất dữ liệu an toàn bao phủ mọi case cấu hình Axios Interceptor
   const responseData = data?.data?.data || data?.data || data;
   const slips: Slip[] = responseData?.slips || [];
   const pagination = responseData?.pagination || {};
   const totalPages = pagination?.totalPages || pagination?.pages || 1;
 
+  const handleStatusUpdate = (status: string, items: any[]) => {
+    if (!selectedSlip) return
+    updateStatusMutation.mutate({
+      id: selectedSlip._id,
+      status,
+      items
+    })
+  }
+
+  const handleSave = (info: any, items: any[]) => {
+    if (!selectedSlip) return
+    updateDetailsMutation.mutate({
+      id: selectedSlip._id,
+      data: {
+        ...info,
+        items: items.map(item => ({
+          ...item,
+          quantity: {
+            ...item.quantity,
+            actual: item.quantity.actual
+          }
+        }))
+      }
+    })
+  }
+
   return (
-    <AppShell title="Nhập kho" subtitle="Quản lý danh sách phiếu nhập kho">
+    <AppShell title="Phiếu nhập vật liệu" subtitle="Quản lý danh sách phiếu nhập vật liệu">
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight">Danh sách phiếu nhập</h2>
+            <h2 className="text-2xl font-bold tracking-tight">Danh sách phiếu nhập vật liệu</h2>
             <p className="text-sm text-muted-foreground mt-1">
-              Theo dõi và quản lý các phiếu nhập vật tư, thành phẩm vào kho
+              Theo dõi và quản lý các phiếu nhập vật tư vào kho
             </p>
           </div>
         </div>
@@ -157,11 +215,9 @@ export default function ReceivingPage() {
           slip={selectedSlip}
           type="import"
           statusConfig={statusConfig}
-          onSave={(info, items) => {
-            console.log("Saving slip info:", info)
-            console.log("Saving slip items:", items)
-            setIsDialogOpen(false)
-          }}
+          onSave={handleSave}
+          onStatusUpdate={handleStatusUpdate}
+          isUpdating={updateStatusMutation.isPending || updateDetailsMutation.isPending}
         />
       </div>
     </AppShell>

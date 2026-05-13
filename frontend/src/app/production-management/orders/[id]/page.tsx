@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { DashboardLayout } from "@/features/production/components/dashboard-layout"
 import { Button } from "@/components/ui/button"
@@ -34,9 +34,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useProductionOrder, useUpdateOrderStatus, useAssignOrder, useStaffSuggestions, useSuggestedAssignments, useReassignTask } from "@/features/production/hooks/use-production"
+import { SlipDetailDialog } from "@/components/shared/slip-detail-dialog"
+import { slipApi } from "@/api/slip.api"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
+import {
+  useProductionOrder, useUpdateOrderStatus, useAssignOrder, useStaffSuggestions, useSuggestedAssignments,
+  useReassignTask,
+  useCreateStockInSlip
+} from "@/features/production/hooks/use-production"
 import { format } from "date-fns"
-import { Plus, Trash2, Sparkles, RefreshCw } from "lucide-react"
+import { Plus, Trash2, Sparkles, RefreshCw, Send, Eye } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 const statusConfig = {
   pending: { label: "Chờ duyệt", color: "bg-[#F4C542] text-[#2C2C2C]", icon: Clock },
@@ -46,15 +55,27 @@ const statusConfig = {
   "overdue": { label: "Trễ hạn", color: "bg-[#E04E4E] text-white", icon: AlertTriangle },
 }
 
+const slipStatusConfig: Record<string, { label: string, color: string }> = {
+  pending: { label: "Đang chờ", color: "bg-amber-100 text-amber-700 hover:bg-amber-200" },
+  received: { label: "Đã nhận hàng", color: "bg-blue-100 text-blue-700 hover:bg-blue-200" },
+  inspected: { label: "Đã kiểm tra", color: "bg-purple-100 text-purple-700 hover:bg-purple-200" },
+  in_stock: { label: "Đã vào kho - Chưa xác minh", color: "bg-emerald-100 text-emerald-700 hover:bg-emerald-200" },
+  completed: { label: "Đã hoàn tất", color: "bg-emerald-100 text-emerald-700 hover:bg-emerald-200" },
+  verified: { label: "Đã vào kho - Đã xác minh", color: "bg-teal-100 text-teal-700 hover:bg-teal-200" },
+  cancelled: { label: "Đã hủy", color: "bg-red-100 text-red-700 hover:bg-red-200" },
+}
+
 export default function OrderDetailPage() {
   const params = useParams()
   const router = useRouter()
   const id = params.id as string
+  const queryClient = useQueryClient()
 
   const { data: orderResponse, isLoading: orderLoading } = useProductionOrder(id)
   const updateStatusMutation = useUpdateOrderStatus()
   const assignMutation = useAssignOrder()
   const reassignMutation = useReassignTask()
+  const createStockInSlipMutation = useCreateStockInSlip()
   const { data: staffSuggestions } = useStaffSuggestions()
   const { data: suggestionData, refetch: refetchSuggestions } = useSuggestedAssignments(id)
 
@@ -64,6 +85,7 @@ export default function OrderDetailPage() {
   const [isCancelOpen, setIsCancelOpen] = useState(false)
   const [isAssignOpen, setIsAssignOpen] = useState(false)
   const [isReassignOpen, setIsReassignOpen] = useState(false)
+  const [isSlipDialogOpen, setIsSlipDialogOpen] = useState(false)
 
   const [completeNote, setCompleteNote] = useState("")
   const [cancelReason, setCancelReason] = useState("")
@@ -73,8 +95,50 @@ export default function OrderDetailPage() {
   const [selectedAssignment, setSelectedAssignment] = useState<any>(null)
   const [newStaffId, setNewStaffId] = useState("")
   const [reassignReason, setReassignReason] = useState("")
+  const [stockInSlip, setStockInSlip] = useState<any>(null)
 
   const isCompletedOrder = order?.status === "completed"
+
+  // Fetch slips to see if this order already has one
+  const { data: slipData } = useQuery({
+    queryKey: ['slips', 'import', 'order', id],
+    queryFn: () => slipApi.getSlips({ type: 'import', search: order?.orderCode }),
+    enabled: !!order?.orderCode,
+  })
+
+  // Mutation to update slip details
+  const updateDetailsMutation = useMutation({
+    mutationFn: ({ slipId, data }: { slipId: string, data: any }) =>
+      slipApi.updateSlipDetails(slipId, data),
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ['slips', 'import', 'order', id] })
+      toast.success("Đã lưu thay đổi thông tin phiếu thành công")
+      setIsSlipDialogOpen(false)
+      if (data?.data) {
+        setStockInSlip(data.data)
+      }
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.message || "Lỗi khi lưu thay đổi thông tin phiếu")
+    }
+  })
+
+  // Check if slip exists in response
+  const slips = slipData?.data?.data?.slips || slipData?.data?.slips || [];
+  const existingSlip = slips.find((s: any) => 
+    (s.relatedProductionOrder === order?._id) || 
+    (s.relatedProductionOrder?._id === order?._id) ||
+    s.reason?.includes(order?.orderCode) ||
+    s.slipNumber?.includes(order?.orderCode)
+  )
+
+  useEffect(() => {
+    if (order?.stockInSlip && !stockInSlip) {
+      setStockInSlip(order.stockInSlip)
+    } else if (existingSlip && !stockInSlip) {
+      setStockInSlip(existingSlip)
+    }
+  }, [order, existingSlip, stockInSlip])
 
   const handleOpenAssign = () => {
     if (order?.products) {
@@ -186,6 +250,40 @@ export default function OrderDetailPage() {
       onSuccess: () => {
         setIsCancelOpen(false)
         setCancelReason("")
+      }
+    })
+  }
+
+  const handleCreateStockIn = () => {
+    createStockInSlipMutation.mutate({ id }, {
+      onSuccess: (res: any) => {
+        toast.success("Đã tạo phiếu nhập kho thành công")
+        queryClient.invalidateQueries({ queryKey: ['slips', 'import', 'order', id] })
+        const newSlip = res?.data?.slip || res?.data || res
+        if (newSlip && newSlip._id) {
+            setStockInSlip(newSlip)
+            setIsSlipDialogOpen(true)
+        }
+      },
+      onError: (err: any) => {
+        toast.error(err?.response?.data?.message || err?.message || "Lỗi khi tạo phiếu nhập kho")
+      }
+    })
+  }
+
+  const handleSaveSlip = (info: any, items: any[]) => {
+    if (!stockInSlip) return
+    updateDetailsMutation.mutate({
+      slipId: stockInSlip._id,
+      data: {
+        ...info,
+        items: items.map((item: any) => ({
+          ...item,
+          quantity: {
+            ...item.quantity,
+            actual: item.quantity.actual
+          }
+        }))
       }
     })
   }
@@ -352,85 +450,147 @@ export default function OrderDetailPage() {
           </Card>
 
           {/* Assignments/Staff Info */}
-          <Card className="p-6 bg-card border-border lg:col-span-2">
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-card-foreground">Phân công nhân sự</h3>
-              </div>
-
-              {order.assignments && order.assignments.length > 0 ? (
-                <div className="space-y-4">
-                  {order.assignments.map((assign: any, idx: number) => (
-                    <div key={idx} className="p-4 rounded-xl border border-border bg-muted/20">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                            <User className="h-5 w-5 text-primary" />
-                          </div>
-                          <div>
-                            <p className="font-semibold text-card-foreground">
-                              {assign.staff?.fullName || assign.staff?.username}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              Sản phẩm: {assign.product?.name || (order.products.find((p: any) => (p.product?._id || p.product) === (assign.product?._id || assign.product))?.productName || "Sản phẩm")}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-xs text-primary hover:text-primary hover:bg-primary/10 gap-1"
-                            onClick={() => handleOpenReassign(assign)}
-                          >
-                            <RefreshCw className="h-3 w-3" />
-                            Thay đổi
-                          </Button>
-                          <Badge variant="outline" className="capitalize">
-                            {assign.status?.replace('_', ' ') || 'Pending'}
-                          </Badge>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-xs">
-                          <span>Tiến độ: {assign.completedQuantity} / {assign.assignedQuantity}</span>
-                          <span>{Math.round((assign.completedQuantity / assign.assignedQuantity) * 100)}%</span>
-                        </div>
-                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-primary"
-                            style={{ width: `${(assign.completedQuantity / assign.assignedQuantity) * 100}%` }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+          {!isCompletedOrder && (
+            <Card className="p-6 bg-card border-border lg:col-span-2">
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-card-foreground">Phân công nhân sự</h3>
                 </div>
-              ) : (
-                <div className="text-center py-12 border-2 border-dashed border-border rounded-xl">
-                  <User className="h-12 w-12 text-muted-foreground mx-auto mb-2 opacity-20" />
-                  <p className="text-muted-foreground">Chưa có phân công nhân sự</p>
-                  <Button variant="outline" size="sm" className="mt-4" onClick={handleOpenAssign}>
-                    Phân công ngay
-                  </Button>
-                </div>
-              )}
 
-              <div className="pt-6 border-t border-border">
-                <h3 className="text-lg font-semibold text-card-foreground mb-4">Thông tin nhập kho</h3>
-                {isCompletedOrder ? (
+                {order.assignments && order.assignments.length > 0 ? (
                   <div className="space-y-4">
-                    <div className="rounded-xl border border-[#E5E7EB] bg-white p-5">
-                      <p className="text-sm text-[#64748B] mb-1">Trạng thái</p>
-                      <p className="text-base font-medium text-[#334155]">Sẵn sàng nhập kho thành phẩm</p>
-                    </div>
+                    {order.assignments.map((assign: any, idx: number) => (
+                      <div key={idx} className="p-4 rounded-xl border border-border bg-muted/20">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                              <User className="h-5 w-5 text-primary" />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-card-foreground">
+                                {assign.staff?.fullName || assign.staff?.username}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Sản phẩm: {assign.product?.name || (order.products.find((p: any) => (p.product?._id || p.product) === (assign.product?._id || assign.product))?.productName || "Sản phẩm")}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs text-primary hover:text-primary hover:bg-primary/10 gap-1"
+                              onClick={() => handleOpenReassign(assign)}
+                            >
+                              <RefreshCw className="h-3 w-3" />
+                              Thay đổi
+                            </Button>
+                            <Badge variant="outline" className="capitalize">
+                              {assign.status?.replace('_', ' ') || 'Pending'}
+                            </Badge>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-xs">
+                            <span>Tiến độ: {assign.completedQuantity} / {assign.assignedQuantity}</span>
+                            <span>{Math.round((assign.completedQuantity / assign.assignedQuantity) * 100)}%</span>
+                          </div>
+                          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-primary"
+                              style={{ width: `${(assign.completedQuantity / assign.assignedQuantity) * 100}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 ) : (
-                  <div className="rounded-xl border border-border bg-muted/20 p-6 text-center">
-                    <p className="text-base text-muted-foreground">Chỉ có thể nhập kho khi đơn đã hoàn thành sản xuất</p>
+                  <div className="text-center py-12 border-2 border-dashed border-border rounded-xl">
+                    <User className="h-12 w-12 text-muted-foreground mx-auto mb-2 opacity-20" />
+                    <p className="text-muted-foreground">Chưa có phân công nhân sự</p>
+                    <Button variant="outline" size="sm" className="mt-4" onClick={handleOpenAssign}>
+                      Phân công ngay
+                    </Button>
                   </div>
                 )}
               </div>
+            </Card>
+          )}
+
+          {/* Stock In Section (Full width if completed) */}
+          <Card className={cn("p-6 bg-card border-border", isCompletedOrder ? "lg:col-span-2" : "lg:col-span-2")}>
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-card-foreground">Thông tin nhập kho</h3>
+              </div>
+
+              {isCompletedOrder ? (
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <p className="text-emerald-800 font-bold flex items-center gap-2">
+                        <CheckCircle className="h-5 w-5" />
+                        Sản xuất đã hoàn thành
+                      </p>
+                      <p className="text-sm text-emerald-600">
+                        Đơn hàng đã sẵn sàng để nhập kho thành phẩm.
+                      </p>
+                    </div>
+                    {stockInSlip ? (
+                      <Button
+                        onClick={() => setIsSlipDialogOpen(true)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
+                      >
+                        <Eye className="h-4 w-4" />
+                        Xem phiếu nhập kho
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={handleCreateStockIn}
+                        disabled={createStockInSlipMutation.isPending}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+                      >
+                        {createStockInSlipMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Send className="h-4 w-4" />
+                        )}
+                        Tạo phiếu nhập kho
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Summary of finished products */}
+                  <div className="space-y-3">
+                    <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Thành phẩm cần nhập kho</p>
+                    <div className="grid gap-3">
+                      {order.products?.map((p: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between p-4 bg-white rounded-xl border border-border shadow-sm">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
+                              <Package className="h-5 w-5" />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-sm">{p.productName || (p.product as any)?.name}</p>
+                              <p className="text-xs text-muted-foreground">{p.productCode || (p.product as any)?.code}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-lg font-bold text-emerald-600">{p.quantity}</p>
+                            <p className="text-[10px] text-muted-foreground uppercase">{p.product?.unit || 'cái'}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-border bg-muted/20 p-8 text-center">
+                  <Clock className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-20" />
+                  <p className="text-base text-muted-foreground">Chỉ có thể nhập kho khi đơn đã hoàn thành sản xuất</p>
+                </div>
+              )}
             </div>
           </Card>
         </div>
@@ -674,6 +834,17 @@ export default function OrderDetailPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Slip Detail Dialog */}
+      <SlipDetailDialog
+        open={isSlipDialogOpen}
+        onOpenChange={setIsSlipDialogOpen}
+        slip={stockInSlip}
+        type="import"
+        statusConfig={slipStatusConfig}
+        onSave={handleSaveSlip}
+        isUpdating={updateDetailsMutation.isPending}
+      />
     </DashboardLayout>
   )
 }

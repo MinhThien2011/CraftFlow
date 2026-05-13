@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { Providers } from '@/components/providers'
-import { Toaster } from '@/components/ui/toaster'
+import { Toaster as SonnerToaster } from 'sonner'
 import './globals.css'
 
 const geist = Geist({ 
@@ -47,7 +47,7 @@ export default function RootLayout({
       <body className="font-sans antialiased">
         <Providers>
           {children}
-          <Toaster />
+          <SonnerToaster position="top-right" richColors closeButton />
         </Providers>
         <Analytics />
       </body>

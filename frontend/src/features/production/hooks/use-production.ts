@@ -111,3 +111,20 @@ export function useReassignTask() {
         }
     });
 }
+
+export function useCreateStockInSlip() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ id, data }: { id: string; data?: any }) =>
+            productionApi.createStockInSlip(id, data),
+        onSuccess: (response, variables) => {
+            queryClient.invalidateQueries({ queryKey: productionKeys.all });
+            queryClient.invalidateQueries({ queryKey: productionKeys.order(variables.id) });
+            toast.success("Đã tạo yêu cầu nhập kho thành phẩm");
+        },
+        onError: (error: any) => {
+            toast.error(error.response?.data?.message || error.message || "Tạo yêu cầu nhập kho thất bại");
+        }
+    });
+}

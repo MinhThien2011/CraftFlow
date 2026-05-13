@@ -124,6 +124,8 @@ function UsersPage() {
   const [isLoading, setIsLoading] = useState(true)
 
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [userToDelete, setUserToDelete] = useState<User | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [avatarPreview, setAvatarPreview] = useState<string>("")
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [newUser, setNewUser] = useState({
@@ -146,7 +148,6 @@ function UsersPage() {
       const response = await userApi.getUsers({
         search,
         role,
-        isActive: true,
         limit: itemsPerPage,
         page: page,
       })
@@ -243,9 +244,33 @@ function UsersPage() {
     setIsAddDialogOpen(false)
   }
 
-  const toggleUserStatus = (userId: string) => {
-    // API call would go here
-    toast.info("Chức năng thay đổi trạng thái đang được triển khai")
+  const toggleUserStatus = async (userId: string, currentStatus: boolean) => {
+    try {
+      const response = await userApi.updateStatus(userId, !currentStatus)
+      if (response.success) {
+        toast.success(`Đã ${!currentStatus ? 'kích hoạt' : 'vô hiệu hóa'} tài khoản thành công`)
+        fetchUsers(searchQuery, roleFilterToValue[roleFilter], currentPage)
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || error.message || "Không thể thay đổi trạng thái tài khoản")
+    }
+  }
+
+  const handleDeleteUser = async () => {
+    if (!userToDelete) return
+    setIsDeleting(true)
+    try {
+      const response = await userApi.deleteUser(userToDelete._id)
+      if (response.success) {
+        toast.success("Xóa tài khoản thành công")
+        setUserToDelete(null)
+        fetchUsers(searchQuery, roleFilterToValue[roleFilter], currentPage)
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || error.message || "Không thể xóa tài khoản")
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   const getUserRoleName = (role: User["role"]): string => {
@@ -669,20 +694,14 @@ function UsersPage() {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                <DropdownMenuItem>
-                                  Chỉnh sửa
-                                </DropdownMenuItem>
-                                <DropdownMenuItem>
-                                  Đổi mật khẩu
-                                </DropdownMenuItem>
                                 <DropdownMenuItem
-                                  onClick={() => toggleUserStatus(user._id)}
+                                  onClick={() => toggleUserStatus(user._id, user.isActive)}
                                 >
                                   {user.isActive
                                     ? "Vô hiệu hóa"
                                     : "Kích hoạt"}
                                 </DropdownMenuItem>
-                                <DropdownMenuItem className="text-destructive">
+                                <DropdownMenuItem className="text-destructive" onClick={() => setUserToDelete(user)}>
                                   Xóa tài khoản
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
@@ -776,6 +795,30 @@ function UsersPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Modal Xác nhận Xóa Người dùng */}
+      <Dialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-red-600 flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              Xác nhận xóa tài khoản
+            </DialogTitle>
+            <DialogDescription>
+              Bạn có chắc chắn muốn xóa tài khoản <strong>{userToDelete?.fullName}</strong> ({userToDelete?.username}) không? Hành động này không thể hoàn tác và sẽ xóa bỏ toàn bộ dữ liệu liên quan.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setUserToDelete(null)} disabled={isDeleting}>
+              Hủy
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteUser} disabled={isDeleting}>
+              {isDeleting ? <Spinner className="mr-2 h-4 w-4" /> : null}
+              Xóa tài khoản
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   )
 }

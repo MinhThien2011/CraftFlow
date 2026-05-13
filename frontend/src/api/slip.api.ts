@@ -24,6 +24,8 @@ export interface Slip {
     date: string;
     status: 'pending' | 'received' | 'inspected' | 'inspecting' | 'in_stock' | 'completed' | 'verified' | 'cancelled';
     personName: string;
+    category: string;
+    notes: string;
     reason: string;
     relatedRequisition?: string;
     items: SlipItem[];
@@ -48,6 +50,11 @@ export interface Slip {
     };
     totalAmountInWords?: string;
     originalDocsCount?: string;
+    images?: string[];
+    imageUploadedAt?: string;
+    isImageUploadLate?: boolean;
+    finalizedAt?: string;
+    inStockAt?: string;
     signatures?: {
         creator?: {
             _id: string;
@@ -74,8 +81,13 @@ export interface Slip {
 }
 
 export const slipApi = {
+    // Lấy chi tiết slip
+    getSlipById: async (id: string): Promise<any> => {
+        return axiosInstance.get(`/slips/${id}`);
+    },
+
     // Lấy danh sách slip (có hỗ trợ filter type: 'import' | 'export')
-    getSlips: async (params?: { type?: string; page?: number; limit?: number; search?: string; status?: string }): Promise<any> => {
+    getSlips: async (params?: { type?: string; category?: string; page?: number; limit?: number; search?: string; status?: string }): Promise<any> => {
         return axiosInstance.get("/slips", { params });
     },
 
@@ -96,5 +108,18 @@ export const slipApi = {
         notes?: string;
     }): Promise<any> => {
         return axiosInstance.patch(`/slips/${id}/status`, data);
+    },
+
+    // Upload ảnh chứng từ (Evidence Images)
+    uploadSlipImages: async (id: string, files: File[]): Promise<any> => {
+        const formData = new FormData();
+        files.forEach(file => {
+            formData.append('evidenceImages', file);
+        });
+        return axiosInstance.post(`/slips/${id}/upload-images`, formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data'
+            }
+        });
     }
 };

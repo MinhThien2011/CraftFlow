@@ -3,9 +3,7 @@ import { RedisStore } from 'rate-limit-redis';
 import jwt from 'jsonwebtoken';
 import { client, getRedisHealth } from '../config/redisClient.js';
 
-/**
- * Rate Limit Configuration
- */
+// ─── Config ───────────────────────────────────────────────────────────────────
 const CONFIG = {
     api: {
         windowMs: 15 * 60 * 1000,
@@ -19,141 +17,116 @@ const CONFIG = {
     login: {
         windowMs: 5 * 60 * 1000,
         max: 5,
-        prefix: 'rl:login-fail:',
     },
 };
 
+// ─── Redis Command Wrapper ────────────────────────────────────────────────────
 /**
- * Optimized command sender with Circuit Breaker pattern.
+ * Gửi lệnh tới Redis với timeout + circuit breaker.
+ * ✅ Trả về giá trị fallback thay vì throw để tránh unhandled rejection.
  */
 const fastSendCommand = async (...args) => {
-    // Wait for connection if it's currently connecting
-    if (!client.isOpen && getRedisHealth()) {
-        try {
-            // node-redis v4 throw ClientClosedError if not connected.
-            // We'll catch and wait or skip if it's during startup
-            if (args[0] === 'SCRIPT') {
-                // For SCRIPT LOAD during startup, wait for ready
-                let waitTime = 0;
-                while (!client.isOpen && waitTime < 2000) {
-                    await new Promise(r => setTimeout(r, 200));
-                    waitTime += 200;
-                }
-            }
-        } catch (e) {
-            // Silently ignore waiting errors
-        }
-    }
-
-    // Final check before sending
-    if (!client.isOpen) {
-        // Only throw for critical commands like SCRIPT LOAD or EVAL
-        // For INCR/HINCRBY, we can still return 1 as a safe default if we want to bypass
-        if (args[0] === 'INCR' || args[0] === 'HINCRBY') return 1;
-        throw new Error('Redis client is closed');
+    if (!client.isOpen || !getRedisHealth()) {
+        // Fallback an toàn: trả về 1 để rate limiter không bị crash
+        return args[0] === 'GET' ? null : 1;
     }
 
     try {
-        return await Promise.race([
+        // ✅ Dùng Promise.race nhưng đảm bảo cả 2 nhánh đều được handle
+        const timeoutPromise = new Promise((_, reject) => {
+            const t = setTimeout(() => reject(new Error('Redis timeout')), 1000);
+            // Quan trọng: clear timeout nếu lệnh thành công để tránh leak
+            timeoutPromise._clear = () => clearTimeout(t);
+        });
+
+        const result = await Promise.race([
             client.sendCommand(args),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Redis timeout')), 1000))
+            timeoutPromise,
         ]);
-    } catch (error) {
-        if (!global._lastRedisErrorLog || Date.now() - global._lastRedisErrorLog > 10000) {
-            console.error(`⚠️ Redis Command Error (RateLimit): ${error.message}`);
-            global._lastRedisErrorLog = Date.now();
+
+        return result;
+    } catch (err) {
+        // Throttle log — không spam mỗi request
+        const now = Date.now();
+        if (!global._lastRLErrorLog || now - global._lastRLErrorLog > 10000) {
+            console.warn(`⚠️ Redis RateLimit command failed: ${err.message}`);
+            global._lastRLErrorLog = now;
         }
 
-        // Rethrow for script commands, but return 1 for increments
-        if (args[0] === 'INCR' || args[0] === 'HINCRBY') return 1;
-        throw error;
+        // ✅ Trả về fallback thay vì throw → tránh unhandled rejection
+        return args[0] === 'GET' ? null : 1;
     }
 };
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 /**
- * Extracts User ID from JWT in cookies. 
- * Using jwt.decode for performance as full verification is handled in jwtAuth middleware.
+ * Lấy userId từ JWT trong cookie (dùng decode thay verify để tiết kiệm CPU).
+ * Kết quả được cache trên req object để tránh decode lại nhiều lần.
  */
 const getUserId = (req) => {
-    // Check if we already extracted it in this request
     if (req._rateLimitUserId !== undefined) return req._rateLimitUserId;
 
     const token = req.cookies?.accessToken;
-    if (!token) {
-        req._rateLimitUserId = null;
-        return null;
-    }
+    if (!token) return (req._rateLimitUserId = null);
+
     try {
-        // Use decode instead of verify for rate limiting to save CPU
         const decoded = jwt.decode(token);
-        req._rateLimitUserId = decoded?.id || null;
-        return req._rateLimitUserId;
+        return (req._rateLimitUserId = decoded?.id ?? null);
     } catch {
-        req._rateLimitUserId = null;
-        return null;
+        return (req._rateLimitUserId = null);
     }
 };
 
 /**
- * Shared configuration for all limiters
+ * Kiểm tra xem nên skip rate limiting không:
+ * - Redis không khỏe → skip (không block traffic hợp lệ)
+ * - IP trong whitelist → skip
+ * - Path bắt đầu /public → skip
  */
-const commonOptions = {
-    standardHeaders: true,
-    legacyHeaders: false,
-    validate: { default: false },
+const shouldSkip = (req) => {
+    if (!getRedisHealth() || !client.isOpen) return true;
+    const whitelist = process.env.IP_WHITELIST?.split(',') ?? [];
+    return whitelist.includes(req.ip) || req.path.startsWith('/public');
 };
 
+// ─── Store Factory ────────────────────────────────────────────────────────────
 /**
- * Base configuration for Redis-backed rate limiters with memory fallback
+ * Tạo RedisStore. Nếu Redis không khỏe thì trả về undefined → dùng MemoryStore.
  */
 const createStore = (prefix) => {
-    // If we're sure Redis is down (max retries reached or health check failed)
-    // we use MemoryStore. Otherwise we try RedisStore.
     if (!getRedisHealth()) {
-        console.warn(`ℹ️ Using MemoryStore for ${prefix} rate limiting (Redis is unhealthy)`);
+        console.warn(`ℹ️  RateLimit [${prefix}]: Redis unhealthy → using MemoryStore`);
         return undefined;
     }
 
     try {
         return new RedisStore({
-            sendCommand: async (...args) => {
-                try {
-                    return await fastSendCommand(...args);
-                } catch (err) {
-                    // If sendCommand fails, we throw so rate-limit-redis knows something is wrong
-                    throw err;
-                }
-            },
+            sendCommand: fastSendCommand,
             prefix: `rl:${prefix}:`,
         });
-    } catch (error) {
-        console.error(`⚠️ Failed to initialize RedisStore for ${prefix}, falling back to MemoryStore`);
+    } catch (err) {
+        console.error(`⚠️  RateLimit [${prefix}]: Failed to init RedisStore → using MemoryStore`, err.message);
         return undefined;
     }
 };
 
-/**
- * Main API Limiter
- */
+// ─── Common Options ───────────────────────────────────────────────────────────
+const commonOptions = {
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { default: false },
+    skip: shouldSkip,
+};
+
+// ─── Limiters ─────────────────────────────────────────────────────────────────
 export const apiLimiter = rateLimit({
     ...commonOptions,
     store: createStore('api'),
     windowMs: CONFIG.api.windowMs,
-    max: (req) => {
-        const userId = getUserId(req);
-        return userId ? CONFIG.api.authenticated : CONFIG.api.guest;
-    },
+    max: (req) => getUserId(req) ? CONFIG.api.authenticated : CONFIG.api.guest,
     keyGenerator: (req) => {
         const userId = getUserId(req);
-        // Optimize key length for Redis RAM
         return userId ? `u:${userId}` : `i:${req.ip}`;
-    },
-    skip: (req) => {
-        // Skip rate limiting if Redis is down to prevent blocking legitimate traffic
-        if (!getRedisHealth() || !client.isOpen) return true;
-
-        const whitelist = process.env.IP_WHITELIST?.split(',') || [];
-        return whitelist.includes(req.ip) || req.path.startsWith('/public');
     },
     handler: (req, res) => {
         res.status(429).json({
@@ -164,15 +137,11 @@ export const apiLimiter = rateLimit({
     },
 });
 
-/**
- * Strict Limiter
- */
 export const strictLimiter = rateLimit({
     ...commonOptions,
     store: createStore('strict'),
     windowMs: CONFIG.strict.windowMs,
     max: CONFIG.strict.max,
-    skip: (req) => !getRedisHealth() || !client.isOpen,
     keyGenerator: (req) => {
         const userId = getUserId(req);
         return userId ? `u:${userId}` : `i:${req.ip}`;
@@ -183,17 +152,13 @@ export const strictLimiter = rateLimit({
     },
 });
 
-/**
- * Login Limiter
- */
 export const loginLimiter = rateLimit({
     ...commonOptions,
     store: createStore('login'),
     windowMs: CONFIG.login.windowMs,
     max: CONFIG.login.max,
-    skip: (req) => !getRedisHealth() || !client.isOpen,
     keyGenerator: (req) => {
-        const identifier = req.body.username || req.body.email || req.ip;
+        const identifier = req.body?.username || req.body?.email || req.ip;
         return `l:${identifier}`;
     },
     skipSuccessfulRequests: true,

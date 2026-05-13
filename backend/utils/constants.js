@@ -3,7 +3,6 @@ export const ROLES = {
   STAFF: 'staff',
   KHO_MANAGER: 'kho_manager',
   PRODUCTION_MANAGER: 'production_manager',
-  PRODUCT_MANAGER: 'product_manager',
 };
 
 /**
@@ -119,7 +118,7 @@ export const INVENTORY_IMPORT_EXPORT_SLIP_TYPE = {
 }
 
 export const INVENTORY_IMPORT_EXPORT_SLIP_STATUS = {
-  PENDING: 'pending',     // Mới tạo, chờ xử lý
+  PENDING: 'pending',     // Mới tạo, chờ xử lý,
   RECEIVED: 'received',   // Đã nhận hàng (Import) / Đang soạn hàng (Export)
   INSPECTED: 'inspected', // Đã kiểm tra (Import)
   INSPECTING: 'inspecting', // Đang kiểm kê (Export)

@@ -595,7 +595,22 @@ export const autoUpdateInsufficientOrders = async (materialIds = [], session = n
         }
       }
 
-      // Check stock
+      // 1. Resolve individual MaterialAlerts that are now sufficient
+      const alertsToCheck = await MaterialAlert.find({
+        productionOrder: order._id,
+        status: { $in: ['pending', 'ordered'] }
+      }).session(session);
+
+      for (const alert of alertsToCheck) {
+        const material = await Material.findById(alert.material).session(session).lean();
+        if (material && material.currentStock >= alert.neededQuantity) {
+          alert.status = 'resolved';
+          await alert.save({ session });
+          console.log(`[Production] MaterialAlert ${alert._id} for material ${alert.materialCode} resolved.`);
+        }
+      }
+
+      // 2. Check if the ENTIRE order is now enough to transition status
       let isEnough = true;
       for (const [matId, neededQuantity] of materialRequirements.entries()) {
         const material = await Material.findById(matId).session(session).lean();
@@ -609,9 +624,9 @@ export const autoUpdateInsufficientOrders = async (materialIds = [], session = n
         order.status = ORDER_STATUS.READY_TO_ASSIGN;
         await order.save({ session });
 
-        // Resolve alerts
+        // Double check all alerts for this order are resolved
         await MaterialAlert.updateMany(
-          { productionOrder: order._id, status: 'pending' },
+          { productionOrder: order._id, status: { $in: ['pending', 'ordered'] } },
           { status: 'resolved' },
           { session }
         );

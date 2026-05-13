@@ -40,8 +40,12 @@ axiosInstance.interceptors.response.use(
 
             // Tự động xử lý lỗi 401 Unauthorized nếu cần
             if (error.response.status === 401 && !window.location.pathname.includes('/login') && window.location.pathname !== '/') {
-                // Có thể redirect về login hoặc xóa auth state ở đây
+                // Xóa cache auth-user của React Query
+                // Chú ý: Vì không có cách trực tiếp truy cập queryClient ở đây mà không qua hook, 
+                // chúng ta sẽ dùng window.location để force redirect về login, 
+                // điều này sẽ làm reset state của ứng dụng
                 console.warn('Unauthorized access, please login again');
+                window.location.href = '/';
             }
         }
 

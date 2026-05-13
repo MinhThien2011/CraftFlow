@@ -32,7 +32,7 @@ const userSchema = Joi.object({
   birthDay: Joi.date().optional(),
   gender: Joi.string().valid('male', 'female').default('male'),
   avatar: Joi.string().uri().optional().allow(''),
-  role: Joi.string().hex().length(24).required().messages({
+  role: Joi.string().required().messages({
     'any.required': 'Vai trò là bắt buộc.'
   }),
   isActive: Joi.boolean().default(true),
