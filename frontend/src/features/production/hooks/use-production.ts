@@ -51,7 +51,6 @@ export function useUpdateOrderStatus() {
             productionApi.updateStatus(id, status, notes),
         onSuccess: (response, variables) => {
             queryClient.invalidateQueries({ queryKey: productionKeys.all });
-            queryClient.invalidateQueries({ queryKey: productionKeys.order(variables.id) });
             toast.success("Cập nhật trạng thái thành công");
         },
     });
@@ -65,7 +64,6 @@ export function useAssignOrder() {
             productionApi.assignOrder(orderId, assignments),
         onSuccess: (response, variables) => {
             queryClient.invalidateQueries({ queryKey: productionKeys.all });
-            queryClient.invalidateQueries({ queryKey: productionKeys.order(variables.orderId) });
             toast.success("Phân công nhân sự thành công");
         },
         onError: (error: any) => {
@@ -77,15 +75,17 @@ export function useAssignOrder() {
 export function useStaffSuggestions() {
     return useQuery({
         queryKey: productionKeys.suggestions(),
-        queryFn: () => productionApi.getStaffSuggestions()
+        queryFn: () => productionApi.getStaffSuggestions(),
+        staleTime: 1000 * 60 * 5, // 5 minutes
     });
 }
 
-export function useSuggestedAssignments(id: string) {
+export function useSuggestedAssignments(id: string, enabled = true) {
     return useQuery({
         queryKey: [...productionKeys.order(id), 'suggest'],
         queryFn: () => productionApi.getSuggestedAssignments(id),
-        enabled: !!id
+        enabled: !!id && enabled,
+        staleTime: 1000 * 60 * 2, // 2 minutes
     });
 }
 
@@ -93,6 +93,7 @@ export function useMaterialAlerts(params: any = {}) {
     return useQuery({
         queryKey: productionKeys.alerts(params),
         queryFn: () => productionApi.getMaterialAlerts(params),
+        staleTime: 1000 * 60 * 1, // 1 minute
     });
 }
 
@@ -120,11 +121,42 @@ export function useCreateStockInSlip() {
             productionApi.createStockInSlip(id, data),
         onSuccess: (response, variables) => {
             queryClient.invalidateQueries({ queryKey: productionKeys.all });
-            queryClient.invalidateQueries({ queryKey: productionKeys.order(variables.id) });
             toast.success("Đã tạo yêu cầu nhập kho thành phẩm");
         },
         onError: (error: any) => {
             toast.error(error.response?.data?.message || error.message || "Tạo yêu cầu nhập kho thất bại");
+        }
+    });
+}
+
+export function useUpdateProductionOrder() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ id, data }: { id: string; data: any }) =>
+            productionApi.updateOrder(id, data),
+        onSuccess: (response, variables) => {
+            queryClient.invalidateQueries({ queryKey: productionKeys.all });
+            toast.success("Cập nhật đơn sản xuất thành công");
+        },
+        onError: (error: any) => {
+            toast.error(error.response?.data?.message || error.message || "Cập nhật thất bại");
+        }
+    });
+}
+
+export function useCancelProductionOrder() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+            productionApi.cancelOrder(id, reason),
+        onSuccess: (response, variables) => {
+            queryClient.invalidateQueries({ queryKey: productionKeys.all });
+            toast.success("Đã hủy đơn sản xuất thành công");
+        },
+        onError: (error: any) => {
+            toast.error(error.response?.data?.message || error.message || "Hủy đơn thất bại");
         }
     });
 }

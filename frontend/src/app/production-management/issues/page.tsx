@@ -1,5 +1,6 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { useState, useEffect, useMemo, useCallback } from "react"
 import { DashboardLayout } from "@/features/production/components/dashboard-layout"
 import { Button } from "@/components/ui/button"
@@ -7,6 +8,13 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   Search,
   AlertTriangle,
@@ -18,13 +26,12 @@ import {
   ChevronLeft,
   ChevronRight
 } from "lucide-react"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
+import { toast } from "sonner"
+import { Issue, filters, mockIssues, statusConfig } from "./mock"
+
+const ProcessIssueDialog = dynamic(() => import('./components/process-issue-dialog').then(m => m.ProcessIssueDialog), {
+  ssr: false
+})
 
 const CustomPagination = ({ page, total, pageSize, onChange }: { page: number; total: number; pageSize: number; onChange: (p: number) => void }) => {
   const totalPages = Math.ceil(total / pageSize)
@@ -49,303 +56,11 @@ const CustomPagination = ({ page, total, pageSize, onChange }: { page: number; t
   )
 }
 
-const filters = [
-  { id: "all", label: "Tất cả" },
-  { id: "pending", label: "Chờ xử lý" },
-  { id: "processing", label: "Đang xử lý" },
-  { id: "resolved", label: "Đã giải quyết" },
-]
-
-const issues = [
-  {
-    id: "IS-001",
-    orderId: "PO-2024-001",
-    product: "Giỏ tre đan tay",
-    reporter: "Trần Văn B",
-    type: "Hao hụt nguyên liệu",
-    description: "Tre nguyên liệu bị nứt 15%, không thể sử dụng",
-    quantity: "2.5 kg",
-    status: "pending",
-    createdAt: "19/04/2026",
-    note: "",
-  },
-  {
-    id: "IS-002",
-    orderId: "PO-2024-002",
-    product: "Đèn mây thủ công",
-    reporter: "Lê Thị C",
-    type: "Lỗi sản phẩm",
-    description: "Phát hiện 5 sản phẩm bị lỗi khung, cần làm lại",
-    quantity: "5 cái",
-    status: "processing",
-    createdAt: "18/04/2026",
-    note: "Đang điều tra nguyên nhân",
-  },
-  {
-    id: "IS-003",
-    orderId: "PO-2024-003",
-    product: "Túi cói thêu hoa",
-    reporter: "Phạm Văn D",
-    type: "Hao hụt nguyên liệu",
-    description: "Chỉ thêu bị đứt do chất lượng không đạt",
-    quantity: "500 m",
-    status: "resolved",
-    createdAt: "15/04/2026",
-    note: "Đã đổi nhà cung cấp chỉ mới",
-  },
-  {
-    id: "IS-004",
-    orderId: "PO-2024-004",
-    product: "Khay gỗ chạm khắc",
-    reporter: "Hoàng Thị E",
-    type: "Thiết bị hỏng",
-    description: "Máy chà nhám bị hỏng, cần sửa chữa",
-    quantity: "1 máy",
-    status: "resolved",
-    createdAt: "14/04/2026",
-    note: "Đã sửa xong, hoạt động bình thường",
-  },
-  {
-    id: "IS-005",
-    orderId: "PO-2024-001",
-    product: "Giỏ tre đan tay",
-    reporter: "Vũ Văn F",
-    type: "Lỗi sản phẩm",
-    description: "Sản phẩm không đạt tiêu chuẩn kiểm tra chất lượng",
-    quantity: "8 cái",
-    status: "pending",
-    createdAt: "20/04/2026",
-    note: "",
-  },
-  {
-    id: "IS-006",
-    orderId: "PO-2024-006",
-    product: "Bình gốm men xanh",
-    reporter: "Nguyễn Văn V",
-    type: "Hao hụt nguyên liệu",
-    description: "Đất sét bị khô, không thể sử dụng cho tạo hình",
-    quantity: "3 kg",
-    status: "pending",
-    createdAt: "21/04/2026",
-    note: "",
-  },
-  {
-    id: "IS-007",
-    orderId: "PO-2024-002",
-    product: "Đèn mây thủ công",
-    reporter: "Lê Thị H",
-    type: "Thiết bị hỏng",
-    description: "Kìm uốn mây bị gãy",
-    quantity: "2 cái",
-    status: "processing",
-    createdAt: "17/04/2026",
-    note: "Đã đặt mua kìm mới",
-  },
-  {
-    id: "IS-008",
-    orderId: "PO-2024-003",
-    product: "Túi cói thêu hoa",
-    reporter: "Trần Văn L",
-    type: "Hao hụt nguyên liệu",
-    description: "Cói bị mốc do bảo quản không đúng cách",
-    quantity: "1.5 kg",
-    status: "resolved",
-    createdAt: "12/04/2026",
-    note: "Đã cải thiện điều kiện bảo quản",
-  },
-  {
-    id: "IS-009",
-    orderId: "PO-2024-004",
-    product: "Khay gỗ chạm khắc",
-    reporter: "Phạm Văn R",
-    type: "Lỗi sản phẩm",
-    description: "Hoa văn chạm khắc bị lệch, cần làm lại",
-    quantity: "3 cái",
-    status: "pending",
-    createdAt: "22/04/2026",
-    note: "",
-  },
-  {
-    id: "IS-010",
-    orderId: "PO-2024-001",
-    product: "Giỏ tre đan tay",
-    reporter: "Lê Thị C",
-    type: "Hao hụt nguyên liệu",
-    description: "Nan tre bị gãy trong quá trình đan",
-    quantity: "0.8 kg",
-    status: "resolved",
-    createdAt: "13/04/2026",
-    note: "Đã thay thế nguyên liệu mới",
-  },
-  {
-    id: "IS-011",
-    orderId: "PO-2024-006",
-    product: "Bình gốm men xanh",
-    reporter: "Lê Thị W",
-    type: "Lỗi sản phẩm",
-    description: "Bình bị nứt sau khi nung sơ bộ",
-    quantity: "4 cái",
-    status: "processing",
-    createdAt: "20/04/2026",
-    note: "Đang kiểm tra nhiệt độ lò nung",
-  },
-  {
-    id: "IS-012",
-    orderId: "PO-2024-002",
-    product: "Đèn mây thủ công",
-    reporter: "Phạm Văn I",
-    type: "Thiết bị hỏng",
-    description: "Bóng đèn LED bị cháy khi thử nghiệm",
-    quantity: "10 cái",
-    status: "resolved",
-    createdAt: "16/04/2026",
-    note: "Đã thay đổi nhà cung cấp bóng LED",
-  },
-  {
-    id: "IS-013",
-    orderId: "PO-2024-004",
-    product: "Khay gỗ chạm khắc",
-    reporter: "Nguyễn Văn P",
-    type: "Hao hụt nguyên liệu",
-    description: "Gỗ bị mối mọt, không thể sử dụng",
-    quantity: "2 tấm",
-    status: "pending",
-    createdAt: "19/04/2026",
-    note: "",
-  },
-  {
-    id: "IS-014",
-    orderId: "PO-2024-003",
-    product: "Túi cói thêu hoa",
-    reporter: "Hoàng Thị O",
-    type: "Lỗi sản phẩm",
-    description: "Đường may không đều, cần làm lại",
-    quantity: "6 cái",
-    status: "resolved",
-    createdAt: "14/04/2026",
-    note: "Nhân viên đã được đào tạo lại",
-  },
-  {
-    id: "IS-015",
-    orderId: "PO-2024-006",
-    product: "Bình gốm men xanh",
-    reporter: "Hoàng Thị Y",
-    type: "Hao hụt nguyên liệu",
-    description: "Men xanh bị đóng cặn, không thể sử dụng",
-    quantity: "500 ml",
-    status: "pending",
-    createdAt: "21/04/2026",
-    note: "",
-  },
-  {
-    id: "IS-016",
-    orderId: "PO-2024-001",
-    product: "Giỏ tre đan tay",
-    reporter: "Phạm Văn D",
-    type: "Thiết bị hỏng",
-    description: "Dao cắt tre bị mẻ",
-    quantity: "1 cái",
-    status: "resolved",
-    createdAt: "11/04/2026",
-    note: "Đã mài lại dao",
-  },
-  {
-    id: "IS-017",
-    orderId: "PO-2024-002",
-    product: "Đèn mây thủ công",
-    reporter: "Nguyễn Thị G",
-    type: "Hao hụt nguyên liệu",
-    description: "Mây ngâm bị hỏng do để quá lâu",
-    quantity: "1.2 kg",
-    status: "processing",
-    createdAt: "18/04/2026",
-    note: "Đang điều chỉnh quy trình bảo quản",
-  },
-  {
-    id: "IS-018",
-    orderId: "PO-2024-004",
-    product: "Khay gỗ chạm khắc",
-    reporter: "Lê Thị Q",
-    type: "Lỗi sản phẩm",
-    description: "Bề mặt khay không đều sau khi chà nhám",
-    quantity: "2 cái",
-    status: "resolved",
-    createdAt: "15/04/2026",
-    note: "Đã xử lý lại bề mặt",
-  },
-  {
-    id: "IS-019",
-    orderId: "PO-2024-006",
-    product: "Bình gốm men xanh",
-    reporter: "Vũ Văn Z",
-    type: "Thiết bị hỏng",
-    description: "Bàn xoay bị kẹt",
-    quantity: "1 cái",
-    status: "pending",
-    createdAt: "22/04/2026",
-    note: "",
-  },
-  {
-    id: "IS-020",
-    orderId: "PO-2024-003",
-    product: "Túi cói thêu hoa",
-    reporter: "Phạm Văn N",
-    type: "Hao hụt nguyên liệu",
-    description: "Kim thêu bị gãy",
-    quantity: "5 cái",
-    status: "resolved",
-    createdAt: "13/04/2026",
-    note: "Đã thay kim mới",
-  },
-  {
-    id: "IS-021",
-    orderId: "PO-2024-001",
-    product: "Giỏ tre đan tay",
-    reporter: "Hoàng Thị E",
-    type: "Lỗi sản phẩm",
-    description: "Sơn bảo vệ bị bong tróc",
-    quantity: "5 cái",
-    status: "processing",
-    createdAt: "21/04/2026",
-    note: "Đang thử nghiệm loại sơn mới",
-  },
-  {
-    id: "IS-022",
-    orderId: "PO-2024-002",
-    product: "Đèn mây thủ công",
-    reporter: "Hoàng Thị K",
-    type: "Thiết bị hỏng",
-    description: "Máy hàn điện bị chập",
-    quantity: "1 cái",
-    status: "resolved",
-    createdAt: "17/04/2026",
-    note: "Đã sửa chữa xong",
-  },
-  {
-    id: "IS-023",
-    orderId: "PO-2024-004",
-    product: "Khay gỗ chạm khắc",
-    reporter: "Hoàng Thị S",
-    type: "Hao hụt nguyên liệu",
-    description: "Sơn phủ bị khô trong hộp",
-    quantity: "300 ml",
-    status: "resolved",
-    createdAt: "20/04/2026",
-    note: "Đã mua sơn mới",
-  },
-]
-
-const statusConfig = {
-  pending: { label: "Chờ xử lý", color: "bg-[#F4C542] text-[#2C2C2C]", icon: Clock },
-  processing: { label: "Đang xử lý", color: "bg-[#2B8BE8] text-white", icon: Clock },
-  resolved: { label: "Đã giải quyết", color: "bg-[#4A9C6B] text-white", icon: CheckCircle },
-}
-
 export default function IssuesPage() {
   const [activeFilter, setActiveFilter] = useState("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [isProcessDialogOpen, setIsProcessDialogOpen] = useState(false)
-  const [selectedIssue, setSelectedIssue] = useState<typeof issues[0] | null>(null)
+  const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null)
   const [processStatus, setProcessStatus] = useState("")
   const [processNote, setProcessNote] = useState("")
 
@@ -355,15 +70,15 @@ export default function IssuesPage() {
   // Calculate dynamic counts
   const filterCounts = useMemo(() => {
     return {
-      all: issues.length,
-      pending: issues.filter(i => i.status === "pending").length,
-      processing: issues.filter(i => i.status === "processing").length,
-      resolved: issues.filter(i => i.status === "resolved").length,
+      all: mockIssues.length,
+      pending: mockIssues.filter(i => i.status === "pending").length,
+      processing: mockIssues.filter(i => i.status === "processing").length,
+      resolved: mockIssues.filter(i => i.status === "resolved").length,
     }
   }, [])
 
   const filteredIssues = useMemo(() => {
-    return issues.filter((issue) => {
+    return mockIssues.filter((issue) => {
       const matchesFilter = activeFilter === "all" || issue.status === activeFilter
       const matchesSearch =
         issue.product.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -380,22 +95,19 @@ export default function IssuesPage() {
   // Reset page when filter or search changes
   useEffect(() => { setPage(1) }, [activeFilter, searchQuery])
 
-  const handleOpenProcessDialog = useCallback((issue: typeof issues[0]) => {
+  const handleOpenProcessDialog = useCallback((issue: Issue) => {
     setSelectedIssue(issue)
     setProcessStatus(issue.status)
-    setProcessNote(issue.note)
+    setProcessNote(issue.note || "")
     setIsProcessDialogOpen(true)
   }, [])
 
-  const handleSaveProcess = useCallback(() => {
-    if (selectedIssue) {
-      alert(`Đã cập nhật vấn đề ${selectedIssue.id}:\nTrạng thái: ${statusConfig[processStatus as keyof typeof statusConfig]?.label}\nGhi chú: ${processNote || "Không có"}`)
-      setIsProcessDialogOpen(false)
-      setSelectedIssue(null)
-      setProcessStatus("")
-      setProcessNote("")
-    }
-  }, [selectedIssue, processStatus, processNote])
+  const handleSaveProcess = useCallback((issueId: string, status: string, note: string) => {
+    toast.success(`Đã cập nhật vấn đề ${issueId}`)
+    // Thực tế sẽ gọi Update API ở đây, sau đó refetch
+    setIsProcessDialogOpen(false)
+    setSelectedIssue(null)
+  }, [])
 
   return (
     <DashboardLayout title="Báo cáo hao hụt & Vấn đề">
@@ -455,8 +167,8 @@ export default function IssuesPage() {
               key={filter.id}
               onClick={() => setActiveFilter(filter.id)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeFilter === filter.id
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-card text-muted-foreground hover:bg-muted"
+                ? "bg-primary text-primary-foreground"
+                : "bg-card text-muted-foreground hover:bg-muted"
                 }`}
             >
               {filter.label}
@@ -573,7 +285,7 @@ export default function IssuesPage() {
                 </Button>
                 <Button
                   className="bg-primary hover:bg-primary/90 text-primary-foreground"
-                  onClick={handleSaveProcess}
+                  onClick={() => handleSaveProcess(selectedIssue.id, processStatus, processNote)}
                 >
                   Lưu thay đổi
                 </Button>

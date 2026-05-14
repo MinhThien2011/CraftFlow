@@ -1,5 +1,13 @@
 import app from './app.js';
+import { createServer } from 'http';
+import { initSocket } from './config/socket.js';
 import { handleRequisitionTimeouts } from './services/materialRequisitionService.js';
+
+// Create HTTP server
+const httpServer = createServer(app);
+
+// Initialize Socket.io
+initSocket(httpServer);
 
 // Global error handling to prevent process crashes from unhandled rejections
 process.on('unhandledRejection', (reason, promise) => {
@@ -21,7 +29,7 @@ setInterval(async () => {
   await handleRequisitionTimeouts();
 }, 15 * 60 * 1000);
 
-app.listen(app.get('port'), () => {
+httpServer.listen(app.get('port'), () => {
   console.log(`Server is running on port ${app.get('port')}`);
 }).on('error', (err) => {
   console.log('Server startup error:', err);

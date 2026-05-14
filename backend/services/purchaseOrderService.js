@@ -17,6 +17,13 @@ export const createPurchaseOrderService = async (data, userId) => {
             materialAlerts = []
         } = data;
 
+        // Clean up data to avoid "none" or empty strings causing ObjectId cast errors
+        const cleanProductionOrder = (productionOrder && productionOrder !== 'none') ? productionOrder : null;
+        const cleanMaterialAlert = (materialAlert && materialAlert !== 'none') ? materialAlert : null;
+        const cleanMaterialAlerts = (materialAlerts && Array.isArray(materialAlerts))
+            ? materialAlerts.filter(id => id && id !== 'none')
+            : [];
+
         const consolidatedRequirements = new Map(); // materialId -> quantity
         const alertsToLink = new Set();
 
@@ -30,19 +37,19 @@ export const createPurchaseOrderService = async (data, userId) => {
         // Priority: specific alerts list > production order alerts > single material alert
         const alertQuery = { status: 'pending', purchaseOrder: { $exists: false } };
 
-        if (materialAlerts && materialAlerts.length > 0) {
-            alertQuery._id = { $in: materialAlerts };
-        } else if (productionOrder) {
-            alertQuery.productionOrder = productionOrder;
-        } else if (materialAlert) {
-            alertQuery._id = materialAlert;
+        if (cleanMaterialAlerts.length > 0) {
+            alertQuery._id = { $in: cleanMaterialAlerts };
+        } else if (cleanProductionOrder) {
+            alertQuery.productionOrder = cleanProductionOrder;
+        } else if (cleanMaterialAlert) {
+            alertQuery._id = cleanMaterialAlert;
         }
 
-        if (productionOrder || materialAlert || (materialAlerts && materialAlerts.length > 0)) {
+        if (cleanProductionOrder || cleanMaterialAlert || cleanMaterialAlerts.length > 0) {
             const relevantAlerts = await MaterialAlert.find(alertQuery).lean();
 
             // Validation for specifically requested alerts
-            const requestedAlertIds = materialAlerts.length > 0 ? materialAlerts : (materialAlert ? [materialAlert] : []);
+            const requestedAlertIds = cleanMaterialAlerts.length > 0 ? cleanMaterialAlerts : (cleanMaterialAlert ? [cleanMaterialAlert] : []);
 
             if (requestedAlertIds.length > 0 && relevantAlerts.length < requestedAlertIds.length) {
                 // Find which one is missing/already linked
@@ -80,7 +87,7 @@ export const createPurchaseOrderService = async (data, userId) => {
         const { processedMaterials, totalBaseCost } = await processMaterialCosts(finalItemsToProcess);
 
         // 4. Performance Check: Shelf Capacity (only for general stock fill)
-        const isGeneralStockFill = !productionOrder && !materialAlert;
+        const isGeneralStockFill = !cleanProductionOrder && !cleanMaterialAlert;
         if (isGeneralStockFill) {
             const materialIds = processedMaterials.map(m => m.material);
             const materials = await Material.find({ _id: { $in: materialIds } }).populate('shelf').lean();
@@ -108,10 +115,10 @@ export const createPurchaseOrderService = async (data, userId) => {
         }));
 
         // 6. Clean and Descriptive Reason
-        const defaultReason = productionOrder
-            ? `Purchase for Production Order ${productionOrder}`
-            : materialAlert
-                ? `Purchase for Material Alert ${materialAlert}`
+        const defaultReason = cleanProductionOrder
+            ? `Purchase for Production Order ${cleanProductionOrder}`
+            : cleanMaterialAlert
+                ? `Purchase for Material Alert ${cleanMaterialAlert}`
                 : 'General Stock Replenishment';
 
         const finalReason = orderReason || `${defaultReason}. Priority: ${priority}. Total items: ${finalPurchaseOrderItems.length}.`;
@@ -120,8 +127,8 @@ export const createPurchaseOrderService = async (data, userId) => {
             creator: userId,
             status: PURCHASE_ORDER_STATUS.PENDING,
             priority,
-            productionOrder,
-            materialAlert,
+            productionOrder: cleanProductionOrder,
+            materialAlert: cleanMaterialAlert,
             orderReason: finalReason,
             purchaseOrderItems: finalPurchaseOrderItems,
             totalBaseCost

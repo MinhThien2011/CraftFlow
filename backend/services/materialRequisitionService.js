@@ -17,6 +17,7 @@ import { updateShelfLoad } from './shelfService.js';
 import { allocateBatchesForMaterial, createBatch } from './fifoService.js';
 import { createSlipService } from './importExportSlipService.js';
 import { autoUpdateInsufficientOrders } from './productionOrderService.js';
+import { createNotification } from './notificationService.js';
 import mongoose from 'mongoose';
 
 /**
@@ -45,7 +46,20 @@ export const requestMaterials = async (productionOrderId, managerId, items) => {
     await newRequisition.save({ session });
     await session.commitTransaction();
 
-    return ServiceResponse(true, 'Material requisition submitted.', newRequisition, 201);
+    // Notify Warehouse Managers
+    const warehouseManagers = await mongoose.model('User').find({ role: ROLES.KHO_MANAGER });
+    for (const wm of warehouseManagers) {
+      await createNotification({
+        recipient: wm._id,
+        title: 'Yêu cầu cấp vật tư mới',
+        message: `Đơn sản xuất ${order.orderCode} vừa tạo yêu cầu cấp vật tư mới (${requisitionCode}).`,
+        type: 'INVENTORY',
+        priority: 'MEDIUM',
+        metaData: { requisitionId: newRequisition._id, orderId: order._id }
+      });
+    }
+
+    return ServiceResponse(true, 'Đã gửi yêu cầu cấp vật tư thành công.', newRequisition, 201);
   } catch (error) {
     await session.abortTransaction();
     console.log('[MaterialRequisitionService] requestMaterials error:', error);

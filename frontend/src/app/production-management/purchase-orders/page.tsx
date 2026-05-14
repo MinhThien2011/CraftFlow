@@ -50,6 +50,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
+import { useSearchParams } from 'next/navigation'
 
 const CustomPagination = ({ page, total, pageSize, onChange }: { page: number; total: number; pageSize: number; onChange: (p: number) => void }) => {
   const totalPages = Math.ceil(total / pageSize)
@@ -76,6 +77,7 @@ const CustomPagination = ({ page, total, pageSize, onChange }: { page: number; t
 
 export default function PurchaseOrdersPage() {
   const { role, isAdmin } = useAuth()
+  const searchParams = useSearchParams()
   const [orders, setOrders] = useState<PurchaseOrder[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -123,6 +125,29 @@ export default function PurchaseOrdersPage() {
   useEffect(() => {
     fetchOrders()
   }, [fetchOrders])
+
+  // Handle auto-open create modal from query params
+  useEffect(() => {
+    const shouldCreate = searchParams.get('create') === 'true'
+    const orderId = searchParams.get('orderId')
+
+    if (shouldCreate) {
+      handleOpenCreate()
+      if (orderId) {
+        // We need to wait for insufficientOrders and materialAlerts to be loaded
+        // before we can set the specific order
+        const checkAndSet = setInterval(() => {
+          if (insufficientOrders.length > 0 || materialAlerts.length > 0) {
+            handleCreateOrderChange(orderId)
+            clearInterval(checkAndSet)
+          }
+        }, 500)
+
+        // Timeout after 10 seconds to avoid infinite loop
+        setTimeout(() => clearInterval(checkAndSet), 10000)
+      }
+    }
+  }, [searchParams, insufficientOrders.length, materialAlerts.length])
 
   const handleOpenCreate = () => {
     setIsCreateOpen(true)
@@ -548,120 +573,141 @@ export default function PurchaseOrdersPage() {
 
       {/* Create Dialog */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Tạo Yêu Cầu Mua Hàng</DialogTitle>
-            <DialogDescription>
+        <DialogContent size="full" className="max-h-[90vh] overflow-y-auto p-8 sm:p-12 rounded-[2rem] shadow-2xl border-muted/20">
+          <DialogHeader className="mb-8">
+            <DialogTitle className="text-3xl font-extrabold tracking-tight text-primary">Tạo Yêu Cầu Mua Hàng</DialogTitle>
+            <DialogDescription className="text-lg text-muted-foreground mt-2">
               Tạo yêu cầu nhập vật tư mới hoặc nhập cho đơn sản xuất bị thiếu vật liệu.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label>Mức độ ưu tiên</Label>
+          <div className="space-y-10 py-2">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              <div className="space-y-3">
+                <Label className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Mức độ ưu tiên</Label>
                 <Select value={createPriority} onValueChange={(v: any) => setCreatePriority(v)}>
-                  <SelectTrigger>
+                  <SelectTrigger className="h-12 text-base rounded-xl border-2">
                     <SelectValue placeholder="Chọn mức độ" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">Thấp</SelectItem>
-                    <SelectItem value="medium">Trung bình</SelectItem>
-                    <SelectItem value="high">Cao</SelectItem>
+                  <SelectContent className="rounded-xl">
+                    <SelectItem value="low" className="rounded-lg">Thấp</SelectItem>
+                    <SelectItem value="medium" className="rounded-lg">Trung bình</SelectItem>
+                    <SelectItem value="high" className="rounded-lg">Cao</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>Lý do / Ghi chú</Label>
+              <div className="space-y-3">
+                <Label className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Lý do / Ghi chú</Label>
                 <Input
+                  className="h-12 text-lg rounded-xl border-2 px-4"
                   placeholder="VD: Nhập vật tư cho đơn hàng..."
                   value={createReason}
                   onChange={e => setCreateReason(e.target.value)}
                 />
               </div>
-              <div className="space-y-2">
-                <Label>Đơn Sản Xuất (Thiếu vật tư)</Label>
+              <div className="space-y-3">
+                <Label className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Đơn Sản Xuất (Thiếu vật tư)</Label>
                 <Select value={createOrder || "none"} onValueChange={handleCreateOrderChange}>
-                  <SelectTrigger className="bg-background">
+                  <SelectTrigger className="h-12 text-base rounded-xl border-2 bg-background">
                     <SelectValue placeholder="Chọn đơn sản xuất..." />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">-- Không chọn --</SelectItem>
+                  <SelectContent className="rounded-xl">
+                    <SelectItem value="none" className="rounded-lg">-- Không chọn --</SelectItem>
                     {(Array.isArray(insufficientOrders) ? insufficientOrders : []).map(o => (
-                      <SelectItem key={o._id} value={o._id}>{o.orderCode || o._id}</SelectItem>
+                      <SelectItem key={o._id} value={o._id} className="rounded-lg">{o.orderCode || o._id}</SelectItem>
                     ))}
                     {createOrder && !(Array.isArray(insufficientOrders) ? insufficientOrders : []).some(o => o._id === createOrder) && (
-                      <SelectItem value={createOrder}>{createOrder}</SelectItem>
+                      <SelectItem value={createOrder} className="rounded-lg">{createOrder}</SelectItem>
                     )}
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-6">
               <div className="flex justify-between items-center">
-                <Label>Danh sách vật tư</Label>
-                <Button variant="outline" size="sm" onClick={addEmptyCreateItem} className="h-7 text-xs">
-                  <Plus className="h-3 w-3 mr-1" /> Thêm vật tư
+                <Label className="text-xl font-bold text-foreground/90">Danh sách vật tư</Label>
+                <Button variant="outline" size="default" onClick={addEmptyCreateItem} className="h-12 px-8 rounded-xl border-2 hover:bg-primary hover:text-primary-foreground transition-all duration-300">
+                  <Plus className="h-5 w-5 mr-2" /> Thêm vật tư
                 </Button>
               </div>
-              <div className="border rounded-md p-2 max-h-64 overflow-y-auto">
-                <div className="space-y-3">
+              <div className="border-2 rounded-[1.5rem] p-6 bg-muted/10 min-h-[200px] max-h-[400px] overflow-y-auto shadow-inner">
+                <div className="grid grid-cols-1 gap-6">
                   {createItems.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground text-sm">
-                      Chưa có vật tư nào được thêm
+                    <div className="flex flex-col items-center justify-center py-12 text-muted-foreground gap-4">
+                      <PackagePlus className="h-16 w-16 opacity-10" />
+                      <p className="text-lg font-medium">Chưa có vật tư nào được thêm</p>
                     </div>
                   ) : createItems.map((item, index) => (
-                    <div key={index} className="flex items-center justify-between gap-4 p-2 bg-muted/30 rounded">
+                    <div key={index} className="flex flex-col lg:flex-row items-start lg:items-end gap-6 p-6 bg-card hover:bg-accent/5 transition-colors rounded-[1.25rem] border border-border shadow-sm relative group">
                       {item.isManual ? (
-                        <Select
-                          value={item.material._id}
-                          onValueChange={(val) => {
-                            const selectedMat = availableMaterials.find(m => m._id === val)
-                            if (selectedMat) {
-                              const newItems = [...createItems]
-                              newItems[index].material = selectedMat
-                              setCreateItems(newItems)
-                            }
-                          }}
-                        >
-                          <SelectTrigger className="flex-1 min-w-[200px] h-9 bg-background">
-                            <SelectValue placeholder="Chọn vật tư" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {(Array.isArray(availableMaterials) ? availableMaterials : []).map(m => (
-                              <SelectItem key={m._id} value={m._id}>{m.name} ({m.code})</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <div className="w-full lg:flex-1 space-y-3">
+                          <Label className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground">Chọn vật tư cần nhập</Label>
+                          <Select
+                            value={item.material._id}
+                            onValueChange={(val) => {
+                              const selectedMat = availableMaterials.find(m => m._id === val)
+                              if (selectedMat) {
+                                const newItems = [...createItems]
+                                newItems[index].material = selectedMat
+                                setCreateItems(newItems)
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="h-12 text-base rounded-xl border-2 bg-background">
+                              <SelectValue placeholder="Chọn vật tư..." />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl">
+                              {(Array.isArray(availableMaterials) ? availableMaterials : []).map(m => (
+                                <SelectItem key={m._id} value={m._id} className="rounded-lg">{m.name} ({m.code})</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
                       ) : (
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{item.material.name}</p>
-                          <p className="text-xs text-muted-foreground truncate">{item.material.code} · Tồn: {item.material.currentStock || 0}</p>
+                        <div className="w-full lg:flex-1 space-y-2">
+                          <Label className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground">Vật tư yêu cầu</Label>
+                          <div className="p-3 bg-primary/5 rounded-xl border border-primary/10">
+                            <p className="text-lg font-bold text-primary truncate">{item.material.name}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge variant="outline" className="text-[10px] font-mono">{item.material.code}</Badge>
+                              <span className="text-xs text-muted-foreground">Tồn hiện tại: <span className="font-bold text-foreground">{item.material.currentStock || 0}</span></span>
+                            </div>
+                          </div>
                         </div>
                       )}
 
-                      <div className="flex items-center gap-2 shrink-0">
-                        <Input
-                          type="number"
-                          value={item.quantity}
-                          onChange={(e) => {
-                            const newItems = [...createItems]
-                            newItems[index].quantity = e.target.value
-                            setCreateItems(newItems)
-                          }}
-                          className="h-9 w-20 bg-background"
-                          min={1}
-                        />
-                        <span className="text-sm text-muted-foreground w-8 truncate">{item.material?.unit || 'đv'}</span>
-                        <Button variant="ghost" size="sm" onClick={() => {
+                      <div className="w-full lg:w-48 space-y-3">
+                        <Label className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground">Số lượng</Label>
+                        <div className="flex items-center gap-3">
+                          <Input
+                            type="number"
+                            value={item.quantity}
+                            onChange={(e) => {
+                              const newItems = [...createItems]
+                              newItems[index].quantity = e.target.value
+                              setCreateItems(newItems)
+                            }}
+                            className="h-12 text-xl font-bold rounded-xl border-2 bg-background"
+                            min={1}
+                          />
+                          <Badge className="h-12 px-4 rounded-xl text-sm font-bold bg-muted text-muted-foreground border-0 uppercase">{item.material?.unit || 'đv'}</Badge>
+                        </div>
+                      </div>
+
+                      <Button 
+                        type="button" 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => {
                           const newItems = [...createItems]
                           newItems.splice(index, 1)
                           setCreateItems(newItems)
-                        }} className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive">
-                          <XCircle className="h-4 w-4" />
-                        </Button>
-                      </div>
+                        }} 
+                        className="absolute top-4 right-4 lg:static h-12 w-12 rounded-xl text-destructive hover:bg-destructive/10 transition-all opacity-0 group-hover:opacity-100"
+                      >
+                        <XCircle className="h-6 w-6" />
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -669,11 +715,16 @@ export default function PurchaseOrdersPage() {
             </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCreateOpen(false)}>Hủy</Button>
-            <Button onClick={handleCreateSubmit} disabled={isSubmitting}>
-              {isSubmitting ? <Spinner className="mr-2" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
-              Tạo PO
+          <DialogFooter className="gap-4 mt-8">
+            <Button variant="outline" size="lg" onClick={() => setIsCreateOpen(false)} className="h-14 px-10 rounded-2xl text-lg font-semibold border-2">Hủy bỏ</Button>
+            <Button 
+              size="lg"
+              onClick={handleCreateSubmit} 
+              disabled={isSubmitting}
+              className="h-14 px-12 rounded-2xl text-lg font-bold shadow-lg shadow-primary/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
+            >
+              {isSubmitting ? <Spinner className="mr-2" /> : <CheckCircle2 className="mr-2 h-6 w-6" />}
+              Xác nhận tạo yêu cầu
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -8,7 +8,7 @@ import ProductionOrderAssignment from '../models/ProductionOrderAssignment.js';
 import MaterialRequisition from '../models/MaterialRequisition.js';
 import InventoryImportExportSlip from '../models/InventoryImportExportSlip.js';
 import { createNotification } from './notificationService.js';
-import { ORDER_STATUS, ROLES, TRANSACTION_TYPE, REQUISITION_STATUS, INVENTORY_IMPORT_EXPORT_SLIP_TYPE, INVENTORY_IMPORT_EXPORT_SLIP_STATUS, PRIORITY } from '../utils/constants.js'; // Import TRANSACTION_TYPE
+import { ORDER_STATUS, ROLES, TRANSACTION_TYPE, REQUISITION_STATUS, REQUISITION_TYPE, INVENTORY_IMPORT_EXPORT_SLIP_TYPE, INVENTORY_IMPORT_EXPORT_SLIP_STATUS, PRIORITY } from '../utils/constants.js'; // Import TRANSACTION_TYPE
 import { generateSlipNumber } from '../utils/slipHelper.js';
 import mongoose from 'mongoose';
 
@@ -719,13 +719,25 @@ export const assignProductionOrder = async (orderId, assignments) => {
 
     await session.commitTransaction();
 
+    // Notify staff about new assignments
+    for (const assign of newAssignments) {
+      await createNotification({
+        recipient: assign.staff,
+        title: 'Nhiệm vụ sản xuất mới',
+        message: `Bạn được phân công nhiệm vụ mới cho đơn hàng ${order.orderCode}.`,
+        type: 'TASK',
+        priority: 'MEDIUM',
+        metaData: { assignmentId: assign._id, orderId: order._id }
+      });
+    }
+
     // Log final results for debugging
     const summary = Array.from(assignedPerProduct.entries()).map(([pId, qty]) => `${pId}: ${qty}/${productMap.get(pId)}`);
     console.log(`[Production] Order ${orderId} assigned. Summary: ${summary.join(', ')}`);
 
     return {
       success: true,
-      message: 'Assignments created successfully.',
+      message: 'Phân công nhân sự thành công.',
       data: { assignments: newAssignments }
     };
   } catch (error) {
@@ -759,9 +771,19 @@ export const updateProductionOrderStatus = async (orderId, status, notes = '') =
     await order.save({ session });
     await session.commitTransaction();
 
+    // Notify about status change
+    await createNotification({
+      recipient: order.createdBy,
+      title: 'Cập nhật đơn sản xuất',
+      message: `Đơn hàng ${order.orderCode} đã chuyển sang trạng thái: ${status}.`,
+      type: 'ORDER',
+      priority: 'MEDIUM',
+      metaData: { orderId: order._id, status }
+    });
+
     return {
       success: true,
-      message: `Production order status updated to ${status}.`,
+      message: `Đã cập nhật trạng thái đơn hàng sang ${status}.`,
       data: { order }
     };
   } catch (error) {
@@ -808,10 +830,20 @@ export const reassignProductionOrder = async (assignmentId, newStaffId, reason =
 
     await assignment.save({ session });
 
+    // Notify new staff
+    await createNotification({
+      recipient: newStaffId,
+      title: 'Nhiệm vụ sản xuất mới',
+      message: `Bạn được phân công nhiệm vụ mới cho đơn hàng ${assignment.productionOrder}. Số lượng: ${assignment.assignedQuantity}.`,
+      type: 'TASK',
+      priority: 'HIGH',
+      metaData: { assignmentId: assignment._id, orderId: assignment.productionOrder }
+    });
+
     await session.commitTransaction();
     return {
       success: true,
-      message: 'Assignment reassigned successfully.',
+      message: 'Đã thay đổi nhân sự thành công.',
       data: { assignment }
     };
   } catch (error) {
@@ -1000,74 +1032,380 @@ export const createStockInSlip = async (orderIdentifier, managerId, slipData = {
     const totalAmount = 0; // Total amount is 0 initially
 
     const newSlip = new InventoryImportExportSlip({
-      type: INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT,
       slipNumber,
+      type: INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT,
+      status: INVENTORY_IMPORT_EXPORT_SLIP_STATUS.PENDING,
       relatedProductionOrder: orderId,
-      reason: `Nhập kho thành phẩm từ lệnh sản xuất ${order.orderCode}`,
       items: slipItems,
       totalAmount,
-      signatures: {
-        creator: managerId,
-        personInOut: slipData.personInOut || 'Bộ phận sản xuất'
-      },
-      images: slipData.images || [],
-      notes: slipData.notes || '',
-      status: INVENTORY_IMPORT_EXPORT_SLIP_STATUS.PENDING
+      createdBy: managerId,
+      personInOut: slipData.personInOut || 'Bộ phận sản xuất',
+      notes: slipData.notes || `Nhập kho thành phẩm cho đơn hàng ${order.orderCode}`,
     });
 
     await newSlip.save({ session });
+
+    // Link slip to order
+    order.stockInSlip = newSlip._id;
+    await order.save({ session });
+
     await session.commitTransaction();
 
     return {
       success: true,
-      message: 'Internal stock-in slip created. Waiting for Warehouse Manager approval.',
+      message: 'Stock-in slip created successfully.',
       data: { slip: newSlip }
     };
   } catch (error) {
     if (session.inTransaction()) await session.abortTransaction();
-    console.log('[ProductionOrderService] createStockInSlip error:', error);
-    return { success: false, message: error.message, data: null };
+    console.error('[ProductionOrderService] createStockInSlip error:', error);
+    return { status: 'error', message: error.message, data: null };
   } finally {
     session.endSession();
   }
 };
 
 /**
- * Get BOM for a specific production order by ID or orderCode.
+ * Update an existing production order.
+ * Handles re-calculating material requirements and alerts.
  */
-export const getBomByOrderId = async (orderIdentifier) => {
+export const updateProductionOrder = async (orderId, updateData, userId) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
-    const isObjectId = mongoose.Types.ObjectId.isValid(orderIdentifier);
-    const order = isObjectId
-      ? await ProductionOrder.findById(orderIdentifier).lean()
-      : await ProductionOrder.findOne({ orderCode: orderIdentifier }).lean();
+    const order = await ProductionOrder.findById(orderId).session(session);
+    if (!order) throw new Error('Order not found.');
 
-    if (!order) {
-      return {
-        success: false,
-        message: 'Production order not found.',
-        data: null
-      };
+    if ([ORDER_STATUS.COMPLETED, ORDER_STATUS.CANCELLED].includes(order.status)) {
+      throw new Error(`Không thể chỉnh sửa đơn hàng đang ở trạng thái ${order.status}.`);
     }
 
-    const orderId = order._id;
+    const { products: orderProducts, priority, deadline, notes, reason } = updateData;
 
-    const bom = await Bom.findOne({ productionOrder: orderId })
-      .populate('items.material', 'name code unit price')
-      .lean();
+    // 1. Check if quantity update is allowed
+    const isProductionStarted = [
+      ORDER_STATUS.IN_PRODUCTION,
+      ORDER_STATUS.PARTIALLY_COMPLETE,
+      ORDER_STATUS.COMPLETED
+    ].includes(order.status);
 
-    if (!bom) {
-      console.error('BOM not found for this production order:', orderId);
-      return {
-        success: false,
-        message: 'BOM not found for this production order.',
-        data: null
-      };
+    if (orderProducts && isProductionStarted) {
+      throw new Error('Đơn hàng đã bắt đầu sản xuất, không thể thay đổi số lượng sản phẩm. Chỉ có thể cập nhật hạn hoàn thành và ghi chú.');
     }
+
+    // 2. Update basic fields
+    if (priority) order.priority = priority;
+    if (deadline) order.deadline = deadline;
+    if (notes !== undefined) order.notes = notes;
+
+    // Log the update reason
+    const logEntry = `\n[${new Date().toLocaleString()}] Chỉnh sửa bởi ${userId}. Lý do: ${reason}`;
+    order.notes = (order.notes || '') + logEntry;
+
+    // 3. Handle product and material updates
+    if (orderProducts && Array.isArray(orderProducts)) {
+      const productIdentifiers = orderProducts.map(p => p.productId || p.productCode);
+      const products = await Product.find({
+        $or: [
+          { _id: { $in: productIdentifiers.filter(id => mongoose.Types.ObjectId.isValid(id)) } },
+          { code: { $in: productIdentifiers } }
+        ]
+      }).lean();
+
+      const productMap = new Map();
+      products.forEach(p => {
+        productMap.set(p._id.toString(), p);
+        productMap.set(p.code, p);
+      });
+
+      const validatedProducts = [];
+      const newMaterialRequirements = new Map();
+      let totalEstimatedTime = 0;
+
+      for (const item of orderProducts) {
+        const product = productMap.get(item.productId || item.productCode);
+        if (!product) throw new Error(`Sản phẩm ${item.productId || item.productCode} không tồn tại.`);
+
+        validatedProducts.push({
+          product: product._id,
+          quantity: item.quantity,
+          productName: product.name,
+          productCode: product.code
+        });
+
+        totalEstimatedTime += (product.estimatedProductionTime || 0) * item.quantity;
+
+        for (const matCost of product.estimateMaterialCost) {
+          const matId = matCost.material.toString();
+          const needed = matCost.quantity * item.quantity;
+          newMaterialRequirements.set(matId, (newMaterialRequirements.get(matId) || 0) + needed);
+        }
+      }
+
+      // Calculate old requirements from BOM
+      const oldBom = await Bom.findOne({ productionOrder: orderId }).session(session);
+      const oldRequirements = new Map();
+      if (oldBom) {
+        oldBom.items.forEach(item => {
+          oldRequirements.set(item.material.toString(), item.qtyPerUnit);
+        });
+      }
+
+      order.products = validatedProducts;
+      order.estimatedCompletionTime = totalEstimatedTime;
+
+      // 4. Re-check materials and handle Requisitions
+      const materialIds = Array.from(newMaterialRequirements.keys());
+      const materials = await Material.find({ _id: { $in: materialIds } }).session(session);
+      const materialMap = new Map(materials.map(m => [m._id.toString(), m]));
+
+      const shortages = [];
+      let hasInsufficientStock = false;
+
+      for (const [matId, neededQuantity] of newMaterialRequirements.entries()) {
+        const material = materialMap.get(matId);
+        if (!material) throw new Error(`Vật tư ${matId} không tồn tại.`);
+
+        if (material.currentStock < neededQuantity) {
+          hasInsufficientStock = true;
+          shortages.push({
+            material: material._id,
+            materialCode: material.code,
+            materialName: material.name,
+            neededQuantity,
+            availableQuantity: material.currentStock,
+            shortageQuantity: neededQuantity - material.currentStock
+          });
+        }
+      }
+
+      // Only update status if it's not already in production/assigned
+      if (![ORDER_STATUS.ASSIGNED, ORDER_STATUS.IN_PRODUCTION].includes(order.status)) {
+        order.status = hasInsufficientStock ? ORDER_STATUS.INSUFFICIENT_MATERIALS : ORDER_STATUS.READY_TO_ASSIGN;
+      }
+
+      // 5. Update BOM snapshot
+      await Bom.deleteMany({ productionOrder: orderId }).session(session);
+      const bomItems = Array.from(newMaterialRequirements.entries()).map(([matId, needed]) => {
+        const material = materialMap.get(matId);
+        return {
+          material: matId,
+          qtyPerUnit: needed,
+          unit: material ? material.unit : '',
+          note: `Updated Snapshot for order ${order.orderCode}`
+        };
+      });
+      const newBom = new Bom({
+        productionOrder: orderId,
+        items: bomItems,
+        version: 'v1.1-updated',
+        isActive: true
+      });
+      await newBom.save({ session });
+
+      // 6. Update Material Alerts
+      await MaterialAlert.deleteMany({ productionOrder: orderId }).session(session);
+      if (hasInsufficientStock) {
+        const alertPromises = shortages.map(shortage => {
+          const newAlert = new MaterialAlert({
+            ...shortage,
+            productionOrder: orderId,
+            status: 'pending'
+          });
+          return newAlert.save({ session });
+        });
+        await Promise.all(alertPromises);
+      }
+
+      // 7. Handle Material Requisitions Sync
+      const existingRequisitions = await MaterialRequisition.find({
+        productionOrder: orderId,
+        status: { $ne: REQUISITION_STATUS.CANCELLED }
+      }).session(session);
+
+      const pendingReq = existingRequisitions.find(r => r.status === REQUISITION_STATUS.PENDING && r.type === REQUISITION_TYPE.ISSUE);
+      const processedReqs = existingRequisitions.filter(r => r.status !== REQUISITION_STATUS.PENDING || r.type !== REQUISITION_TYPE.ISSUE);
+
+      if (pendingReq) {
+        // If there's a pending requisition, we can replace it
+        await MaterialRequisition.findByIdAndDelete(pendingReq._id).session(session);
+
+        const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        const reqCount = await MaterialRequisition.countDocuments({ createdAt: { $gte: new Date().setHours(0, 0, 0, 0) } }).session(session);
+        const requisitionCode = `REQ-${dateStr}-${(reqCount + 1).toString().padStart(3, '0')}`;
+
+        const newRequisition = new MaterialRequisition({
+          requisitionCode,
+          productionOrder: orderId,
+          createdBy: userId,
+          items: Array.from(newMaterialRequirements.entries()).map(([matId, needed]) => {
+            const material = materialMap.get(matId);
+            return {
+              material: matId,
+              requestedQuantity: needed,
+              actualQuantity: 0
+            };
+          }),
+          status: REQUISITION_STATUS.PENDING,
+          notes: `Tạo lại yêu cầu sau khi chỉnh sửa đơn hàng. Lý do: ${reason}`
+        });
+        await newRequisition.save({ session });
+      } else if (processedReqs.length > 0) {
+        // If requisition is already being processed/approved, check if we need supplementary materials
+        const supplementaryItems = [];
+
+        for (const [matId, neededQuantity] of newMaterialRequirements.entries()) {
+          const oldNeeded = oldRequirements.get(matId) || 0;
+          if (neededQuantity > oldNeeded) {
+            supplementaryItems.push({
+              material: matId,
+              requestedQuantity: neededQuantity - oldNeeded,
+              actualQuantity: 0
+            });
+          }
+        }
+
+        if (supplementaryItems.length > 0) {
+          const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+          const reqCount = await MaterialRequisition.countDocuments({ createdAt: { $gte: new Date().setHours(0, 0, 0, 0) } }).session(session);
+          const requisitionCode = `SUP-${dateStr}-${(reqCount + 1).toString().padStart(3, '0')}`;
+
+          const supRequisition = new MaterialRequisition({
+            requisitionCode,
+            productionOrder: orderId,
+            createdBy: userId,
+            items: supplementaryItems,
+            type: REQUISITION_TYPE.SUPPLEMENTARY,
+            status: REQUISITION_STATUS.PENDING,
+            notes: `Yêu cầu bổ sung vật tư do tăng số lượng đơn hàng. Lý do: ${reason}`
+          });
+          await supRequisition.save({ session });
+        }
+      } else {
+        // No requisitions at all (maybe order was just created and not checked yet)
+        const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        const reqCount = await MaterialRequisition.countDocuments({ createdAt: { $gte: new Date().setHours(0, 0, 0, 0) } }).session(session);
+        const requisitionCode = `REQ-${dateStr}-${(reqCount + 1).toString().padStart(3, '0')}`;
+
+        const newRequisition = new MaterialRequisition({
+          requisitionCode,
+          productionOrder: orderId,
+          createdBy: userId,
+          items: Array.from(newMaterialRequirements.entries()).map(([matId, needed]) => {
+            return {
+              material: matId,
+              requestedQuantity: needed,
+              actualQuantity: 0
+            };
+          }),
+          status: REQUISITION_STATUS.PENDING
+        });
+        await newRequisition.save({ session });
+      }
+    }
+
+    await order.save({ session });
+    await session.commitTransaction();
 
     return {
       success: true,
-      message: 'BOM retrieved successfully.',
+      message: 'Cập nhật đơn sản xuất thành công.',
+      data: { order }
+    };
+  } catch (error) {
+    if (session.inTransaction()) await session.abortTransaction();
+    console.error('[ProductionOrderService] updateProductionOrder error:', error);
+    return { status: 'error', message: error.message, data: null };
+  } finally {
+    session.endSession();
+  }
+};
+
+/**
+ * Cancel a production order.
+ * Cancels assignments and material requisitions.
+ */
+export const cancelProductionOrder = async (orderId, reason, userId) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const order = await ProductionOrder.findById(orderId).session(session);
+    if (!order) throw new Error('Order not found.');
+
+    if (order.status === ORDER_STATUS.COMPLETED) {
+      throw new Error('Cannot cancel a completed order.');
+    }
+
+    // 1. Update Order Status
+    order.status = ORDER_STATUS.CANCELLED;
+    order.notes = (order.notes || '') + `\n[CANCELLED] Reason: ${reason} (by ${userId})`;
+    await order.save({ session });
+
+    // 2. Cancel Assignments
+    const assignments = await ProductionOrderAssignment.find({ productionOrder: orderId }).session(session);
+    for (const assignment of assignments) {
+      if (assignment.status !== ORDER_STATUS.COMPLETED) {
+        // Update staff workload
+        await User.findByIdAndUpdate(assignment.staff, {
+          $inc: { currentAssignedQuantity: -assignment.assignedQuantity }
+        }, { session });
+
+        assignment.status = ORDER_STATUS.CANCELLED;
+        assignment.notes = (assignment.notes || '') + `\n[CANCELLED] Order cancelled: ${reason}`;
+        await assignment.save({ session });
+
+        // Notify staff
+        await createNotification({
+          recipient: assignment.staff,
+          title: 'Nhiệm vụ bị hủy',
+          message: `Nhiệm vụ sản xuất cho đơn ${order.orderCode} đã bị hủy. Lý do: ${reason}`,
+          type: 'TASK',
+          priority: 'MEDIUM',
+          metaData: { orderId, assignmentId: assignment._id }
+        });
+      }
+    }
+
+    // 3. Cancel Requisitions and Alerts
+    await MaterialRequisition.updateMany(
+      { productionOrder: orderId, status: REQUISITION_STATUS.PENDING },
+      { status: 'cancelled' },
+      { session }
+    );
+
+    await MaterialAlert.updateMany(
+      { productionOrder: orderId, status: 'pending' },
+      { status: 'ignored' },
+      { session }
+    );
+
+    await session.commitTransaction();
+
+    return {
+      success: true,
+      message: 'Production order cancelled successfully.',
+      data: { order }
+    };
+  } catch (error) {
+    if (session.inTransaction()) await session.abortTransaction();
+    console.error('[ProductionOrderService] cancelProductionOrder error:', error);
+    return { status: 'error', message: error.message, data: null };
+  } finally {
+    session.endSession();
+  }
+};
+
+/**
+ * Get BOM (Material Snapshot) for a specific order.
+ */
+export const getBomByOrderId = async (orderId) => {
+  try {
+    const bom = await Bom.findOne({ productionOrder: orderId }).populate('items.material').lean();
+    if (!bom) return { success: false, message: 'BOM snapshot not found for this order.', data: null };
+
+    return {
+      success: true,
+      message: 'BOM retrieved.',
       data: bom
     };
   } catch (error) {

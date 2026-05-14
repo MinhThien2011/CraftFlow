@@ -1,14 +1,12 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from "react"
-import { AlertTriangle, Bell, Package, Search, Download, AlertCircle, CheckCircle2, Plus, Loader2, X, ChevronLeft, ChevronRight } from "lucide-react"
+import { AlertTriangle, Bell, Package, Search, Download, ChevronLeft, ChevronRight } from "lucide-react"
 import { AppShell } from "@/components/app-shell"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -19,53 +17,16 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs"
-import {
-  Dialog, DialogContent, DialogDescription,
-  DialogFooter, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog"
-import {
-  Select, SelectContent, SelectItem,
-  SelectTrigger, SelectValue,
-} from "@/components/ui/select"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import { materialApi } from "@/api/material.api"
 import { productionApi } from "@/api/production.api"
 import { purchaseOrderApi } from "@/api/purchaseOrder.api"
-import { toast } from "sonner"
-import { CurrencyDisplay } from "@/components/ui/currency-display"
 import { PermissionGuard, withPermission } from "@/components/guards/permission-guard"
-
-// ── Types ─────────────────────────────────────────────────────
-interface Material {
-  _id: string
-  name: string
-  code: string
-  unit: string
-  currentStock: number
-  threshold: number
-  price: number
-  supplier?: { name: string }
-  alertId?: string
-  alertType?: 'low_stock' | 'order_requirement'
-  productionOrder?: any
-  shortageQuantity?: number
-}
-
-interface RestockDraft {
-  material: Material
-  quantity: string
-  note: string
-}
-
-interface ThresholdDraft {
-  material: Material
-  threshold: string
-}
-
-// ── Components ────────────────────────────────────────────────
-const FieldError = ({ msg }: { msg?: string }) =>
-  msg ? <p className="text-xs text-destructive mt-1">{msg}</p> : null
+import { Material } from "./types"
+import { RestockDialog } from "@/components/dialog/restock-dialog"
+import { ThresholdDialog } from "@/components/dialog/threshold-dialog"
+import { BatchRestockDialog } from "@/components/dialog/batch-restock-dialog"
+import { toast } from "sonner"
 
 const exportAlertsCSV = (data: Material[]) => {
   const headers = "Tên,Mã,Loại,Tồn kho,Đơn vị\n"
@@ -108,17 +69,11 @@ function AlertsPage() {
   const [allMaterials, setAllMaterials] = useState<Material[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  // restock modal
-  const [restockItem, setRestockItem] = useState<RestockDraft | null>(null)
-  const [restockOpen, setRestockOpen] = useState(false)
-  const [restockError, setRestockError] = useState('')
-  const [restockDone, setRestockDone] = useState(false)
-
-  // threshold modal
-  const [thresholdItem, setThresholdItem] = useState<ThresholdDraft | null>(null)
-  const [thresholdOpen, setThresholdOpen] = useState(false)
-  const [thresholdError, setThresholdError] = useState('')
-  const [thresholdDone, setThresholdDone] = useState(false)
+  // Modals state
+  const [selectedMaterial, setSelectedMaterial] = useState<Material | null>(null)
+  const [isRestockOpen, setIsRestockOpen] = useState(false)
+  const [isThresholdOpen, setIsThresholdOpen] = useState(false)
+  const [isBatchOpen, setIsBatchOpen] = useState(false)
 
   // multi-select
   const [selectedAlertIds, setSelectedAlertIds] = useState<Set<string>>(new Set())
@@ -127,29 +82,38 @@ function AlertsPage() {
   const [page, setPage] = useState(1)
   const ITEMS_PER_PAGE = 10
 
-  // batch restock modal
-  const [batchRestockOpen, setBatchRestockOpen] = useState(false)
-  const [batchItems, setBatchItems] = useState<{ material: Material, quantity: string, isManual?: boolean }[]>([])
-  const [batchNote, setBatchNote] = useState('')
-  const [batchPriority, setBatchPriority] = useState<'low' | 'medium' | 'high'>('medium')
-  const [batchOrder, setBatchOrder] = useState<string>('')
-
-  const [availableMaterials, setAvailableMaterials] = useState<any[]>([])
-  const [insufficientOrders, setInsufficientOrders] = useState<any[]>([])
-
   // ── Fetch ──────────────────────────────────────────────────
   const fetchLowStock = useCallback(async (search?: string) => {
     setIsLoading(true)
     try {
-      // Gọi cả 2 API để lấy đủ dữ liệu cho 2 tab
-      const [inventoryRes, ordersRes] = await Promise.all([
+      // Gọi các API để lấy đủ dữ liệu: Tồn kho thấp, Cảnh báo đơn hàng, và Đơn mua hàng đang xử lý
+      const [inventoryRes, ordersRes, poPendingRes, poAcceptedRes] = await Promise.all([
         materialApi.getLowStockMaterials({ search, limit: 100 }).catch(e => { console.error(e); return { success: false }; }),
         productionApi.getMaterialAlerts({
-          status: statusFilter === 'All' ? 'all' : (statusFilter === 'Critical' ? 'critical' : 'low_stock'),
+          status: 'pending',
           limit: 100,
           page: 1
-        }).catch(e => { console.error(e); return { success: false }; })
+        }).catch(e => { console.error(e); return { success: false }; }),
+        purchaseOrderApi.getAll({ status: 'pending' }).catch(e => { console.error(e); return { success: false }; }),
+        purchaseOrderApi.getAll({ status: 'accepted' }).catch(e => { console.error(e); return { success: false }; })
       ])
+
+      // Tập hợp các ID vật tư đã có đơn mua hàng đang chờ xử lý hoặc đã duyệt
+      const poItems = new Set<string>();
+      const processPOs = (res: any) => {
+        if (res && (res.success || res.status === 'success')) {
+          const pos = Array.isArray(res.data) ? res.data : (res.data?.items || []);
+          pos.forEach((po: any) => {
+            po.purchaseOrderItems?.forEach((item: any) => {
+              const matId = item.material?._id || item.material;
+              if (matId) poItems.add(matId.toString());
+            });
+          });
+        }
+      };
+
+      processPOs(poPendingRes);
+      processPOs(poAcceptedRes);
 
       let mappedInventory: Material[] = []
       let mappedOrders: Material[] = []
@@ -158,35 +122,45 @@ function AlertsPage() {
       const invRes: any = inventoryRes;
       if (invRes.success || invRes.status === 'success') {
         const materials = invRes.data?.materials || invRes.data?.items || invRes.data || [];
-        mappedInventory = materials.map((m: any) => ({
-          ...m,
-          alertType: 'low_stock',
-          alertId: m._id // Sử dụng _id của material làm alertId cho tab này
-        }))
+        mappedInventory = materials
+          .filter((m: any) => !poItems.has(m._id?.toString())) // Lọc bỏ vật tư đã có đơn mua hàng (PO)
+          .map((m: any) => ({
+            ...m,
+            alertType: 'low_stock',
+            alertId: m._id
+          }))
       }
 
       // 2. Map dữ liệu Thiếu cho đơn hàng (từ productionApi)
       const ordRes: any = ordersRes;
       if ((ordRes.success || ordRes.status === 'success') && ordRes.data?.alerts) {
-        mappedOrders = ordRes.data.alerts.map((alert: any) => {
-          const materialInfo = alert.material && typeof alert.material === 'object' ? alert.material : {};
-          return {
-            ...materialInfo,
-            _id: materialInfo._id || (typeof alert.material === 'string' ? alert.material : alert._id),
-            name: materialInfo.name || alert.materialName || "Vật tư không xác định",
-            code: materialInfo.code || alert.materialCode || "N/A",
-            unit: materialInfo.unit || alert.unit || "đv",
-            currentStock: materialInfo.currentStock ?? alert.availableQuantity ?? 0,
-            threshold: materialInfo.threshold ?? alert.neededQuantity ?? 0,
-            price: materialInfo.price || alert.price || 0,
-            alertId: alert._id,
-            alertType: alert.productionOrder ? 'order_requirement' : 'low_stock',
-            productionOrder: alert.productionOrder,
-            alertStatus: alert.status,
-            shortageQuantity: alert.shortageQuantity || 0,
-            neededQuantity: alert.neededQuantity || 0
-          }
-        }).filter((m: any) => m.alertType === 'order_requirement') // Lọc chỉ giữ lại alert của đơn hàng
+        mappedOrders = ordRes.data.alerts
+          .filter((alert: any) => !alert.purchaseOrder) // Lọc bỏ các cảnh báo đã được liên kết với PO
+          .filter((alert: any) => {
+            // Lọc thêm: Nếu vật tư trong alert này đã nằm trong 1 PO khác (dù chưa link alertId)
+            const matId = alert.material?._id || alert.material;
+            return !poItems.has(matId?.toString());
+          })
+          .map((alert: any) => {
+            const materialInfo = alert.material && typeof alert.material === 'object' ? alert.material : {};
+            return {
+              ...materialInfo,
+              _id: materialInfo._id || (typeof alert.material === 'string' ? alert.material : alert._id),
+              name: materialInfo.name || alert.materialName || "Vật tư không xác định",
+              code: materialInfo.code || alert.materialCode || "N/A",
+              unit: materialInfo.unit || alert.unit || "đv",
+              currentStock: materialInfo.currentStock ?? alert.availableQuantity ?? 0,
+              threshold: materialInfo.threshold ?? alert.neededQuantity ?? 0,
+              price: materialInfo.price || alert.price || 0,
+              alertId: alert._id,
+              alertType: alert.productionOrder ? 'order_requirement' : 'low_stock',
+              productionOrder: alert.productionOrder,
+              alertStatus: alert.status,
+              shortageQuantity: alert.shortageQuantity || 0,
+              neededQuantity: alert.neededQuantity || 0
+            }
+          })
+          .filter((m: any) => m.alertType === 'order_requirement')
       }
 
       const combined = [...mappedInventory, ...mappedOrders]
@@ -203,7 +177,7 @@ function AlertsPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [statusFilter])
+  }, [statusFilter]) // Keep statusFilter if needed, though search is passed as arg
 
   useEffect(() => {
     const timer = setTimeout(() => fetchLowStock(searchQuery), 400)
@@ -283,196 +257,19 @@ function AlertsPage() {
 
   // ── Restock ────────────────────────────────────────────────
   const openRestock = (m: Material) => {
-    setRestockItem({ material: m, quantity: '', note: '' })
-    setRestockError('')
-    setRestockDone(false)
-    setRestockOpen(true)
-  }
-
-  const handleRestock = async () => {
-    if (!restockItem) return
-    const qty = Number(restockItem.quantity)
-    if (!restockItem.quantity || qty <= 0) { setRestockError('Vui lòng nhập số lượng > 0'); return }
-
-    setIsLoading(true)
-    try {
-      const material = restockItem.material as any
-
-      // Chuẩn bị dữ liệu theo cấu trúc Backend (backend/validations/purchaseOrderValidation.js)
-      const payload = {
-        orderReason: restockItem.note || `Yêu cầu nhập hàng cho ${material.name} (${material.alertType === 'order_requirement' ? 'Thiếu vật tư cho đơn hàng' : 'Tồn kho thấp'})`,
-        priority: (material.alertType === 'order_requirement' ? 'high' : 'medium') as 'high' | 'medium' | 'low',
-        productionOrder: material.productionOrder?._id || (typeof material.productionOrder === 'string' ? material.productionOrder : null),
-        ...(material.alertType === 'order_requirement' && { materialAlert: material.alertId }),
-        purchaseOrderItems: [
-          {
-            material: material._id,
-            quantity: qty,
-            materialCode: material.code,
-            unit: material.unit,
-            priceAtTimePurchase: material.price || 0,
-            totalPriceAtTimePurchase: (material.price || 0) * qty
-          }
-        ]
-      }
-
-      const response = await purchaseOrderApi.create(payload)
-      const res: any = response;
-
-      if (res.success || res.status === 'success') {
-        toast.success(`Đã tạo yêu cầu mua ${qty} ${material.unit} ${material.name} thành công`)
-        setRestockDone(true)
-        // Refresh danh sách để cập nhật trạng thái
-        setTimeout(() => fetchLowStock(searchQuery), 1000)
-      } else {
-        throw new Error(res.message || "Không thể tạo yêu cầu mua hàng")
-      }
-    } catch (error: any) {
-      console.error("Create Purchase Order error:", error)
-      toast.error(error.response?.data?.message || error.message || "Không thể tạo yêu cầu mua hàng")
-    } finally {
-      setIsLoading(false)
-    }
+    setSelectedMaterial(m)
+    setIsRestockOpen(true)
   }
 
   // ── Batch Restock ──────────────────────────────────────────
-  const fetchAvailableMaterials = async () => {
-    if (availableMaterials.length > 0) return
-    try {
-      let res: any
-      if (typeof materialApi.getMaterials === 'function') res = await materialApi.getMaterials({ limit: 1000 })
-      else if (typeof (materialApi as any).getMaterials === 'function') res = await (materialApi as any).getMaterials({ limit: 1000 })
-
-      if (res && (res.success || res.status === 'success')) {
-        const materialsData = res.data?.materials || res.data?.items || res.data
-        setAvailableMaterials(Array.isArray(materialsData) ? materialsData : [])
-      }
-    } catch (e) { console.error("Fetch materials error:", e) }
-  }
-
-  const fetchInsufficientOrders = async () => {
-    if (insufficientOrders.length > 0) return
-    try {
-      let res: any
-      if (typeof (productionApi as any).getAll === 'function') res = await (productionApi as any).getAll({ status: 'insufficient_materials', limit: 100 })
-      else if (typeof (productionApi as any).getOrders === 'function') res = await (productionApi as any).getOrders({ status: 'insufficient_materials', limit: 100 })
-      
-      if (res && (res.success || res.status === 'success')) {
-        const ordersData = res.data?.orders || res.data?.items || res.data
-        setInsufficientOrders(Array.isArray(ordersData) ? ordersData : [])
-      }
-    } catch (e) { console.error("Fetch orders error:", e) }
-  }
-
   const openBatchRestock = () => {
-    const selected = allMaterials.filter(m => selectedAlertIds.has(m.alertId!))
-    const items = selected.map(m => {
-      const neededQty = m.alertType === 'order_requirement'
-        ? (m.shortageQuantity || (m.threshold - m.currentStock) || 1)
-        : (Math.max(0, m.threshold - m.currentStock) || 1)
-      return { material: m, quantity: String(neededQty) }
-    })
-    setBatchItems(items)
-
-    // Nếu tất cả alert đều thuộc cùng 1 Production Order thì gán Production Order mặc định
-    const orderIds = selected.map(m => m.productionOrder?._id || m.productionOrder).filter(Boolean)
-    const uniqueOrders = Array.from(new Set(orderIds))
-    if (uniqueOrders.length === 1) {
-      setBatchOrder(uniqueOrders[0])
-      setBatchPriority('high')
-    } else {
-      setBatchOrder('')
-      setBatchPriority('medium')
-    }
-
-    setBatchNote('')
-    setRestockError('')
-    setRestockDone(false)
-    fetchAvailableMaterials()
-    fetchInsufficientOrders()
-    setBatchRestockOpen(true)
-  }
-
-  const addEmptyBatchItem = () => {
-    setBatchItems([...batchItems, {
-      material: { _id: '', name: 'Chọn vật tư...', code: '', unit: 'đv', currentStock: 0, threshold: 0, price: 0 },
-      quantity: '1',
-      isManual: true
-    }])
-  }
-
-  const handleBatchRestock = async () => {
-    const validItems = batchItems.filter(i => i.material._id)
-    if (validItems.length === 0) { setRestockError('Vui lòng thêm ít nhất 1 vật tư'); return }
-    if (validItems.some(i => !i.quantity || Number(i.quantity) <= 0)) {
-      setRestockError('Vui lòng nhập số lượng hợp lệ cho tất cả vật tư')
-      return
-    }
-
-    setIsLoading(true)
-    try {
-      const purchaseOrderItems = validItems.map(item => ({
-        material: item.material._id,
-        quantity: Number(item.quantity),
-        materialCode: item.material.code,
-        unit: item.material.unit,
-        priceAtTimePurchase: item.material.price || 0,
-        totalPriceAtTimePurchase: (item.material.price || 0) * Number(item.quantity)
-      }))
-
-      const payload: any = {
-        orderReason: batchNote || `Yêu cầu nhập hàng cho ${purchaseOrderItems.length} vật tư`,
-        priority: batchPriority,
-        purchaseOrderItems,
-        ...(batchOrder && { productionOrder: batchOrder })
-      }
-
-      const alertIds = validItems
-        .filter(i => i.material.alertType === 'order_requirement')
-        .map(i => i.material.alertId)
-        .filter(Boolean)
-      if (alertIds.length > 0) {
-        payload.materialAlert = alertIds[0] // Để tương thích API cũ
-        if (alertIds.length > 1) payload.materialAlerts = alertIds // Gửi thêm list
-      }
-
-      const response = await purchaseOrderApi.create(payload)
-      const res: any = response;
-
-      if (res.success || res.status === 'success') {
-        toast.success(`Đã tạo yêu cầu mua hàng thành công`)
-        setRestockDone(true)
-        setSelectedAlertIds(new Set())
-        setTimeout(() => fetchLowStock(searchQuery), 1000)
-      } else {
-        throw new Error(res.message || "Không thể tạo yêu cầu mua hàng")
-      }
-    } catch (error: any) {
-      console.error("Create Purchase Order error:", error)
-      toast.error(error.response?.data?.message || error.message || "Không thể tạo yêu cầu mua hàng")
-    } finally {
-      setIsLoading(false)
-    }
+    setIsBatchOpen(true)
   }
 
   // ── Threshold ──────────────────────────────────────────────
   const openThreshold = (m: Material) => {
-    setThresholdItem({ material: m, threshold: String(m.threshold ?? '') })
-    setThresholdError('')
-    setThresholdDone(false)
-    setThresholdOpen(true)
-  }
-
-  const handleThreshold = () => {
-    if (!thresholdItem) return
-    const val = Number(thresholdItem.threshold)
-    if (!thresholdItem.threshold || val < 0) { setThresholdError('Vui lòng nhập ngưỡng hợp lệ'); return }
-    // cập nhật local
-    setAllMaterials((prev) =>
-      prev.map((m) => m._id === thresholdItem.material._id ? { ...m, threshold: val } : m)
-    )
-    // TODO: gọi API cập nhật threshold
-    setThresholdDone(true)
+    setSelectedMaterial(m)
+    setIsThresholdOpen(true)
   }
 
   return (
@@ -735,291 +532,42 @@ function AlertsPage() {
         </Tabs>
       </div>
 
-      {/* ── Restock Modal ── */}
-      <Dialog open={restockOpen} onOpenChange={(o) => { setRestockOpen(o); if (!o) setRestockDone(false) }}>
-        <DialogContent className="sm:max-w-md w-[95vw] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Nhập hàng – {restockItem?.material.name}</DialogTitle>
-            <DialogDescription>
-              Tồn hiện tại: <strong>{restockItem?.material.currentStock} {restockItem?.material.unit}</strong> · Mức tối thiểu: <strong>{restockItem?.material.threshold} {restockItem?.material.unit}</strong>
-            </DialogDescription>
-          </DialogHeader>
+      {/* Modals */}
+      {selectedMaterial && (
+        <>
+          <RestockDialog
+            open={isRestockOpen}
+            onOpenChange={setIsRestockOpen}
+            material={selectedMaterial}
+            onSuccess={() => {
+              fetchLowStock(searchQuery)
+              setSelectedAlertIds(new Set())
+            }}
+          />
+          <ThresholdDialog
+            open={isThresholdOpen}
+            onOpenChange={setIsThresholdOpen}
+            material={selectedMaterial}
+            onSuccess={(newThreshold) => {
+              // Update local state for immediate feedback
+              setAllMaterials(prev => prev.map(m =>
+                m._id === selectedMaterial._id ? { ...m, threshold: newThreshold } : m
+              ))
+              toast.success("Đã cập nhật ngưỡng cảnh báo")
+            }}
+          />
+        </>
+      )}
 
-          {restockDone ? (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm">
-              <CheckCircle2 className="size-4 shrink-0" />
-              Đã tạo yêu cầu nhập hàng thành công
-            </div>
-          ) : (
-            <div className="space-y-4 py-2">
-              {/* Gợi ý số lượng cần nhập */}
-              {restockItem && restockItem.material.threshold > restockItem.material.currentStock && (
-                <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-700">
-                  Gợi ý: cần nhập thêm ít nhất{' '}
-                  <strong>{restockItem.material.threshold - restockItem.material.currentStock} {restockItem.material.unit}</strong>{' '}
-                  để đạt mức tối thiểu
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <Label>Số lượng cần nhập <span className="text-destructive">*</span></Label>
-                <div className="flex gap-2 items-center">
-                  <Input
-                    type="number"
-                    placeholder="Nhập số lượng..."
-                    value={restockItem?.quantity ?? ''}
-                    onChange={(e) => {
-                      setRestockItem((prev) => prev ? { ...prev, quantity: e.target.value } : prev)
-                      setRestockError('')
-                    }}
-                    className={restockError ? 'border-destructive' : ''}
-                    min={1}
-                  />
-                  <span className="text-sm text-muted-foreground shrink-0">{restockItem?.material.unit}</span>
-                </div>
-                <FieldError msg={restockError} />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Ghi chú</Label>
-                <Textarea
-                  placeholder="Ghi chú thêm cho yêu cầu nhập hàng..."
-                  rows={2}
-                  value={restockItem?.note ?? ''}
-                  onChange={(e) => setRestockItem((prev) => prev ? { ...prev, note: e.target.value } : prev)}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 text-sm p-3 bg-muted/50 rounded-lg">
-                <div><span className="text-muted-foreground">Nhà cung cấp:</span> <strong>{restockItem?.material.supplier?.name}</strong></div>
-                <div><span className="text-muted-foreground">Đơn giá:</span> <strong><CurrencyDisplay value={restockItem?.material.price ?? 0} /></strong></div>
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            {restockDone ? (
-              <Button variant="outline" onClick={() => setRestockOpen(false)}>Đóng</Button>
-            ) : (
-              <>
-                <Button variant="outline" onClick={() => setRestockOpen(false)}>Hủy</Button>
-                <Button onClick={handleRestock}>Tạo yêu cầu nhập</Button>
-              </>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Threshold Modal ── */}
-      <Dialog open={thresholdOpen} onOpenChange={(o) => { setThresholdOpen(o); if (!o) setThresholdDone(false) }}>
-        <DialogContent className="sm:max-w-sm w-[95vw] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Thiết lập ngưỡng cảnh báo</DialogTitle>
-            <DialogDescription>
-              {thresholdItem?.material.name} · Ngưỡng hiện tại: <strong>{thresholdItem?.material.threshold} {thresholdItem?.material.unit}</strong>
-            </DialogDescription>
-          </DialogHeader>
-
-          {thresholdDone ? (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm">
-              <CheckCircle2 className="size-4 shrink-0" />
-              Đã cập nhật ngưỡng cảnh báo thành công
-            </div>
-          ) : (
-            <div className="space-y-4 py-2">
-              <div className="space-y-2">
-                <Label>Ngưỡng cảnh báo mới <span className="text-destructive">*</span></Label>
-                <div className="flex gap-2 items-center">
-                  <Input
-                    type="number"
-                    placeholder="Nhập ngưỡng..."
-                    value={thresholdItem?.threshold ?? ''}
-                    onChange={(e) => {
-                      setThresholdItem((prev) => prev ? { ...prev, threshold: e.target.value } : prev)
-                      setThresholdError('')
-                    }}
-                    className={thresholdError ? 'border-destructive' : ''}
-                    min={0}
-                  />
-                  <span className="text-sm text-muted-foreground shrink-0">{thresholdItem?.material.unit}</span>
-                </div>
-                <FieldError msg={thresholdError} />
-                <p className="text-xs text-muted-foreground">
-                  Hệ thống sẽ cảnh báo khi tồn kho xuống dưới mức này
-                </p>
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            {thresholdDone ? (
-              <Button variant="outline" onClick={() => setThresholdOpen(false)}>Đóng</Button>
-            ) : (
-              <>
-                <Button variant="outline" onClick={() => setThresholdOpen(false)}>Hủy</Button>
-                <Button onClick={handleThreshold}>Lưu ngưỡng</Button>
-              </>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Batch Restock Modal ── */}
-      <Dialog open={batchRestockOpen} onOpenChange={(o) => { setBatchRestockOpen(o); if (!o) setRestockDone(false) }}>
-        <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Tạo Yêu Cầu Nhập Hàng Đã Chọn</DialogTitle>
-            <DialogDescription>
-              Đang tạo Purchase Order cho {batchItems.length} cảnh báo vật tư.
-            </DialogDescription>
-          </DialogHeader>
-
-          {restockDone ? (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm">
-              <CheckCircle2 className="size-4 shrink-0" />
-              Đã tạo yêu cầu mua hàng thành công
-            </div>
-          ) : (
-            <div className="space-y-4 py-2">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label>Mức độ ưu tiên</Label>
-                  <Select value={batchPriority} onValueChange={(v: any) => setBatchPriority(v)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Chọn mức độ" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="low">Thấp</SelectItem>
-                      <SelectItem value="medium">Trung bình</SelectItem>
-                      <SelectItem value="high">Cao</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Lý do / Ghi chú</Label>
-                  <Input
-                    placeholder="VD: Nhập vật tư cho đơn hàng..."
-                    value={batchNote}
-                    onChange={e => setBatchNote(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Mã Đơn Sản Xuất (Tùy chọn)</Label>
-                  <Select value={batchOrder || "none"} onValueChange={(val) => {
-                    const newVal = val === "none" ? "" : val;
-                    setBatchOrder(newVal);
-                    if (newVal) {
-                      // Loại bỏ các cảnh báo đã pick thuộc về ĐƠN SẢN XUẤT KHÁC ra khỏi danh sách
-                      // để đảm bảo dữ liệu trong PO luôn sạch sẽ, không bị lẫn lộn vật tư của 2 đơn khác nhau.
-                      setBatchItems(prev => prev.filter(item => {
-                        if (item.isManual) return true;
-                        const itemOrder = item.material.productionOrder?._id || item.material.productionOrder;
-                        return !itemOrder || itemOrder === newVal;
-                      }));
-                    }
-                  }}>
-                    <SelectTrigger className="bg-background">
-                      <SelectValue placeholder="Chọn đơn sản xuất..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">-- Không chọn --</SelectItem>
-                      {(Array.isArray(insufficientOrders) ? insufficientOrders : []).map(o => (
-                        <SelectItem key={o._id} value={o._id}>{o.orderCode || o._id}</SelectItem>
-                      ))}
-                      {/* Hiển thị mã hiện tại nếu nó không nằm trong danh sách (để không bị mất label) */}
-                      {batchOrder && !(Array.isArray(insufficientOrders) ? insufficientOrders : []).some(o => o._id === batchOrder) && (
-                        <SelectItem value={batchOrder}>{batchOrder}</SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <Label>Danh sách vật tư</Label>
-                  <Button variant="outline" size="sm" onClick={addEmptyBatchItem} className="h-7 text-xs">
-                    <Plus className="h-3 w-3 mr-1" /> Thêm vật tư
-                  </Button>
-                </div>
-                <ScrollArea className="h-64 border rounded-md p-2">
-                  <div className="space-y-3">
-                    {batchItems.map((item, index) => (
-                      <div key={index} className="flex items-center justify-between gap-4 p-2 bg-muted/30 rounded">
-                        {item.isManual ? (
-                          <Select
-                            value={item.material._id}
-                            onValueChange={(val) => {
-                              const selectedMat = availableMaterials.find(m => m._id === val)
-                              if (selectedMat) {
-                                const newItems = [...batchItems]
-                                newItems[index].material = { ...selectedMat, alertId: undefined }
-                                setBatchItems(newItems)
-                              }
-                            }}
-                          >
-                            <SelectTrigger className="flex-1 min-w-[200px] h-9 bg-background">
-                              <SelectValue placeholder="Chọn vật tư" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {(Array.isArray(availableMaterials) ? availableMaterials : []).map(m => (
-                                <SelectItem key={m._id} value={m._id}>{m.name} ({m.code})</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <div className="flex-1 truncate">
-                            <p className="text-sm font-medium truncate">{item.material.name}</p>
-                            <p className="text-xs text-muted-foreground">{item.material.code} · Tồn: {item.material.currentStock}</p>
-                          </div>
-                        )}
-
-                        <div className="flex items-center gap-2 shrink-0">
-                          <Input
-                            type="number"
-                            value={item.quantity}
-                            onChange={(e) => {
-                              const newItems = [...batchItems]
-                              newItems[index].quantity = e.target.value
-                              setBatchItems(newItems)
-                              setRestockError('')
-                            }}
-                            className="h-9 w-20 bg-background"
-                            min={1}
-                          />
-                          <span className="text-sm text-muted-foreground w-8 truncate">{item.material.unit}</span>
-                          <Button variant="ghost" size="sm" onClick={() => {
-                            const newItems = [...batchItems]
-                            newItems.splice(index, 1)
-                            setBatchItems(newItems)
-                          }} className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive">
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-                <FieldError msg={restockError} />
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            {restockDone ? (
-              <Button variant="outline" onClick={() => setBatchRestockOpen(false)}>Đóng</Button>
-            ) : (
-              <>
-                <Button variant="outline" onClick={() => setBatchRestockOpen(false)}>Hủy</Button>
-                <Button onClick={handleBatchRestock} disabled={isLoading}>
-                  {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Tạo yêu cầu
-                </Button>
-              </>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <BatchRestockDialog
+        open={isBatchOpen}
+        onOpenChange={setIsBatchOpen}
+        selectedMaterials={allMaterials.filter(m => selectedAlertIds.has(m.alertId!))}
+        onSuccess={() => {
+          fetchLowStock(searchQuery)
+          setSelectedAlertIds(new Set())
+        }}
+      />
     </AppShell>
   )
 }

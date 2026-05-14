@@ -145,5 +145,25 @@ export const productionApi = {
      */
     createStockInSlip: async (id: string, data: { notes?: string, personInOut?: string, images?: string[] } = {}): Promise<ApiResponse<any>> => {
         return axiosInstance.post(`/production/${id}/stock-in`, data);
+    },
+
+    /**
+     * Update an existing production order
+     */
+    updateOrder: async (id: string, orderData: {
+        products?: Array<{ productId?: string; productCode?: string; quantity: number }>;
+        priority?: string;
+        deadline?: string;
+        notes?: string;
+        reason: string;
+    }): Promise<ApiResponse<ProductionOrder>> => {
+        return axiosInstance.put(`/production/${id}`, orderData);
+    },
+
+    /**
+     * Cancel a production order
+     */
+    cancelOrder: async (id: string, reason: string): Promise<ApiResponse<any>> => {
+        return axiosInstance.delete(`/production/${id}`, { data: { reason } });
     }
 };

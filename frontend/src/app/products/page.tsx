@@ -1,45 +1,21 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import { useState, useEffect, useCallback, useMemo } from "react"
 import {
   Boxes,
   Plus,
   Search,
-  ChevronDown,
-  ChevronRight,
   Package,
   Filter,
   RefreshCw,
-  MoreVertical,
-  Edit,
-  Trash2,
-  ExternalLink,
 } from "lucide-react"
 
 import { AppShell } from "@/components/app-shell"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -47,65 +23,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { productCategories } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
-import { CurrencyDisplay } from "@/components/ui/currency-display"
 import { productApi } from "@/api/product.api"
 import type { Product, PaginationData } from "@/lib/types"
 import { toast } from "sonner"
-import { Spinner } from "@/components/ui/spinner"
 import { useAuth } from "@/features/auth/hooks/use-auth"
 
 type TabType = "products" | "bom"
 
-function ProductSkeleton() {
-  return (
-    <TableRow>
-      <TableCell><div className="h-12 w-48 animate-pulse rounded bg-muted" /></TableCell>
-      <TableCell><div className="h-6 w-24 animate-pulse rounded bg-muted" /></TableCell>
-      <TableCell><div className="ml-auto h-6 w-20 animate-pulse rounded bg-muted" /></TableCell>
-      <TableCell><div className="ml-auto h-6 w-20 animate-pulse rounded bg-muted" /></TableCell>
-      <TableCell><div className="h-6 w-24 animate-pulse rounded bg-muted" /></TableCell>
-      <TableCell><div className="h-8 w-8 animate-pulse rounded bg-muted" /></TableCell>
-    </TableRow>
-  )
-}
-
-function BOMSkeleton() {
-  return (
-    <Card className="animate-pulse border-none shadow-sm">
-      <div className="p-4 flex items-center gap-4">
-        <div className="h-16 w-16 rounded-xl bg-muted" />
-        <div className="flex-1 space-y-2">
-          <div className="h-4 w-1/3 bg-muted rounded" />
-          <div className="h-3 w-1/4 bg-muted rounded" />
-        </div>
-        <div className="h-10 w-32 bg-muted rounded-xl" />
-      </div>
-    </Card>
-  )
-}
-
-const calculateBaseCost = (product: any) => {
-  if (product.baseCost && product.baseCost > 0) return product.baseCost;
-  if (!product.estimateMaterialCost || !Array.isArray(product.estimateMaterialCost)) return 0;
-  return product.estimateMaterialCost.reduce((acc: number, item: any) => {
-    const qty = item.quantity ?? item.qtyPerUnit ?? item.amount ?? 0;
-    const price = item.priceAtTime ?? item.material?.price ?? 0;
-    return acc + (qty * price);
-  }, 0);
-}
+// Lazy load sub-components để giảm tải bundle đầu tiên
+const ProductTable = dynamic(() => import('@/components/product/product-table').then(m => m.ProductTable), {
+  ssr: false, loading: () => <div className="p-8 text-center text-muted-foreground animate-pulse">Đang tải danh sách...</div>
+})
+const BOMList = dynamic(() => import('@/components/product/bom-list').then(m => m.BOMList), {
+  ssr: false, loading: () => <div className="p-8 text-center text-muted-foreground animate-pulse">Đang tải định mức...</div>
+})
+const CreateBomDialog = dynamic(() => import('@/components/product/create-bom-dialog').then(m => m.CreateBomDialog), {
+  ssr: false
+})
 
 export default function ProductsPage() {
   const router = useRouter()
@@ -115,8 +51,6 @@ export default function ProductsPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState<string>("All")
   const [currentPage, setCurrentPage] = useState(1)
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
-  const [expandedBOM, setExpandedBOM] = useState<string | null>(null)
 
   // API States
   const [products, setProducts] = useState<Product[]>([])
@@ -240,32 +174,7 @@ export default function ProductsPage() {
                   Thêm sản phẩm
                 </Button>
               ) : (
-                <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button className="gap-2 bg-primary hover:bg-primary/90">
-                      <Plus className="h-4 w-4" />
-                      Tạo BOM
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="sm:max-w-lg">
-                    <DialogHeader>
-                      <DialogTitle className="text-xl">
-                        Tạo BOM mới
-                      </DialogTitle>
-                      <DialogDescription>
-                        Thiết lập định mức nguyên vật liệu tiêu chuẩn cho một đơn vị sản phẩm.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="grid gap-6 py-4">
-                      <div className="rounded-lg bg-muted/50 p-4 text-center text-sm text-muted-foreground border border-dashed">
-                        Vui lòng sử dụng tính năng "Xem chi tiết / Sửa" ở từng sản phẩm để cập nhật, hoặc truy cập trang tạo mới.
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <Button variant="ghost" onClick={() => setIsAddDialogOpen(false)}>Đóng</Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
+                <CreateBomDialog />
               )
             )}
           </div>
@@ -370,287 +279,19 @@ export default function ProductsPage() {
 
         {/* Main Content Area */}
         {activeTab === "products" ? (
-          <Card className="border-none shadow-sm overflow-hidden">
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader className="bg-muted/30">
-                  <TableRow className="hover:bg-transparent border-none">
-                    <TableHead className="font-bold text-foreground py-4">Sản phẩm</TableHead>
-                    <TableHead className="font-bold text-foreground">Danh mục</TableHead>
-                    <TableHead className="text-right font-bold text-foreground">Giá gốc (BOM)</TableHead>
-                    <TableHead className="text-right font-bold text-foreground">Tồn kho</TableHead>
-                    <TableHead className="font-bold text-foreground">Trạng thái</TableHead>
-                    <TableHead className="w-12"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoading ? (
-                    Array(5).fill(0).map((_, i) => <ProductSkeleton key={i} />)
-                  ) : products.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="h-60 text-center">
-                        <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
-                          <Boxes className="h-12 w-12 opacity-20" />
-                          <p className="text-lg font-medium">Không tìm thấy sản phẩm nào</p>
-                          <Button variant="link" onClick={handleResetFilters}>Xóa bộ lọc</Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    products.map((product) => (
-                      <TableRow key={product._id} className="group hover:bg-muted/20 transition-colors">
-                        <TableCell className="py-4">
-                          <div className="flex items-center gap-3">
-                            <div className="h-12 w-12 rounded-lg bg-muted overflow-hidden shrink-0 border border-muted">
-                              {product.productImage ? (
-                                <img src={product.productImage} alt={product.name} className="h-full w-full object-cover" />
-                              ) : (
-                                <div className="h-full w-full flex items-center justify-center">
-                                  <Package className="h-6 w-6 text-muted-foreground/30" />
-                                </div>
-                              )}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="font-semibold text-foreground truncate">{product.name}</p>
-                              <p className="text-xs text-muted-foreground font-mono">{product.code}</p>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary" className="bg-muted/50 text-muted-foreground font-medium">
-                            {product.category}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right font-medium">
-                          <CurrencyDisplay value={calculateBaseCost(product)} />
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex flex-col items-end">
-                            <span className="font-bold">{product.currentStock}</span>
-                            <span className="text-[10px] text-muted-foreground uppercase">{product.unit}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "font-medium",
-                              (product.stockLevel === "Nguy cấp" || product.stockLevel === "critical") ? "border-red-200 bg-red-50 text-red-700" :
-                                (product.stockLevel === "Sắp hết" || product.stockLevel === "low") ? "border-amber-200 bg-amber-50 text-amber-700" :
-                                  "border-green-200 bg-green-50 text-green-700"
-                            )}
-                          >
-                            {product.stockLevel === "critical" ? "Nguy cấp" :
-                              product.stockLevel === "low" ? "Sắp hết" :
-                                product.stockLevel === "normal" ? "Ổn định" :
-                                  (product.stockLevel || "Ổn định")}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100 transition-opacity">
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="rounded-xl">
-                              <DropdownMenuItem
-                                className="gap-2 cursor-pointer"
-                                onClick={() => router.push(`/products/${product._id}`)}
-                              >
-                                <ExternalLink className="h-4 w-4" /> Xem chi tiết {isProductionManager && "/ Sửa"}
-                              </DropdownMenuItem>
-                              {isProductionManager && (
-                                <DropdownMenuItem
-                                  className="gap-2 text-destructive focus:text-destructive cursor-pointer"
-                                  onClick={() => handleDeleteProduct(product._id)}
-                                >
-                                  <Trash2 className="h-4 w-4" /> Xóa
-                                </DropdownMenuItem>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-
-              {/* Pagination */}
-              {pagination && pagination.pages > 1 && (
-                <div className="flex items-center justify-between px-6 py-4 border-t bg-muted/10">
-                  <p className="text-sm text-muted-foreground">
-                    Hiển thị <span className="font-medium">{(pagination.page - 1) * pagination.limit + 1}</span> - <span className="font-medium">{Math.min(pagination.page * pagination.limit, pagination.total)}</span> trong <span className="font-medium">{pagination.total}</span> sản phẩm
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                      disabled={currentPage === 1 || isRefreshing}
-                      className="rounded-lg h-9"
-                    >
-                      Trước
-                    </Button>
-                    <div className="flex items-center gap-1">
-                      {Array.from({ length: pagination.pages }, (_, i) => i + 1).map(page => (
-                        <Button
-                          key={page}
-                          variant={currentPage === page ? "default" : "ghost"}
-                          size="sm"
-                          onClick={() => setCurrentPage(page)}
-                          className={cn("h-9 w-9 p-0 rounded-lg", currentPage === page ? "shadow-md" : "")}
-                        >
-                          {page}
-                        </Button>
-                      ))}
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(p => Math.min(pagination.pages, p + 1))}
-                      disabled={currentPage === pagination.pages || isRefreshing}
-                      className="rounded-lg h-9"
-                    >
-                      Sau
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <ProductTable
+            products={products}
+            isLoading={isLoading}
+            isRefreshing={isRefreshing}
+            pagination={pagination}
+            currentPage={currentPage}
+            setCurrentPage={setCurrentPage}
+            handleResetFilters={handleResetFilters}
+            handleDeleteProduct={handleDeleteProduct}
+            isProductionManager={isProductionManager}
+          />
         ) : (
-          <div className="flex flex-col gap-4">
-            {isLoading ? (
-              Array(5).fill(0).map((_, i) => <BOMSkeleton key={i} />)
-            ) : products.length === 0 ? (
-              <div className="h-60 flex flex-col items-center justify-center gap-2 text-muted-foreground bg-white rounded-2xl shadow-sm border border-dashed">
-                <Package className="h-12 w-12 opacity-20" />
-                <p className="text-lg font-medium">Chưa có dữ liệu định mức</p>
-              </div>
-            ) : (
-              products.map((product) => (
-                <Card key={product._id} className="border-none shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden group">
-                  <Collapsible
-                    open={expandedBOM === product._id}
-                    onOpenChange={(open) => setExpandedBOM(open ? product._id : null)}
-                  >
-                    <div className="p-4 flex flex-col md:flex-row md:items-center gap-6">
-                      {/* Image */}
-                      <div className="h-20 w-20 rounded-2xl bg-muted overflow-hidden shrink-0 border border-muted shadow-sm">
-                        {product.productImage ? (
-                          <img src={product.productImage} alt={product.name} className="h-full w-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                        ) : (
-                          <div className="h-full w-full flex items-center justify-center">
-                            <Package className="h-8 w-8 text-muted-foreground/30" />
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-3 mb-1">
-                          <h3 className="font-bold text-lg text-foreground truncate group-hover:text-primary transition-colors">
-                            {product.name}
-                          </h3>
-                          <Badge className="bg-[#4A7C23]/10 text-[#4A7C23] border-[#4A7C23]/20 font-bold shrink-0">
-                            {product.estimateMaterialCost?.length || 0} nguyên liệu
-                          </Badge>
-                        </div>
-                        <p className="text-xs font-mono text-muted-foreground uppercase flex items-center gap-2">
-                          <Boxes className="h-3 w-3" />
-                          {product.code}
-                          <span className="h-1 w-1 rounded-full bg-muted-foreground/30" />
-                          {product.category}
-                        </p>
-                      </div>
-
-                      {/* Cost & Action */}
-                      <div className="flex flex-col md:flex-row items-center gap-4 md:gap-8">
-                        <div className="text-center md:text-right">
-                          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">Chi phí dự kiến</p>
-                          <p className="font-black text-xl text-[#8B7355]">
-                            <CurrencyDisplay value={calculateBaseCost(product)} />
-                          </p>
-                        </div>
-
-                        <CollapsibleTrigger asChild>
-                          <Button variant="outline" className="rounded-xl px-6 h-12 gap-2 border-muted hover:border-primary hover:text-primary hover:bg-primary/5 transition-all group/btn">
-                            <span className="text-sm font-bold">
-                              {expandedBOM === product._id ? "Đóng chi tiết" : "Xem định mức"}
-                            </span>
-                            {expandedBOM === product._id ? (
-                              <ChevronDown className="h-4 w-4" />
-                            ) : (
-                              <ChevronRight className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </CollapsibleTrigger>
-                      </div>
-                    </div>
-
-                    <CollapsibleContent className="px-4 pb-4">
-                      <div className="rounded-2xl bg-muted/30 border border-muted/50 p-6">
-                        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                          {product.estimateMaterialCost && product.estimateMaterialCost.length > 0 ? (
-                            product.estimateMaterialCost.map((item, index) => (
-                              <div key={index} className="flex items-center gap-4 p-3 rounded-xl bg-white shadow-sm border border-muted/50 group/item hover:border-primary/30 transition-colors">
-                                <div className="h-10 w-10 rounded-lg bg-primary/5 flex items-center justify-center shrink-0">
-                                  <Package className="h-5 w-5 text-primary/40" />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-bold text-foreground truncate">
-                                    {typeof item.material === 'object' && item.material !== null
-                                      ? (item.material as any).name
-                                      : item.materialCode || 'Nguyên liệu không xác định'}
-                                  </p>
-                                  <p className="text-[10px] text-muted-foreground font-mono">
-                                    {item.materialCode || (item.material as any)?.code}
-                                  </p>
-                                </div>
-                                {(() => {
-                                  const qty = item.quantity ?? (item as any).qtyPerUnit ?? (item as any).amount ?? 0;
-                                  const price = item.priceAtTime ?? (item.material as any)?.price ?? 0;
-                                  return (
-                                    <div className="text-right shrink-0">
-                                      <p className="text-sm font-black text-foreground">
-                                        {qty} <span className="text-[10px] font-normal text-muted-foreground uppercase ml-0.5">{item.unit || (item.material as any)?.unit}</span>
-                                      </p>
-                                      <p className="text-[10px] text-muted-foreground">
-                                        <CurrencyDisplay value={price * qty} />
-                                      </p>
-                                    </div>
-                                  )
-                                })()}
-                              </div>
-                            ))
-                          ) : (
-                            <div className="col-span-full py-8 text-center">
-                              <p className="text-sm text-muted-foreground italic">Chưa thiết lập định mức nguyên liệu cho sản phẩm này.</p>
-                            </div>
-                          )}
-                        </div>
-
-                        {isProductionManager && (
-                          <div className="mt-6 flex justify-end">
-                            <Button
-                              size="sm"
-                              className="rounded-lg gap-2"
-                              onClick={() => router.push(`/products/${product._id}`)}
-                            >
-                              <Edit className="h-3.5 w-3.5" />
-                              Cập nhật định mức
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    </CollapsibleContent>
-                  </Collapsible>
-                </Card>
-              ))
-            )}
-          </div>
+          <BOMList products={products} isLoading={isLoading} isProductionManager={isProductionManager} />
         )}
       </div>
     </AppShell>

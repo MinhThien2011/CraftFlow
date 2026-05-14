@@ -15,7 +15,9 @@ import {
   getMaterialAlerts,
   reassignTask,
   updateAssignmentStatus,
-  updateOrderStatus
+  updateOrderStatus,
+  updateOrder,
+  cancelOrder
 } from '../controllers/productionOrderController.js';
 
 const productionRouter = Router();
@@ -33,6 +35,8 @@ productionRouter.get('/:id/bom', rolePermission([ROLES.ADMIN, ROLES.PRODUCTION_M
 
 // Order Management (Production Manager)
 productionRouter.post('/', rolePermission([ROLES.PRODUCTION_MANAGER]), createOrder);
+productionRouter.put('/:id', rolePermission([ROLES.PRODUCTION_MANAGER]), updateOrder);
+productionRouter.delete('/:id', rolePermission([ROLES.PRODUCTION_MANAGER]), cancelOrder);
 productionRouter.post('/assign', rolePermission([ROLES.PRODUCTION_MANAGER]), assignOrder);
 productionRouter.post('/reassign', rolePermission([ROLES.PRODUCTION_MANAGER]), reassignTask);
 productionRouter.post('/:id/stock-in', rolePermission([ROLES.PRODUCTION_MANAGER]), createStockInSlip);

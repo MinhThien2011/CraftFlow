@@ -1,5 +1,6 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import { DashboardLayout } from '@/features/production/components/dashboard-layout'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -7,9 +8,15 @@ import { Card } from '@/components/ui/card'
 import { Plus, Search, AlertTriangle } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useProductionOrdersModule } from '@/features/production/hooks/use-production-orders'
-import { OrdersTable } from '@/features/production/components/orders-table'
-import { CreateOrderModal } from '@/features/production/components/create-order-modal'
 import { withPermission } from '@/components/guards/permission-guard'
+
+// Lazy load các components nặng để tối ưu initial load
+const OrdersTable = dynamic(() => import('@/features/production/components/orders-table').then(m => m.OrdersTable), {
+  ssr: false, loading: () => <div className="p-8 text-center text-muted-foreground animate-pulse">Đang tải danh sách đơn hàng...</div>
+})
+const CreateOrderModal = dynamic(() => import('@/features/production/components/create-order-modal').then(m => m.CreateOrderModal), {
+  ssr: false
+})
 
 const filters = [
   { id: "all", label: "Tất cả" },

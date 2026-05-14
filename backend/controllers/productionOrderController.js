@@ -8,7 +8,9 @@ import {
   assignOrderValidator,
   reassignTaskValidator,
   updateAssignmentStatusValidator,
-  createStockInSlipValidator
+  createStockInSlipValidator,
+  updateOrderValidator,
+  cancelOrderValidator
 } from '../validations/productionValidation.js';
 import { handleServiceResponse } from '../utils/responseHelper.js';
 
@@ -502,6 +504,108 @@ export const createStockInSlip = async (req, res) => {
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
       message: 'Failed to create stock-in slip.',
+      data: null
+    });
+  }
+};
+
+export const updateOrder = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { error, value } = updateOrderValidator(req.body);
+    if (error) {
+      const errorMessages = error.details.map(detail => detail.message).join(', ');
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        status: 'error',
+        message: `Validation failed: ${errorMessages}`,
+        data: null
+      });
+    }
+
+    const result = await productionOrderService.updateProductionOrder(id, value, req.userId);
+
+    if (result.status === 'error') {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        status: 'error',
+        message: result.message,
+        data: null
+      });
+    }
+
+    // Invalidate caches
+    clearCacheByPattern('production:list:*');
+    clearCacheByPattern(`production:detail:${id}`);
+
+    await logActivity({
+      author: req.userId,
+      action: 'UPDATE_PRODUCTION_ORDER',
+      module: 'PRODUCTION',
+      details: `Updated production order ${id}. Reason: ${value.reason}`,
+      targetId: id
+    }, req);
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: result.message,
+      data: result.data
+    });
+
+  } catch (error) {
+    console.error('[ProductionOrderController] updateOrder error:', error);
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: 'error',
+      message: 'Failed to update production order.',
+      data: null
+    });
+  }
+};
+
+export const cancelOrder = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { error, value } = cancelOrderValidator(req.body);
+    if (error) {
+      const errorMessages = error.details.map(detail => detail.message).join(', ');
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        status: 'error',
+        message: `Validation failed: ${errorMessages}`,
+        data: null
+      });
+    }
+
+    const result = await productionOrderService.cancelProductionOrder(id, value.reason, req.userId);
+
+    if (result.status === 'error') {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        status: 'error',
+        message: result.message,
+        data: null
+      });
+    }
+
+    // Invalidate caches
+    clearCacheByPattern('production:list:*');
+    clearCacheByPattern(`production:detail:${id}`);
+
+    await logActivity({
+      author: req.userId,
+      action: 'CANCEL_PRODUCTION_ORDER',
+      module: 'PRODUCTION',
+      details: `Cancelled production order ${id}. Reason: ${value.reason}`,
+      targetId: id
+    }, req);
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: result.message,
+      data: result.data
+    });
+
+  } catch (error) {
+    console.error('[ProductionOrderController] cancelOrder error:', error);
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: 'error',
+      message: 'Failed to cancel production order.',
       data: null
     });
   }
