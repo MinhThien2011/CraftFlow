@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { AppShell } from '@/components/app-shell'
 import {
-  Clipboard, Plus, Search, Play, Pause, CheckCircle2,
+  Clipboard, Plus, Search, Play, Pause, CheckCircle2, QrCode, ScanLine,
   AlertTriangle, FileSignature, Calculator, AlertCircle, X
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -25,6 +25,8 @@ import {
 import { Label } from '@/components/ui/label'
 import { format } from 'date-fns'
 import { vi } from 'date-fns/locale'
+import { QRScanner } from "@/features/receiving/components/qr-scanner"
+import { toast } from "sonner"
 
 // ── Types ─────────────────────────────────────────────────────
 type SessionStatus = 'draft' | 'in_progress' | 'completed' | 'approved'
@@ -115,6 +117,11 @@ export default function StocktakePage() {
   const [createNote, setCreateNote] = useState('')
   const [createErrors, setCreateErrors] = useState<Record<string, string>>({})
   const [createDone, setCreateDone] = useState(false)
+
+  // Scanner states
+  const [isSessionScannerOpen, setIsSessionScannerOpen] = useState(false)
+  const [isItemScannerOpen, setIsItemScannerOpen] = useState(false)
+  const audioCtxRef = useRef<AudioContext | null>(null)
 
   // luôn lấy session mới nhất
   const currentSession = sessions.find((s) => s.id === selectedSession?.id) ?? selectedSession
@@ -229,6 +236,76 @@ export default function StocktakePage() {
     setCreateOpen(true)
   }
 
+  const handleSessionScan = (data: any) => {
+    const code = data?.code || data?.id || (typeof data === 'string' ? data : '')
+    if (code) {
+      setSearchTerm(code)
+      toast.success(`Đã quét mã: ${code}`)
+    }
+  }
+
+  // Hàm phát âm thanh khi quét QR
+  const playScanSound = (type: 'success' | 'error') => {
+      try {
+          if (!audioCtxRef.current) {
+              audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)()
+          }
+          const ctx = audioCtxRef.current
+          if (ctx.state === 'suspended') ctx.resume()
+
+          const oscillator = ctx.createOscillator()
+          const gainNode = ctx.createGain()
+          oscillator.connect(gainNode)
+          gainNode.connect(ctx.destination)
+
+          if (type === 'success') {
+              oscillator.type = 'sine'
+              oscillator.frequency.setValueAtTime(1200, ctx.currentTime)
+              gainNode.gain.setValueAtTime(0.1, ctx.currentTime)
+              gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1)
+              oscillator.start(ctx.currentTime)
+              oscillator.stop(ctx.currentTime + 0.1)
+          } else {
+              oscillator.type = 'square'
+              oscillator.frequency.setValueAtTime(400, ctx.currentTime)
+              gainNode.gain.setValueAtTime(0.1, ctx.currentTime)
+              gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15)
+              oscillator.start(ctx.currentTime)
+              oscillator.stop(ctx.currentTime + 0.15)
+
+              const osc2 = ctx.createOscillator()
+              const gain2 = ctx.createGain()
+              osc2.connect(gain2)
+              gain2.connect(ctx.destination)
+              osc2.type = 'square'
+              osc2.frequency.setValueAtTime(400, ctx.currentTime + 0.2)
+              gain2.gain.setValueAtTime(0.1, ctx.currentTime + 0.2)
+              gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35)
+              osc2.start(ctx.currentTime + 0.2)
+              osc2.stop(ctx.currentTime + 0.35)
+          }
+      } catch (e) {
+          console.error("Audio API not supported", e)
+      }
+  }
+
+  const handleItemScan = (data: any) => {
+      const scannedCode = data?.code || data?.itemCode || data?.materialCode || data?.productCode || data?.id || (typeof data === 'string' ? data : null)
+      if (!scannedCode) return
+
+      const itemIndex = items.findIndex(item => item.itemCode === scannedCode || item.itemCode === scannedCode.split('-')[0])
+      if (itemIndex !== -1) {
+          const newItems = [...items]
+          const item = newItems[itemIndex]
+          item.countedQty = (item.countedQty !== null ? item.countedQty : 0) + 1
+          setItems(newItems)
+          playScanSound('success')
+      } else {
+          playScanSound('error')
+          toast.error(`Mã [${scannedCode}] không thuộc phiên kiểm kê này!`)
+      }
+  }
+
   // ── Render ────────────────────────────────────────────────
   return (
     <AppShell title="Kiểm kê Kho" subtitle="Cycle Count và Physical Count">
@@ -271,6 +348,9 @@ export default function StocktakePage() {
                     className="pl-9"
                   />
                 </div>
+                <Button variant="outline" onClick={() => setIsSessionScannerOpen(true)}>
+                  <QrCode className="size-4 mr-2" /> Quét QR
+                </Button>
                 <Button onClick={openCreate}>
                   <Plus className="size-4 mr-2" /> Tạo phiên kiểm kê
                 </Button>
@@ -371,17 +451,30 @@ export default function StocktakePage() {
           {currentSession && (
             <>
               {/* Summary row */}
-              <div className="grid grid-cols-3 gap-3 py-2">
-                {[
-                  { label: 'Đã kiểm',    value: `${countedCount(items)}/${items.length}`, color: 'text-blue-600' },
-                  { label: 'Chênh lệch', value: discrepancyCount(items),                  color: discrepancyCount(items) > 0 ? 'text-red-600' : 'text-emerald-600' },
-                  { label: 'Trạng thái', value: STATUS_CONFIG[currentSession.status].label, color: 'text-foreground' },
-                ].map(({ label, value, color }) => (
-                  <div key={label} className="p-3 rounded-lg bg-muted/50 text-center">
-                    <p className="text-xs text-muted-foreground mb-1">{label}</p>
-                    <p className={`text-xl font-bold ${color}`}>{value}</p>
-                  </div>
-                ))}
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-4 py-2">
+                <div className="grid grid-cols-3 gap-3 flex-1 w-full">
+                  {[
+                    { label: 'Đã kiểm',    value: `${countedCount(items)}/${items.length}`, color: 'text-blue-600' },
+                    { label: 'Chênh lệch', value: discrepancyCount(items),                  color: discrepancyCount(items) > 0 ? 'text-red-600' : 'text-emerald-600' },
+                    { label: 'Trạng thái', value: STATUS_CONFIG[currentSession.status].label, color: 'text-foreground' },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="p-3 rounded-lg bg-muted/50 text-center">
+                      <p className="text-xs text-muted-foreground mb-1">{label}</p>
+                      <p className={`text-xl font-bold ${color}`}>{value}</p>
+                    </div>
+                  ))}
+                </div>
+                {(currentSession.status === 'in_progress' || currentSession.status === 'draft') && (
+                  <Button
+                      size="lg"
+                      variant="outline"
+                      onClick={() => setIsItemScannerOpen(true)}
+                      className="gap-2 text-blue-600 border-blue-200 hover:bg-blue-50 w-full sm:w-auto h-[72px]"
+                  >
+                      <ScanLine className="size-5" />
+                      Quét mã kiểm đếm
+                  </Button>
+                )}
               </div>
 
               {/* Items table */}
@@ -639,6 +732,16 @@ export default function StocktakePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <QRScanner 
+        open={isSessionScannerOpen} 
+        onOpenChange={setIsSessionScannerOpen} 
+        onScanSuccess={handleSessionScan} 
+      />
+      <QRScanner 
+        open={isItemScannerOpen} 
+        onOpenChange={setIsItemScannerOpen} 
+        onScanSuccess={handleItemScan} 
+      />
     </AppShell>
   )
 }

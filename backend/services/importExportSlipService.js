@@ -131,8 +131,10 @@ async function processMaterialUpdate(item, slip, userId, session, transactionDoc
             beforeStock,
             afterStock: material.currentStock,
             performedBy: userId,
-            note: `Import via ${slip.slipNumber}`,
-            orderRef: slip.slipNumber
+            note: `Import via ${slip.slipNumber}${item.batchNumber ? '. Batch: ' + item.batchNumber : ''}`,
+            orderRef: slip.slipNumber,
+            location: item.shelf ? (await Shelf.findById(item.shelf))?.shelfCode : null,
+            batch: item.batchNumber ? (await mongoose.model('InventoryBatch').findOne({ batchNumber: item.batchNumber }))?._id : null
         });
     }
     await material.save({ session });
@@ -162,8 +164,10 @@ async function processProductUpdate(item, slip, userId, session, transactionDocs
             beforeStock,
             afterStock: product.currentStock,
             performedBy: userId,
-            note: `Product import via ${slip.slipNumber}`,
-            orderRef: slip.slipNumber
+            note: `Product import via ${slip.slipNumber}${item.batchNumber ? '. Batch: ' + item.batchNumber : ''}`,
+            orderRef: slip.slipNumber,
+            location: item.shelf ? (await Shelf.findById(item.shelf))?.shelfCode : null,
+            batch: item.batchNumber ? (await mongoose.model('InventoryBatch').findOne({ batchNumber: item.batchNumber }))?._id : null
         });
     } else {
         const fifoResult = await allocateBatchesForItem({ productId: item.product, quantityNeeded: quantity, session });
@@ -343,7 +347,7 @@ export const updateSlipStatusService = async (slipId, newStatus, updateData, use
                 slip.finalizedAt = new Date();
                 if (isImport) slip.inStockAt = slip.finalizedAt;
 
-                await slip.save({ session , ordered: true });
+                await slip.save({ session, ordered: true });
                 await session.commitTransaction();
 
                 inventoryEvents.emit('inventory_finalized', { slip, userId });
@@ -351,7 +355,7 @@ export const updateSlipStatusService = async (slipId, newStatus, updateData, use
                 return ServiceResponse(true, `Slip updated to ${targetStatus}`, { slip, warnings });
             }
 
-            await slip.save({ session});
+            await slip.save({ session });
             await session.commitTransaction();
             return ServiceResponse(true, `Slip updated to ${targetStatus}`, { slip, warnings });
         } catch (error) {
@@ -518,8 +522,10 @@ async function finalizeInventoryUpdate(slip, userId, session) {
                     beforeStock,
                     afterStock: material.currentStock,
                     performedBy: userId,
-                    note: `Finalized import via slip ${slip.slipNumber}. ${item.itemNote || ''}`,
-                    orderRef: slip.slipNumber
+                    note: `Finalized import via slip ${slip.slipNumber}. ${item.itemNote || ''}${item.batchNumber ? '. Batch: ' + item.batchNumber : ''}`,
+                    orderRef: slip.slipNumber,
+                    location: item.shelf ? (await Shelf.findById(item.shelf))?.shelfCode : null,
+                    batch: item.batchNumber ? (await mongoose.model('InventoryBatch').findOne({ batchNumber: item.batchNumber }))?._id : null
                 });
             }
         }
@@ -556,8 +562,10 @@ async function finalizeInventoryUpdate(slip, userId, session) {
                     beforeStock,
                     afterStock: product.currentStock,
                     performedBy: userId,
-                    note: `Nhập kho thành phẩm từ sản xuất via slip ${slip.slipNumber}. ${item.itemNote || ''}`,
-                    orderRef: slip.slipNumber
+                    note: `Nhập kho thành phẩm từ sản xuất via slip ${slip.slipNumber}. ${item.itemNote || ''}${item.batchNumber ? '. Batch: ' + item.batchNumber : ''}`,
+                    orderRef: slip.slipNumber,
+                    location: item.shelf ? (await Shelf.findById(item.shelf))?.shelfCode : null,
+                    batch: item.batchNumber ? (await mongoose.model('InventoryBatch').findOne({ batchNumber: item.batchNumber }))?._id : null
                 });
             } else {
                 // Product Export: Apply FIFO logic

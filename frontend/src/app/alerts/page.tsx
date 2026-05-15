@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from "react"
-import { AlertTriangle, Bell, Package, Search, Download, ChevronLeft, ChevronRight } from "lucide-react"
+import { AlertTriangle, Bell, Package, Search, Download, ChevronLeft, ChevronRight, QrCode } from "lucide-react"
 import { AppShell } from "@/components/app-shell"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -27,6 +27,7 @@ import { RestockDialog } from "@/components/dialog/restock-dialog"
 import { ThresholdDialog } from "@/components/dialog/threshold-dialog"
 import { BatchRestockDialog } from "@/components/dialog/batch-restock-dialog"
 import { toast } from "sonner"
+import { QRScanner } from "@/features/receiving/components/qr-scanner"
 
 const exportAlertsCSV = (data: Material[]) => {
   const headers = "Tên,Mã,Loại,Tồn kho,Đơn vị\n"
@@ -74,6 +75,7 @@ function AlertsPage() {
   const [isRestockOpen, setIsRestockOpen] = useState(false)
   const [isThresholdOpen, setIsThresholdOpen] = useState(false)
   const [isBatchOpen, setIsBatchOpen] = useState(false)
+  const [isScannerOpen, setIsScannerOpen] = useState(false)
 
   // multi-select
   const [selectedAlertIds, setSelectedAlertIds] = useState<Set<string>>(new Set())
@@ -93,9 +95,9 @@ function AlertsPage() {
           status: 'pending',
           limit: 100,
           page: 1
-        }).catch(e => { console.error(e); return { success: false }; }),
-        purchaseOrderApi.getAll({ status: 'pending' }).catch(e => { console.error(e); return { success: false }; }),
-        purchaseOrderApi.getAll({ status: 'accepted' }).catch(e => { console.error(e); return { success: false }; })
+        }).catch(e => { return { success: false }; }),
+        purchaseOrderApi.getAll({ status: 'pending' }).catch(e => { return { success: false }; }),
+        purchaseOrderApi.getAll({ status: 'accepted' }).catch(e => { return { success: false }; })
       ])
 
       // Tập hợp các ID vật tư đã có đơn mua hàng đang chờ xử lý hoặc đã duyệt
@@ -272,6 +274,14 @@ function AlertsPage() {
     setIsThresholdOpen(true)
   }
 
+  const handleScanSuccess = (data: any) => {
+    const code = data?.code || data?.id || (typeof data === 'string' ? data : '')
+    if (code) {
+      setSearchQuery(code)
+      toast.success(`Đã quét mã: ${code}`)
+    }
+  }
+
   return (
     <AppShell title="Cảnh báo vật tư" subtitle="Theo dõi nguyên vật liệu sắp hết và thiếu hụt cho đơn sản xuất">
       <div className="space-y-6">
@@ -333,6 +343,9 @@ function AlertsPage() {
                       className="pl-9"
                     />
                   </div>
+                  <Button variant="outline" onClick={() => setIsScannerOpen(true)} className="md:ml-2">
+                    <QrCode className="mr-2 h-4 w-4" /> Quét QR
+                  </Button>
                   <div className="flex gap-2">
                     {(['All', 'Critical', 'Low Stock'] as const).map((f) => (
                       <Button
@@ -567,6 +580,11 @@ function AlertsPage() {
           fetchLowStock(searchQuery)
           setSelectedAlertIds(new Set())
         }}
+      />
+      <QRScanner 
+        open={isScannerOpen} 
+        onOpenChange={setIsScannerOpen} 
+        onScanSuccess={handleScanSuccess} 
       />
     </AppShell>
   )

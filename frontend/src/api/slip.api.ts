@@ -15,6 +15,10 @@ export interface SlipItem {
     unit: string;
     unitPrice: number;
     amount: number;
+    batchNumber?: string;
+    expirationDate?: string;
+    shelf?: string | { _id: string; shelfCode: string };
+    itemNote?: string;
 }
 
 export interface Slip {
@@ -101,8 +105,13 @@ export const slipApi = {
         status: string;
         items?: Array<{
             itemCode?: string;
+            material?: string;
+            product?: string;
             actualQuantity?: number;
             provisionalQuantity?: number;
+            batchNumber?: string;
+            expirationDate?: string;
+            shelf?: string;
             itemNote?: string;
         }>;
         notes?: string;

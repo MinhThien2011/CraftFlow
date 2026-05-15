@@ -20,6 +20,11 @@ shelfRouter.get('/:id',
     shelfController.getShelfById
 );
 
+shelfRouter.get('/recommendations/:itemId',
+    rolePermission([ROLES.ADMIN, ROLES.KHO_MANAGER, ROLES.PRODUCTION_MANAGER]),
+    shelfController.getShelfRecommendations
+);
+
 // --- Management (Warehouse Manager Only) ---
 shelfRouter.post('/', rolePermission([ROLES.KHO_MANAGER]), shelfController.createShelf);
 shelfRouter.put('/:id', rolePermission([ROLES.KHO_MANAGER]), shelfController.updateShelf);

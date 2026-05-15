@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Search, CheckCircle2, XCircle, Clock, Eye, FileCheck, AlertCircle } from 'lucide-react'
+import { Search, CheckCircle2, XCircle, Clock, Eye, FileCheck, AlertCircle, QrCode } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -28,6 +28,8 @@ import { format } from "date-fns"
 import { vi } from "date-fns/locale"
 import { CurrencyDisplay } from "@/components/ui/currency-display"
 import { SlipDetailDialog } from "@/components/shared/slip-detail-dialog"
+import { QRScanner } from "@/features/receiving/components/qr-scanner"
+import { StockingAssignmentDialog } from "@/features/receiving/components/stocking-assignment-dialog"
 import { toast } from "sonner"
 
 const statusConfig: Record<string, { label: string, color: string }> = {
@@ -51,6 +53,9 @@ export default function ReceivingProductsPage() {
   // Trạng thái cho việc xem chi tiết Slip
   const [selectedSlip, setSelectedSlip] = useState<Slip | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isScannerOpen, setIsScannerOpen] = useState(false)
+  const [isStockingDialogOpen, setIsStockingDialogOpen] = useState(false)
+  const [stockingItems, setStockingItems] = useState<any[]>([])
 
   // Gọi API lấy phiếu nhập thành phẩm (truyền type = import)
   const { data, isLoading, isError, error } = useQuery({
@@ -66,6 +71,7 @@ export default function ReceivingProductsPage() {
       queryClient.invalidateQueries({ queryKey: ['slips', 'import-products'] })
       toast.success("Đã cập nhật trạng thái nhập kho thành công")
       setIsDialogOpen(false)
+      setIsStockingDialogOpen(false)
       setSelectedSlip(null)
     },
     onError: (error: any) => {
@@ -103,6 +109,21 @@ export default function ReceivingProductsPage() {
     })
   }
 
+  const handleStockingAssignment = (slip: Slip, items: any[]) => {
+    setSelectedSlip(slip)
+    setStockingItems(items)
+    setIsStockingDialogOpen(true)
+  }
+
+  const handleStockingConfirm = (assignments: any[]) => {
+    if (!selectedSlip) return
+    updateStatusMutation.mutate({
+      id: selectedSlip._id,
+      status: 'in_stock',
+      items: assignments
+    })
+  }
+
   const handleSave = (info: any, items: any[]) => {
     if (!selectedSlip) return
     updateDetailsMutation.mutate({
@@ -118,6 +139,12 @@ export default function ReceivingProductsPage() {
         }))
       }
     })
+  }
+
+  const handleScanSuccess = (data: any) => {
+    if (data?.id) {
+      setSearchQuery(data.id) // Tự động điền mã quét được vào ô tìm kiếm
+    }
   }
 
   return (
@@ -176,15 +203,21 @@ export default function ReceivingProductsPage() {
 
         {/* Filters */}
         <Card>
-          <CardContent className="p-4">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-              <Input
-                placeholder="Tìm theo mã, số phiếu..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
+          <CardContent className="p-4 flex flex-col md:flex-row gap-4 justify-between items-center">
+            <div className="flex gap-2 w-full md:w-auto">
+              <div className="relative w-full md:w-96">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Tìm theo mã, số phiếu..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <Button variant="outline" onClick={() => setIsScannerOpen(true)}>
+                <QrCode className="mr-2 h-4 w-4" />
+                Quét QR
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -253,9 +286,25 @@ export default function ReceivingProductsPage() {
           slip={selectedSlip}
           type="import"
           statusConfig={statusConfig}
-          onSave={handleSave}
           onStatusUpdate={handleStatusUpdate}
+          onStockingAssignment={handleStockingAssignment}
+          onSave={handleSave}
           isUpdating={updateStatusMutation.isPending || updateDetailsMutation.isPending}
+        />
+
+        <StockingAssignmentDialog
+          open={isStockingDialogOpen}
+          onOpenChange={setIsStockingDialogOpen}
+          slip={selectedSlip}
+          items={stockingItems}
+          onConfirm={handleStockingConfirm}
+          isSubmitting={updateStatusMutation.isPending}
+        />
+
+        <QRScanner
+          open={isScannerOpen}
+          onOpenChange={setIsScannerOpen}
+          onScanSuccess={handleScanSuccess}
         />
       </div>
     </AppShell>

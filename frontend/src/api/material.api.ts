@@ -53,4 +53,16 @@ export const materialApi = {
     deleteMaterial: async (id: string): Promise<ApiResponse<null>> => {
         return axiosInstance.delete(`/materials/${id}`);
     },
+
+    /**
+     * Get material movement history
+     */
+    getHistory: async (id: string, params: {
+        page?: number;
+        limit?: number;
+        type?: string;
+        direction?: 'in' | 'out';
+    } = {}): Promise<ApiResponse<any>> => {
+        return axiosInstance.get(`/materials/${id}/history`, { params });
+    },
 };

@@ -1,7 +1,8 @@
 'use client'
 
+import { useState } from 'react'
 import { AppShell } from '@/components/app-shell'
-import { Download, Plus, AlertTriangle } from 'lucide-react'
+import { Download, Plus, AlertTriangle, QrCode } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { InventoryStats } from '@/features/inventory/components/inventory-stats'
@@ -11,8 +12,12 @@ import { useInventoryMaterials } from '@/features/inventory/hooks/use-inventory-
 import { Material } from '@/lib/types'
 import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
+import { QRScanner } from "@/features/receiving/components/qr-scanner"
+import { TransactionHistoryDialog } from "@/components/shared/transaction-history-dialog"
 
 export default function InventoryMaterialsPage() {
+  const [isScannerOpen, setIsScannerOpen] = useState(false)
+  const [historyItem, setHistoryItem] = useState<Material | null>(null)
   const {
     searchTerm,
     setSearchTerm,
@@ -30,7 +35,7 @@ export default function InventoryMaterialsPage() {
 
   // Modal Handlers
   const handleView = (material: Material) => {
-    toast.info(`Đang xem chi tiết: ${material.name}`)
+    setHistoryItem(material)
   }
 
   const handleEdit = (material: Material) => {
@@ -43,6 +48,14 @@ export default function InventoryMaterialsPage() {
 
   const handleExport = () => {
     toast.success("Đang chuẩn bị dữ liệu xuất Excel...")
+  }
+
+  const handleScanSuccess = (data: any) => {
+    const code = data?.code || data?.id || (typeof data === 'string' ? data : '')
+    if (code) {
+      setSearchTerm(code)
+      toast.success(`Đã quét mã: ${code}`)
+    }
   }
 
   if (isError) {
@@ -74,6 +87,9 @@ export default function InventoryMaterialsPage() {
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle className="text-lg font-semibold">Danh sách nguyên vật liệu</CardTitle>
               <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => setIsScannerOpen(true)}>
+                  <QrCode className="mr-2 size-4" /> Quét QR
+                </Button>
                 <Button variant="outline" size="sm" onClick={handleExport}>
                   <Download className="mr-2 size-4" /> Xuất Excel
                 </Button>
@@ -103,11 +119,26 @@ export default function InventoryMaterialsPage() {
                 materials={materials}
                 onView={handleView}
                 onEdit={handleEdit}
+                onHistory={(item) => setHistoryItem(item)}
               />
             )}
           </CardContent>
         </Card>
       </div>
+      <QRScanner
+        open={isScannerOpen}
+        onOpenChange={setIsScannerOpen}
+        onScanSuccess={handleScanSuccess}
+      />
+      {historyItem && (
+        <TransactionHistoryDialog
+          open={!!historyItem}
+          onOpenChange={(open) => !open && setHistoryItem(null)}
+          itemId={historyItem._id}
+          itemName={historyItem.name}
+          itemType="material"
+        />
+      )}
     </AppShell>
   )
 }

@@ -1,15 +1,26 @@
 "use client"
 
-import React, { useState, useEffect, useMemo } from "react"
+import React, { useState, useEffect, useMemo, useRef } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Save, CheckCircle2, Image as ImageIcon, Upload, X, AlertTriangle, CheckCircle } from "lucide-react"
+import { Save, CheckCircle2, Image as ImageIcon, Upload, X, AlertTriangle, CheckCircle, ScanLine } from "lucide-react"
 import { format } from "date-fns"
 import { vi } from "date-fns/locale"
 import { slipApi, Slip, SlipItem } from "@/api/slip.api"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { QRCodeSVG } from 'qrcode.react'
+import Barcode from 'react-barcode'
+import { QRScanner } from "@/features/receiving/components/qr-scanner"
+import { useShelves } from "@/features/inventory/hooks/use-shelves"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 
 /**
  * Chuyển đổi số thành chữ tiếng Việt
@@ -73,6 +84,7 @@ export interface SlipDetailDialogProps {
     statusConfig: Record<string, { label: string, color: string }>
     onSave?: (slipInfo: any, items: SlipItem[]) => void
     onStatusUpdate?: (status: string, items: any[]) => void
+    onStockingAssignment?: (slip: Slip, items: SlipItem[]) => void
     isUpdating?: boolean
 }
 
@@ -84,6 +96,7 @@ export function SlipDetailDialog({
     statusConfig,
     onSave,
     onStatusUpdate,
+    onStockingAssignment,
     isUpdating = false
 }: SlipDetailDialogProps) {
     const [editableItems, setEditableItems] = useState<SlipItem[]>([])
@@ -98,9 +111,18 @@ export function SlipDetailDialog({
     })
     const [uploading, setUploading] = useState(false)
     const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+    const [isScannerOpen, setIsScannerOpen] = useState(false)
+    const audioCtxRef = useRef<AudioContext | null>(null)
+    const isImport = type === 'import'
+    // Lấy danh sách kệ để chọn
+    const { data: shelvesResponse } = useShelves({
+        category: isImport ? 'Material' : undefined,
+        status: 'Available'
+    })
+    const shelves = shelvesResponse?.data || []
 
     const currentStatus = slip?.status || 'pending'
-    const isImport = type === 'import'
+
 
     // Xác định các quyền chỉnh sửa dựa trên trạng thái
     const canEditProvisional = isImport && currentStatus === 'pending'
@@ -233,6 +255,93 @@ export function SlipDetailDialog({
         }
     }
 
+    // Hàm phát âm thanh khi quét QR
+    const playScanSound = (type: 'success' | 'error') => {
+        try {
+            if (!audioCtxRef.current) {
+                audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)()
+            }
+            const ctx = audioCtxRef.current
+            if (ctx.state === 'suspended') ctx.resume()
+
+            const oscillator = ctx.createOscillator()
+            const gainNode = ctx.createGain()
+            oscillator.connect(gainNode)
+            gainNode.connect(ctx.destination)
+
+            if (type === 'success') {
+                // Tiếng "Bíp" ngắn, thanh (Tần số 1200Hz)
+                oscillator.type = 'sine'
+                oscillator.frequency.setValueAtTime(1200, ctx.currentTime)
+                gainNode.gain.setValueAtTime(0.1, ctx.currentTime)
+                gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1)
+                oscillator.start(ctx.currentTime)
+                oscillator.stop(ctx.currentTime + 0.1)
+            } else {
+                // Tiếng "Tít Tít" lỗi (Tần số 400Hz, 2 nhịp)
+                oscillator.type = 'square'
+                oscillator.frequency.setValueAtTime(400, ctx.currentTime)
+                gainNode.gain.setValueAtTime(0.1, ctx.currentTime)
+                gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15)
+                oscillator.start(ctx.currentTime)
+                oscillator.stop(ctx.currentTime + 0.15)
+
+                const osc2 = ctx.createOscillator()
+                const gain2 = ctx.createGain()
+                osc2.connect(gain2)
+                gain2.connect(ctx.destination)
+                osc2.type = 'square'
+                osc2.frequency.setValueAtTime(400, ctx.currentTime + 0.2)
+                gain2.gain.setValueAtTime(0.1, ctx.currentTime + 0.2)
+                gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35)
+                osc2.start(ctx.currentTime + 0.2)
+                osc2.stop(ctx.currentTime + 0.35)
+            }
+        } catch (e) {
+            console.error("Audio API not supported", e)
+        }
+    }
+
+    const handleScanSuccess = (data: any) => {
+        const scannedCode = data?.code || data?.itemCode || data?.materialCode || data?.productCode || data?.id || (typeof data === 'string' ? data : null)
+
+        if (!scannedCode) {
+            toast.error("Mã không hợp lệ hoặc không đọc được.")
+            return
+        }
+
+        // Tìm item có mã tương ứng trong danh sách phiếu (bao gồm cả fallback nếu mã có tiền tố phụ)
+        const itemIndex = editableItems.findIndex(item => item.itemCode === scannedCode || item.itemCode === scannedCode.split('-')[0])
+
+        if (itemIndex !== -1) {
+            const newItems = [...editableItems]
+            const item = newItems[itemIndex]
+
+            if (canEditActual) {
+                item.quantity.actual = (item.quantity.actual || 0) + 1
+                item.amount = item.quantity.actual * (item.unitPrice || 0)
+                playScanSound('success')
+                toast.success(`Khớp mã! Đã cộng 1 vào thực nhập: ${item.itemName}`, {
+                    description: `Số lượng thực tế mới: ${item.quantity.actual}`
+                })
+            } else if (canEditProvisional) {
+                item.quantity.provisional = (item.quantity.provisional || 0) + 1
+                item.amount = item.quantity.provisional * (item.unitPrice || 0)
+                playScanSound('success')
+                toast.success(`Khớp mã! Đã cộng 1 vào tạm tính: ${item.itemName}`, {
+                    description: `Số lượng tạm tính mới: ${item.quantity.provisional}`
+                })
+            }
+
+            setEditableItems(newItems)
+        } else {
+            playScanSound('error')
+            toast.error(`Mã [${scannedCode}] không khớp!`, {
+                description: "Vật tư/sản phẩm này KHÔNG CÓ TRONG PHIẾU."
+            })
+        }
+    }
+
     // Logic xác định bước tiếp theo và nhãn nút
     const getNextStepAction = () => {
         if (isImport) {
@@ -291,6 +400,61 @@ export function SlipDetailDialog({
     const personLabel2 = isImport ? "Người giao hàng" : "Người nhận hàng"
     const actualLabel = isImport ? "Thực nhập" : "Thực xuất"
 
+    const handlePrint = () => {
+        const printContent = document.getElementById('printable-slip-wrapper');
+        if (!printContent) return;
+
+        // Cập nhật value cho các input để outerHTML lấy được giá trị bạn vừa gõ
+        const inputs = printContent.querySelectorAll('input');
+        inputs.forEach(input => {
+            input.setAttribute('value', input.value);
+        });
+
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) {
+            toast.error("Vui lòng cho phép popup trình duyệt để in phiếu");
+            return;
+        }
+
+        let styleHTML = '';
+        document.querySelectorAll('style, link[rel="stylesheet"]').forEach(el => {
+            styleHTML += el.outerHTML;
+        });
+
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>In Phiếu</title>
+                ${styleHTML}
+                <style>
+                    body { background: white !important; padding: 0; font-family: "Times New Roman", Times, serif; }
+                    #printable-slip-wrapper { width: 100%; margin: 0 auto; padding: 20px; }
+                    .print\\:hidden { display: none !important; }
+                    input { border: none !important; border-bottom: 1px dotted black !important; background: transparent !important; color: black !important; }
+                    table { border-collapse: collapse !important; width: 100% !important; }
+                    th, td { border: 1px solid black !important; }
+                    ::-webkit-scrollbar { display: none; }
+                    @media print {
+                        @page { size: A4; margin: 15mm; }
+                        body { padding: 0; }
+                    }
+                </style>
+            </head>
+            <body>
+                ${printContent.outerHTML}
+                <script>
+                    setTimeout(() => {
+                        window.print();
+                        window.onafterprint = () => window.close();
+                    }, 800); // Chờ 800ms cho QR/Barcode render nét chuẩn
+                </script>
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
+    }
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent size="4xl" className="w-[95vw] max-h-[95vh] p-0 border-none shadow-2xl rounded-2xl overflow-hidden flex flex-col bg-white">
@@ -300,8 +464,36 @@ export function SlipDetailDialog({
                         Hiển thị thông tin chi tiết và chỉnh sửa {formTitle.toLowerCase()} theo {formNumber}
                     </DialogDescription>
                 </DialogHeader>
+
+                {/* Style dành riêng cho máy in: Cắt bỏ UI thừa, chuẩn hóa form giấy */}
+                <style>{`
+                    @media print {
+                        body { visibility: hidden; background: white !important; }
+                        #printable-slip-wrapper, #printable-slip-wrapper * { visibility: visible; }
+                        #printable-slip-wrapper {
+                            position: absolute; left: 0; top: 0; width: 100vw; margin: 0; padding: 0;
+                            background: white !important;
+                        }
+                        /* Ẩn các phần tử có class print:hidden */
+                        .print\\:hidden { display: none !important; }
+                        /* Chuyển các input thành chữ thường có viền chấm */
+                        #printable-slip-wrapper input {
+                            border: none !important;
+                            border-bottom: 1px dotted black !important;
+                            background: transparent !important;
+                            color: black !important;
+                        }
+                        /* Chuẩn hóa viền bảng in */
+                        table { border-collapse: collapse !important; width: 100% !important; }
+                        th, td { border: 1px solid black !important; }
+                        /* Ẩn thanh cuộn */
+                        ::-webkit-scrollbar { display: none; }
+                        @page { size: A4; margin: 15mm; }
+                    }
+                `}</style>
+
                 <div className="overflow-y-auto w-full h-full scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
-                    <div className="p-8 md:p-12 text-black print:p-0" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+                    <div id="printable-slip-wrapper" className="p-8 md:p-12 text-black print:p-0" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
                         {/* Header */}
                         <div className="flex justify-between items-start mb-8">
                             <div className="space-y-1 text-sm">
@@ -324,11 +516,34 @@ export function SlipDetailDialog({
                                     />
                                 </div>
                             </div>
-                            <div className="text-center space-y-1">
-                                <p className="font-bold text-base uppercase">{formNumber}</p>
-                                <p className="text-[10px] leading-tight max-w-[220px] mx-auto">
-                                    (Ban hành theo Thông tư số 133/2016/TT-BTC ngày 26/8/2016 của Bộ Tài chính)
-                                </p>
+                            <div className="flex items-start gap-8">
+                                <div className="text-center space-y-1 mt-1">
+                                    <p className="font-bold text-base uppercase">{formNumber}</p>
+                                    <p className="text-[10px] leading-tight max-w-[220px] mx-auto">
+                                        (Ban hành theo Thông tư số 133/2016/TT-BTC ngày 26/8/2016 của Bộ Tài chính)
+                                    </p>
+                                </div>
+                                {slip && (
+                                    <div className="flex flex-col items-center justify-center p-2.5 bg-white rounded-lg border-2 border-dashed border-gray-300 shrink-0 min-w-[120px] print:border-black print:border-solid">
+                                        <QRCodeSVG
+                                            value={JSON.stringify({ type: isImport ? 'RECEIVING_SLIP' : 'DELIVERY_SLIP', id: slip._id, code: slip.slipNumber })}
+                                            size={65}
+                                            level="M"
+                                            includeMargin={false}
+                                        />
+                                        <div className="border-t border-gray-200 print:border-black mt-2.5 pt-2 w-full flex justify-center">
+                                            <Barcode
+                                                value={slip.slipNumber}
+                                                width={1.2}
+                                                height={28}
+                                                displayValue={true}
+                                                fontSize={11}
+                                                background="transparent"
+                                                margin={0}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -439,6 +654,22 @@ export function SlipDetailDialog({
                         </div>
 
                         {/* Table */}
+                        <div className="flex items-center justify-between mb-2 mt-4 print:hidden">
+                            <h3 className="text-sm font-bold flex items-center gap-2">
+                                Danh sách vật tư / hàng hóa
+                            </h3>
+                            {(canEditProvisional || canEditActual) && (
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setIsScannerOpen(true)}
+                                    className="gap-2 text-blue-600 border-blue-200 hover:bg-blue-50"
+                                >
+                                    <ScanLine className="size-4" />
+                                    Quét mã kiểm đếm
+                                </Button>
+                            )}
+                        </div>
                         <div className="mb-6 overflow-x-auto">
                             <table className="w-full border-collapse border border-black text-[13px]">
                                 <thead>
@@ -691,9 +922,10 @@ export function SlipDetailDialog({
                             </div>
                             <div className="flex gap-3">
                                 <Button
+                                    type="button"
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => window.print()}
+                                    onClick={handlePrint}
                                     className="gap-2"
                                     disabled={isUpdating}
                                 >
@@ -705,9 +937,13 @@ export function SlipDetailDialog({
                                         size="sm"
                                         className={cn("gap-2 text-white shadow-sm transition-all hover:scale-105 active:scale-95", nextStep.color)}
                                         onClick={() => {
-                                            if (onStatusUpdate) {
+                                            if (nextStep.nextStatus === 'in_stock' && onStockingAssignment && slip) {
+                                                onStockingAssignment(slip, editableItems)
+                                            } else if (onStatusUpdate) {
                                                 const itemsToUpdate = editableItems.map(item => ({
                                                     itemCode: item.itemCode,
+                                                    material: item.material,
+                                                    product: item.product,
                                                     provisionalQuantity: item.quantity.provisional,
                                                     actualQuantity: item.quantity.actual,
                                                     itemNote: ""
@@ -728,7 +964,11 @@ export function SlipDetailDialog({
                                         className="gap-2 bg-emerald-600 hover:bg-emerald-700 shadow-sm transition-all hover:scale-105 active:scale-95"
                                         onClick={() => {
                                             if (onSave) {
-                                                onSave(editableSlipInfo, editableItems)
+                                                const itemsWithDetails = editableItems.map(item => ({
+                                                    ...item,
+                                                    shelf: typeof item.shelf === 'object' ? (item.shelf as any)?._id : item.shelf
+                                                }))
+                                                onSave(editableSlipInfo, itemsWithDetails)
                                             }
                                         }}
                                         disabled={isUpdating}
@@ -742,6 +982,11 @@ export function SlipDetailDialog({
                     </div>
                 </div>
             </DialogContent>
+            <QRScanner
+                open={isScannerOpen}
+                onOpenChange={setIsScannerOpen}
+                onScanSuccess={handleScanSuccess}
+            />
         </Dialog>
     )
 }

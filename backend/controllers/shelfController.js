@@ -3,6 +3,7 @@ import { handleServiceResponse } from '../utils/responseHelper.js';
 import { createShelfValidator, updateShelfValidator } from '../validations/shelfValidation.js';
 import { logActivity } from '../utils/logger.js';
 import { StatusCodes } from 'http-status-codes';
+import mongoose from 'mongoose';
 
 /**
  * Controller to get all shelves.
@@ -135,6 +136,34 @@ export const deleteShelf = async (req, res) => {
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: 'error',
       message: 'Internal server error while deleting shelf.',
+      data: null
+    });
+  }
+};
+
+/**
+ * Controller to get shelf recommendations for an item.
+ */
+export const getShelfRecommendations = async (req, res) => {
+  try {
+    const { itemId } = req.params;
+    const { type = 'Material', quantity = 0 } = req.query;
+
+    if (!mongoose.Types.ObjectId.isValid(itemId)) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        status: 'error',
+        message: 'Invalid item ID.',
+        data: null
+      });
+    }
+
+    const result = await shelfService.getShelfRecommendations(itemId, type, quantity);
+    return handleServiceResponse(res, result);
+  } catch (error) {
+    console.log('[ShelfController] getShelfRecommendations error:', error);
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: 'error',
+      message: 'Internal server error while getting shelf recommendations.',
       data: null
     });
   }

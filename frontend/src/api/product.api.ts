@@ -51,5 +51,17 @@ export const productApi = {
      */
     deleteProduct: async (id: string): Promise<ApiResponse<null>> => {
         return axiosInstance.delete(`/products/${id}`);
-    }
+    },
+
+    /**
+     * Get product movement history
+     */
+    getHistory: async (id: string, params: {
+        page?: number;
+        limit?: number;
+        type?: string;
+        direction?: 'in' | 'out';
+    } = {}): Promise<ApiResponse<any>> => {
+        return axiosInstance.get(`/products/${id}/history`, { params });
+    },
 };

@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
-import { QrCode, Download, Printer } from 'lucide-react'
+import Barcode from 'react-barcode'
+import { QrCode, Download, Printer, ScanLine } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -8,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 interface QRCodeDialogProps {
   open: boolean
@@ -27,6 +29,8 @@ export function QRCodeDialog({
   receiver,
   time,
 }: QRCodeDialogProps) {
+  const [codeType, setCodeType] = useState<'qr' | 'barcode'>('qr')
+
   const qrData = JSON.stringify({
     type: 'RECEIVING_RECEIPT',
     id: receiptId,
@@ -37,7 +41,7 @@ export function QRCodeDialog({
   })
 
   const downloadQRCode = () => {
-    const svg = document.getElementById('qr-code-svg')
+    const svg = codeType === 'qr' ? document.getElementById('qr-code-svg') : document.querySelector('#barcode-wrapper svg')
     if (!svg) return
 
     const svgData = new XMLSerializer().serializeToString(svg)
@@ -52,7 +56,7 @@ export function QRCodeDialog({
       const pngFile = canvas.toDataURL('image/png')
 
       const downloadLink = document.createElement('a')
-      downloadLink.download = `QR_${receiptId}.png`
+      downloadLink.download = `${codeType.toUpperCase()}_${receiptId}.png`
       downloadLink.href = pngFile
       downloadLink.click()
     }
@@ -64,7 +68,7 @@ export function QRCodeDialog({
     const printWindow = window.open('', '_blank')
     if (!printWindow) return
 
-    const svg = document.getElementById('qr-code-svg')
+    const svg = codeType === 'qr' ? document.getElementById('qr-code-svg') : document.querySelector('#barcode-wrapper svg')
     if (!svg) return
 
     const svgData = new XMLSerializer().serializeToString(svg)
@@ -73,7 +77,7 @@ export function QRCodeDialog({
       <!DOCTYPE html>
       <html>
         <head>
-          <title>In mã QR - \${receiptId}</title>
+          <title>In mã \${codeType === 'qr' ? 'QR' : 'Barcode'} - \${receiptId}</title>
           <style>
             body { margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: system-ui, -apple-system, sans-serif; }
             .qr-container { text-align: center; padding: 40px; border: 2px solid #E5E7EB; border-radius: 12px; background: white; }
@@ -92,7 +96,7 @@ export function QRCodeDialog({
               <div><strong>Người nhận:</strong> \${receiver}</div>
               <div><strong>Thời gian:</strong> \${time}</div>
             </div>
-            <div class="qr-code">\${svgData}</div>
+            <div class="qr-code" style="display: flex; justify-content: center;">\${svgData}</div>
           </div>
           <script>
             window.onload = () => {
@@ -113,32 +117,55 @@ export function QRCodeDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-[#A67C00] rounded-lg flex items-center justify-center">
-              <QrCode className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
+              <ScanLine className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <div>Mã QR Phiếu nhập kho</div>
+              <div>Mã tra cứu phiếu nhập kho</div>
               <div className="text-sm font-normal text-gray-500 mt-1">{receiptId}</div>
             </div>
           </DialogTitle>
           <DialogDescription className="sr-only">
-            Mã QR code cho phiếu nhập kho {receiptId}
+            Mã QR và Barcode cho phiếu nhập kho {receiptId}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="flex flex-col items-center justify-center p-6 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-            <QRCodeSVG
-              id="qr-code-svg"
-              value={qrData}
-              size={256}
-              level="H"
-              includeMargin={true}
-              className="bg-white p-4 rounded-lg shadow-sm"
-            />
-          </div>
+          <Tabs value={codeType} onValueChange={(v) => setCodeType(v as any)} className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="qr">Mã QR Code</TabsTrigger>
+              <TabsTrigger value="barcode">Mã vạch</TabsTrigger>
+            </TabsList>
 
-          <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-2 text-sm">
+            <TabsContent value="qr" className="mt-4">
+              <div className="flex flex-col items-center justify-center p-6 bg-muted/30 rounded-xl border-2 border-dashed border-muted-foreground/20">
+                <QRCodeSVG
+                  id="qr-code-svg"
+                  value={qrData}
+                  size={200}
+                  level="H"
+                  includeMargin={true}
+                  className="bg-white p-2 rounded-lg shadow-sm"
+                />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="barcode" className="mt-4">
+              <div className="flex flex-col items-center justify-center p-6 bg-muted/30 rounded-xl border-2 border-dashed border-muted-foreground/20 overflow-x-auto">
+                <div id="barcode-wrapper" className="bg-white p-4 rounded-lg shadow-sm">
+                  <Barcode
+                    value={receiptId}
+                    width={1.8}
+                    height={70}
+                    displayValue={true}
+                    background="#ffffff"
+                  />
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
+
+          <div className="bg-card border rounded-lg p-4 space-y-2 text-sm shadow-sm">
             <div className="flex justify-between"><span className="text-gray-600">Mã phiếu:</span><span className="font-medium">{receiptId}</span></div>
             <div className="flex justify-between"><span className="text-gray-600">Nhà cung cấp:</span><span className="font-medium">{supplier}</span></div>
             <div className="flex justify-between"><span className="text-gray-600">Người nhận:</span><span className="font-medium">{receiver}</span></div>
@@ -146,11 +173,11 @@ export function QRCodeDialog({
           </div>
 
           <div className="flex gap-3">
-            <Button onClick={downloadQRCode} className="flex-1 bg-[#A67C00] hover:bg-[#8B6914] text-white">
+            <Button onClick={downloadQRCode} className="flex-1">
               <Download className="w-4 h-4 mr-2" /> Tải xuống
             </Button>
-            <Button onClick={printQRCode} variant="outline" className="flex-1 border-[#A67C00] text-[#A67C00]">
-              <Printer className="w-4 h-4 mr-2" /> In mã QR
+            <Button onClick={printQRCode} variant="outline" className="flex-1 border-primary/20 text-primary hover:bg-primary/5">
+              <Printer className="w-4 h-4 mr-2" /> In mã
             </Button>
           </div>
         </div>

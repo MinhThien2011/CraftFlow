@@ -206,6 +206,94 @@ export const deleteShelf = async (id) => {
 };
 
 /**
+ * Get shelf recommendations for a specific material or product.
+ * @param {string} itemId - ID of the material or product
+ * @param {string} type - 'Material' or 'Product'
+ * @param {number} quantityNeeded - The quantity being imported
+ */
+export const getShelfRecommendations = async (itemId, type = 'Material', quantityNeeded = 0) => {
+  try {
+    const isMaterial = type === 'Material';
+    const Model = isMaterial ? Material : Product;
+    const qty = Number(quantityNeeded) || 0;
+
+    // Find shelves that already have this item or are empty, and score them
+    const currentShelvesWithItem = await Shelf.aggregate([
+      {
+        $match: {
+          isActive: true,
+          category: type,
+          status: { $ne: 'Maintenance' }
+        }
+      },
+      {
+        $lookup: {
+          from: isMaterial ? 'materials' : 'products',
+          localField: '_id',
+          foreignField: 'shelf',
+          as: 'storedItems'
+        }
+      },
+      {
+        $addFields: {
+          hasSameItem: {
+            $gt: [
+              {
+                $size: {
+                  $filter: {
+                    input: '$storedItems',
+                    as: 'i',
+                    cond: { $eq: ['$$i._id', new mongoose.Types.ObjectId(itemId)] }
+                  }
+                }
+              },
+              0
+            ]
+          },
+          availableCapacity: { $subtract: ['$maxCapacity', '$currentLoad'] }
+        }
+      },
+      {
+        $addFields: {
+          canFullyAccommodate: { $gte: ['$availableCapacity', qty] },
+          isEmpty: { $eq: ['$currentLoad', 0] }
+        }
+      },
+      {
+        $project: {
+          shelfCode: 1,
+          warehouseSection: 1,
+          currentLoad: 1,
+          maxCapacity: 1,
+          availableCapacity: 1,
+          hasSameItem: 1,
+          canFullyAccommodate: 1,
+          isEmpty: 1,
+          recommendationScore: {
+            $add: [
+              { $cond: { if: '$hasSameItem', then: 100, else: 0 } },
+              { $cond: { if: '$canFullyAccommodate', then: 50, else: 0 } },
+              { $cond: { if: '$isEmpty', then: 30, else: 0 } }
+            ]
+          }
+        }
+      },
+      { $sort: { recommendationScore: -1, availableCapacity: -1 } },
+      { $limit: 10 }
+    ]);
+
+    return {
+      success: true,
+      message: 'Shelf recommendations retrieved successfully.',
+      data: currentShelvesWithItem
+    };
+  } catch (error) {
+    console.error('[ShelfService] getShelfRecommendations error:', error);
+    return { status: 'error', message: 'Failed to get recommendations.', data: null };
+  }
+};
+
+/**
  * Recalculate and update the current load of a shelf.
  */
 export const updateShelfLoad = async (shelfId) => {

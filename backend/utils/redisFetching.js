@@ -11,12 +11,12 @@ const LIST_EXPIRY = 300; // 5 minutes
 export const getCachedData = async (key) => {
     if (!client.isOpen) return null;
     try {
-        // Add timeout to prevent hanging if Redis is slow
         const data = await Promise.race([
             client.get(`${DATA_CACHE_PREFIX}${key}`),
             new Promise((_, reject) => setTimeout(() => reject(new Error('Redis Timeout')), 1000))
         ]);
         if (!data) return null;
+        console.log(`[Redis] Fetched cached data for ${key}:`);
         return JSON.parse(data);
     } catch (error) {
         if (error.message !== 'Redis Timeout') {

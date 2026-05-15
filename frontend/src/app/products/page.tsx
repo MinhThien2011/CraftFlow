@@ -29,6 +29,7 @@ import { productApi } from "@/api/product.api"
 import type { Product, PaginationData } from "@/lib/types"
 import { toast } from "sonner"
 import { useAuth } from "@/features/auth/hooks/use-auth"
+import { TransactionHistoryDialog } from "@/components/shared/transaction-history-dialog"
 
 type TabType = "products" | "bom"
 
@@ -51,6 +52,7 @@ export default function ProductsPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState<string>("All")
   const [currentPage, setCurrentPage] = useState(1)
+  const [historyItem, setHistoryItem] = useState<Product | null>(null)
 
   // API States
   const [products, setProducts] = useState<Product[]>([])
@@ -289,9 +291,20 @@ export default function ProductsPage() {
             handleResetFilters={handleResetFilters}
             handleDeleteProduct={handleDeleteProduct}
             isProductionManager={isProductionManager}
+            onViewHistory={setHistoryItem}
           />
         ) : (
           <BOMList products={products} isLoading={isLoading} isProductionManager={isProductionManager} />
+        )}
+
+        {historyItem && (
+          <TransactionHistoryDialog
+            open={!!historyItem}
+            onOpenChange={(open) => !open && setHistoryItem(null)}
+            itemId={historyItem._id}
+            itemName={historyItem.name}
+            itemType="product"
+          />
         )}
       </div>
     </AppShell>

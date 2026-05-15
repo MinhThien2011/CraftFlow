@@ -16,7 +16,8 @@ import {
   ArrowRight,
   ChevronLeft,
   ChevronRight,
-  Plus
+  Plus,
+  QrCode
 } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
 import { materialApi } from "@/api/material.api"
@@ -51,6 +52,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import { useSearchParams } from 'next/navigation'
+import { QRScanner } from "@/features/receiving/components/qr-scanner"
+import { QRCodeSVG } from 'qrcode.react'
 
 const CustomPagination = ({ page, total, pageSize, onChange }: { page: number; total: number; pageSize: number; onChange: (p: number) => void }) => {
   const totalPages = Math.ceil(total / pageSize)
@@ -86,6 +89,7 @@ export default function PurchaseOrdersPage() {
   const [selectedOrder, setSelectedOrder] = useState<PurchaseOrder | null>(null)
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
   const [adminNote, setAdminNote] = useState("")
+  const [isScannerOpen, setIsScannerOpen] = useState(false)
 
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [createPriority, setCreatePriority] = useState<'low' | 'medium' | 'high'>('medium')
@@ -246,16 +250,16 @@ export default function PurchaseOrdersPage() {
       const response = await purchaseOrderApi.create(payload)
       const res: any = response;
 
-      if (res.success || res.status === 'success') {
-        toast.success(`Đã tạo yêu cầu mua hàng thành công`)
-        setIsCreateOpen(false)
-        fetchOrders()
-      } else {
-        throw new Error(res.message || "Không thể tạo yêu cầu mua hàng")
+      if (res?.success === false || res?.status === 'error') {
+        throw new Error(res?.message || res?.error || "Không thể tạo yêu cầu mua hàng")
       }
+
+      toast.success(`Đã tạo yêu cầu mua hàng thành công`)
+      setIsCreateOpen(false)
+      fetchOrders()
     } catch (error: any) {
-      console.error("Create PO error:", error)
-      toast.error(error.response?.data?.message || error.message || "Không thể tạo yêu cầu mua hàng")
+      console.error("Create PO error:", error?.response?.data || error)
+      toast.error(error?.response?.data?.message || error?.response?.data?.error || error?.message || "Không thể tạo yêu cầu mua hàng")
     } finally {
       setIsSubmitting(false)
     }
@@ -270,9 +274,24 @@ export default function PurchaseOrdersPage() {
       setAdminNote("")
       fetchOrders()
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Không thể cập nhật trạng thái")
+      console.error("Update PO status error:", error?.response?.data || error)
+      toast.error(error?.response?.data?.message || error?.response?.data?.error || error?.message || "Không thể cập nhật trạng thái")
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  const handleScanSuccess = (data: any) => {
+    const scannedId = data?.id || data?.orderCode || (typeof data === 'string' ? data : null)
+    if (scannedId) {
+      const order = orders.find(o => o._id === scannedId || (o as any).orderCode === scannedId)
+      if (order) {
+        setSelectedOrder(order)
+        setIsDetailsOpen(true)
+        toast.success("Đã mở chi tiết phiếu yêu cầu")
+      } else {
+        toast.error("Không tìm thấy phiếu yêu cầu này trong hệ thống")
+      }
     }
   }
 
@@ -329,6 +348,10 @@ export default function PurchaseOrdersPage() {
             />
           </div>
           <div className="flex items-center gap-3">
+            <Button variant="outline" onClick={() => setIsScannerOpen(true)}>
+              <QrCode className="mr-2 h-4 w-4" />
+              Quét QR
+            </Button>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-[160px]">
                 <Filter className="mr-2 h-4 w-4" />
@@ -440,28 +463,39 @@ export default function PurchaseOrdersPage() {
 
           {selectedOrder && (
             <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4 bg-muted/30 p-4 rounded-lg">
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground uppercase">Người tạo</p>
-                  <p className="font-medium flex items-center gap-2">
-                    <User className="h-3 w-3" />
-                    {(selectedOrder.creator as any)?.username || (selectedOrder.creator as any)?.fullName || "Production Manager"}
-                  </p>
+              <div className="flex flex-col md:flex-row gap-6">
+                <div className="flex-1 grid grid-cols-2 gap-4 bg-muted/30 p-4 rounded-lg">
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground uppercase">Người tạo</p>
+                    <p className="font-medium flex items-center gap-2">
+                      <User className="h-3 w-3" />
+                      {(selectedOrder.creator as any)?.username || (selectedOrder.creator as any)?.fullName || "Production Manager"}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground uppercase">Ngày tạo</p>
+                    <p className="font-medium flex items-center gap-2">
+                      <Calendar className="h-3 w-3" />
+                      {format(new Date(selectedOrder.createdAt), 'HH:mm dd/MM/yyyy', { locale: vi })}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground uppercase">Độ ưu tiên</p>
+                    {getPriorityBadge(selectedOrder.priority)}
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground uppercase">Trạng thái</p>
+                    {getStatusBadge(selectedOrder.status)}
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground uppercase">Ngày tạo</p>
-                  <p className="font-medium flex items-center gap-2">
-                    <Calendar className="h-3 w-3" />
-                    {format(new Date(selectedOrder.createdAt), 'HH:mm dd/MM/yyyy', { locale: vi })}
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground uppercase">Độ ưu tiên</p>
-                  {getPriorityBadge(selectedOrder.priority)}
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground uppercase">Trạng thái</p>
-                  {getStatusBadge(selectedOrder.status)}
+                <div className="flex flex-col items-center justify-center p-3 bg-white rounded-lg border-2 border-dashed border-muted shrink-0">
+                  <QRCodeSVG
+                    value={JSON.stringify({ type: 'PURCHASE_ORDER', id: selectedOrder._id, orderCode: (selectedOrder as any).orderCode })}
+                    size={110}
+                    level="H"
+                    includeMargin={true}
+                  />
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-2">Mã QR Tra Cứu</span>
                 </div>
               </div>
 
@@ -695,15 +729,15 @@ export default function PurchaseOrdersPage() {
                         </div>
                       </div>
 
-                      <Button 
-                        type="button" 
-                        variant="ghost" 
-                        size="icon" 
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
                         onClick={() => {
                           const newItems = [...createItems]
                           newItems.splice(index, 1)
                           setCreateItems(newItems)
-                        }} 
+                        }}
                         className="absolute top-4 right-4 lg:static h-12 w-12 rounded-xl text-destructive hover:bg-destructive/10 transition-all opacity-0 group-hover:opacity-100"
                       >
                         <XCircle className="h-6 w-6" />
@@ -717,9 +751,9 @@ export default function PurchaseOrdersPage() {
 
           <DialogFooter className="gap-4 mt-8">
             <Button variant="outline" size="lg" onClick={() => setIsCreateOpen(false)} className="h-14 px-10 rounded-2xl text-lg font-semibold border-2">Hủy bỏ</Button>
-            <Button 
+            <Button
               size="lg"
-              onClick={handleCreateSubmit} 
+              onClick={handleCreateSubmit}
               disabled={isSubmitting}
               className="h-14 px-12 rounded-2xl text-lg font-bold shadow-lg shadow-primary/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
             >
@@ -729,6 +763,12 @@ export default function PurchaseOrdersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <QRScanner
+        open={isScannerOpen}
+        onOpenChange={setIsScannerOpen}
+        onScanSuccess={handleScanSuccess}
+      />
     </AppShell>
   )
 }

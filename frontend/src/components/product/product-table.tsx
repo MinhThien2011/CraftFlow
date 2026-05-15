@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Boxes, Package, MoreVertical, ExternalLink, Trash2 } from "lucide-react"
+import { Boxes, Package, MoreVertical, ExternalLink, Trash2, History } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { CurrencyDisplay } from "@/components/ui/currency-display"
 import type { Product, PaginationData } from "@/lib/types"
@@ -33,9 +33,10 @@ interface Props {
     handleResetFilters: () => void
     handleDeleteProduct: (id: string) => void
     isProductionManager: boolean
+    onViewHistory: (product: Product) => void
 }
 
-export function ProductTable({ products, isLoading, isRefreshing, pagination, currentPage, setCurrentPage, handleResetFilters, handleDeleteProduct, isProductionManager }: Props) {
+export function ProductTable({ products, isLoading, isRefreshing, pagination, currentPage, setCurrentPage, handleResetFilters, handleDeleteProduct, isProductionManager, onViewHistory }: Props) {
     const router = useRouter()
 
     return (
@@ -108,6 +109,9 @@ export function ProductTable({ products, isLoading, isRefreshing, pagination, cu
                                             <DropdownMenuContent align="end" className="rounded-xl">
                                                 <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => router.push(`/products/${product._id}`)}>
                                                     <ExternalLink className="h-4 w-4" /> Xem chi tiết {isProductionManager && "/ Sửa"}
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => onViewHistory(product)}>
+                                                    <History className="h-4 w-4" /> Lịch sử lưu kho
                                                 </DropdownMenuItem>
                                                 {isProductionManager && (
                                                     <DropdownMenuItem className="gap-2 text-destructive focus:text-destructive cursor-pointer" onClick={() => handleDeleteProduct(product._id)}>

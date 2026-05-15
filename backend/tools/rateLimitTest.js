@@ -2,16 +2,15 @@ import http from 'http';
 import https from 'https';
 import { EventEmitter } from 'events';
 
-// Tối ưu hóa hệ thống listener
 EventEmitter.defaultMaxListeners = 0;
 
 // =================================================================
 // --- SIÊU CẤU HÌNH (THIẾT LẬP CHIẾN THUẬT) ---
 // =================================================================
 const CONFIG = {
-    url: 'http://localhost:4000',      // Base URL của server
-    totalRequests: 30000,              // Tổng số đạn (Nên tăng lên để test Redis Store)
-    concurrency: 1000,                  // Số lượng bot bắn cùng lúc
+    url: 'http://localhost:4000', 
+    totalRequests: 30000,
+    concurrency: 1000,
 
     /**
      * CÁC CHẾ ĐỘ TẤN CÔNG (MODE):
@@ -58,7 +57,6 @@ const getRandUA = () => {
     return uas[Math.floor(Math.random() * uas.length)];
 };
 
-// Tạo Fake JWT Token để lọt vào logic getUserId của bạn
 const generateFakeToken = () => {
     const payload = btoa(JSON.stringify({
         id: `hacker_${Math.random().toString(36).substring(2, 15)}`,

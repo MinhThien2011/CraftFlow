@@ -128,6 +128,8 @@ export default function OrderDetailPage() {
         queryKey: ['slips', 'import', 'order', id],
         queryFn: () => slipApi.getSlips({ type: 'import', search: order?.orderCode }),
         enabled: !!order?.orderCode,
+        refetchOnWindowFocus: false,
+        retry: false
     })
 
     // Mutation to update slip details

@@ -5,58 +5,83 @@ import morgan from 'morgan';
 import express from 'express';
 import mainRouter from './routes/main.routes.js';
 import cookieParser from 'cookie-parser';
-import { redisConnect } from './config/redisClient.js';
+import { redisConnect, redisDisconnect, getRedisHealth } from './config/redisClient.js';
+import { slowBodyGuard, concurrentLimiter, subnetLimiter, logSecurityStatus } from './middleware/requestGuard.js';
 import superLogger from './middleware/colorfulLogger.js';
-import { setupGracefulShutdown } from './utils/processHandler.js';
 import { connectToDatabase } from './config/db/mongoDB.js';
+import { logJwtAuthStatus } from './middleware/jwtAuth.js';
+import { logSocketStatus } from './config/socket.js';
 
 const app = express();
 
-// Handle Uncaught Exceptions
+// ─── Process Error Handlers ───────────────────────────────────────────────────
 process.on('uncaughtException', (err) => {
   console.error('🔥 UNCAUGHT EXCEPTION! Shutting down...');
   console.error(err.name, err.message);
   process.exit(1);
 });
 
-// Handle Unhandled Rejections
-process.on('unhandledRejection', (err) => {
-  console.error('🔥 UNHANDLED REJECTION!');
-  console.error(err);
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('🔥 UNHANDLED REJECTION at:', promise);
+  console.error('Reason:', reason);
 });
 
-// Connect to external services
+// ─── Graceful Shutdown ────────────────────────────────────────────────────────
+const shutdown = async (signal) => {
+  console.log(`\n🛑 Received ${signal}. Gracefully shutting down...`);
+  try {
+    await redisDisconnect();
+    console.log('✅ Redis disconnected cleanly');
+  } catch (err) {
+    console.error('⚠️ Error during Redis disconnect:', err.message);
+  }
+  process.exit(0);
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
+// ─── Service Initialization ───────────────────────────────────────────────────
 const initializeServices = async () => {
   try {
-    // superLogger.init('CRAB FLOW', 'Supreme System', 'left')
-    //   .hook(true, true, true)
-    //   .step(1, 3, 'Connecting to MongoDB...')
-    //   .step(2, 3, 'Setting up Redis Cache...')
-    //   .step(3, 3, 'Loading Routes...')
-    //   .divider('System Online')
-    //   .success('Server is ready to fly! 🚀');
-
     await redisConnect();
+
+    // Tăng thời gian chờ để chắc chắn Redis ready
+    let attempts = 0;
+    const maxAttempts = 15; // ~4.5 giây
+    while (!getRedisHealth() && attempts < maxAttempts) {
+      await new Promise(r => setTimeout(r, 300));
+      attempts++;
+    }
+
+    if (getRedisHealth()) {
+      console.log('✅ Redis healthy — rate limiting with RedisStore');
+    } else {
+      console.warn('⚠️ Redis not ready after wait — will use MemoryStore');
+    }
+
     await connectToDatabase();
-    setupGracefulShutdown();
   } catch (err) {
     console.error('❌ Failed to initialize services:', err);
   }
 };
 
-initializeServices().catch(err => {
-  console.error('🔥 CRITICAL: Failed to initialize services:', err);
-});
-// app.use(superLogger.handler);
+initializeServices();
 
+// ─── App Config ───────────────────────────────────────────────────────────────
 app.set('port', process.env.PORT || 4000);
 app.set('env', process.env.NODE_ENV || 'development');
-
+app.set('trust proxy', true);
 if (process.env.NODE_ENV === 'development') {
-  app.set("json spaces", 2);
+  app.set('json spaces', 2);
 }
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+
+// ─── Middleware ───────────────────────────────────────────────────────────────
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
 
 app.use(cors({
   origin: FRONTEND_URL,
@@ -67,25 +92,37 @@ app.use(cookieParser());
 app.use(compression());
 app.use(helmet());
 app.use(morgan('dev'));
+
+// ─── Defense Layer 1: Request Guards (chạy trước body-parser) ─────────────────
+app.use(slowBodyGuard);
+app.use(subnetLimiter);
+app.use(concurrentLimiter);
+logSecurityStatus();
+logJwtAuthStatus();
+logSocketStatus();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api', mainRouter);
 
-app.use(/^\/api\/.*/, (req, res) => {
+// ─── 404 Handler ─────────────────────────────────────────────────────────────
+app.use('/api/*path', (req, res) => {
   res.status(404).json({
-    status: "error",
+    status: 'error',
     path: req.path,
-    error: "Endpoint not found",
+    error: 'Endpoint not found',
   });
 });
 
+// ─── Global Error Handler ─────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
-  console.log(err.stack);
-  res.status(500).json({
-    status: "error",
-    error: "Internal Server Error",
-    err: err.message,
+  console.error(err.stack);
+  const isDev = process.env.NODE_ENV === 'development';
+  res.status(err.status || 500).json({
+    status: 'error',
+    error: 'Internal Server Error',
+    ...(isDev && { message: err.message }),
   });
 });
 

@@ -1,9 +1,9 @@
-import { 
-    Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
+import {
+    Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Eye, Edit2, MapPin } from 'lucide-react'
+import { Eye, Edit2, MapPin, History } from 'lucide-react'
 import { Material } from '@/lib/types'
 import { format } from 'date-fns'
 import { vi } from 'date-fns/locale'
@@ -12,6 +12,7 @@ interface InventoryTableProps {
     materials: Material[];
     onView: (material: Material) => void;
     onEdit: (material: Material) => void;
+    onHistory?: (material: Material) => void;
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -21,7 +22,7 @@ const STATUS_COLOR: Record<string, string> = {
     'Tồn dư': 'bg-blue-100 text-blue-700',
 }
 
-export function InventoryTable({ materials, onView, onEdit }: InventoryTableProps) {
+export function InventoryTable({ materials, onView, onEdit, onHistory }: InventoryTableProps) {
     return (
         <div className="rounded-md border bg-white">
             <Table>
@@ -75,11 +76,14 @@ export function InventoryTable({ materials, onView, onEdit }: InventoryTableProp
                                     {item.updatedAt ? format(new Date(item.updatedAt), 'dd/MM/yyyy HH:mm', { locale: vi }) : 'N/A'}
                                 </TableCell>
                                 <TableCell className="text-right">
-                                    <div className="flex justify-end gap-2">
-                                        <Button variant="ghost" size="icon" className="size-8" onClick={() => onView(item)}>
+                                    <div className="flex justify-end gap-1">
+                                        <Button variant="ghost" size="icon" className="size-8" onClick={() => onHistory?.(item)} title="Xem lịch sử">
+                                            <History className="size-4 text-emerald-600" />
+                                        </Button>
+                                        <Button variant="ghost" size="icon" className="size-8" onClick={() => onView(item)} title="Xem chi tiết">
                                             <Eye className="size-4 text-blue-600" />
                                         </Button>
-                                        <Button variant="ghost" size="icon" className="size-8" onClick={() => onEdit(item)}>
+                                        <Button variant="ghost" size="icon" className="size-8" onClick={() => onEdit(item)} title="Chỉnh sửa">
                                             <Edit2 className="size-4 text-amber-600" />
                                         </Button>
                                     </div>
