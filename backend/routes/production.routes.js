@@ -26,7 +26,7 @@ const productionRouter = Router();
 productionRouter.use(jwtAuth);
 
 // Planning & Lists
-productionRouter.get('/material-alerts', rolePermission([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER]), getMaterialAlerts);
+productionRouter.get('/material-alerts', rolePermission([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER,ROLES.KHO_MANAGER]), getMaterialAlerts);
 productionRouter.get('/suggestions', rolePermission([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER]), getSuggestions);
 productionRouter.get('/:id/suggest', rolePermission([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER]), suggestAssignments);
 productionRouter.get('/', rolePermission([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.STAFF]), getListProductionOrder);

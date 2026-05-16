@@ -16,10 +16,19 @@ const userSockets = new Map(); // userId → Set<socket.id>
 
 // ====================== JWT SOCKET AUTH MIDDLEWARE ======================
 const socketAuthMiddleware = (socket, next) => {
-    const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+    let token =
+        socket.handshake.auth?.token ||
+        socket.handshake.query?.token;
+    if (!token && socket.handshake.headers.cookie) {
+        const cookies = socket.handshake.headers.cookie.split(';');
+        const accessTokenCookie = cookies.find(c => c.trim().startsWith('accessToken='));
+        if (accessTokenCookie) {
+            token = accessTokenCookie.split('=')[1];
+        }
+    }
 
     if (!token) {
-        console.warn(`[Socket] Unauthorized connection attempt from ${socket.id}`);
+        console.warn(`[Socket] Unauthorized - No token from ${socket.id}`);
         return next(new Error('Authentication required'));
     }
 
@@ -28,16 +37,13 @@ const socketAuthMiddleware = (socket, next) => {
             algorithms: ['HS256'],
         });
 
-        const userId = decoded.id || decoded.userId;
-        if (!userId) {
-            return next(new Error('Invalid token payload'));
-        }
+        socket.userId = decoded.id || decoded.userId;
+        socket.decoded = decoded;
 
-        socket.userId = userId;
-        next();
+        return next();
     } catch (err) {
-        console.warn(`[Socket] Invalid token from ${socket.id}: ${err.name}`);
-        next(new Error('Invalid token'));
+        console.warn(`[Socket] Invalid token from ${socket.id}: ${err.message}`);
+        return next(new Error('Invalid token'));
     }
 };
 
@@ -73,7 +79,10 @@ export const initSocket = (server) => {
 
         if (userSocketSet.size >= CONFIG.maxConnectionsPerUser) {
             console.warn(`[Socket] User ${userId} exceeded max connections`);
-            socket.emit('error', { message: 'Too many connections' });
+            socket.emit('auth_error', {
+                message: 'Too many connections',
+                code: 'MAX_CONNECTIONS'
+            });
             socket.disconnect(true);
             return;
         }
@@ -82,8 +91,6 @@ export const initSocket = (server) => {
         socket.join(`user_${userId}`);
 
         console.log(`[Socket] ✅ User ${userId} connected | Socket: ${socket.id} | Total: ${userSocketSet.size}`);
-
-        // Handle custom events here if needed
         // socket.on('some-event', (data) => { ... });
 
         socket.on('disconnect', () => {
@@ -137,6 +144,22 @@ export const emitToUsers = (userIds, eventName, data) => {
     userIds.forEach(userId => {
         io.to(`user_${userId}`).emit(eventName, data);
     });
+};
+
+/**
+ * Gửi event tới tất cả user thuộc một role cụ thể
+ */
+export const emitToRoles = async (roles, eventName, data) => {
+    if (!io) return;
+
+    try {
+        const User = mongoose.model('User');
+        const users = await User.find({ role: { $in: roles }, isActive: true }).select('_id');
+        const userIds = users.map(u => u._id.toString());
+        emitToUsers(userIds, eventName, data);
+    } catch (err) {
+        console.error(`[Socket] Failed to emit to roles ${roles}:`, err.message);
+    }
 };
 
 // ====================== STATUS LOGGER ======================

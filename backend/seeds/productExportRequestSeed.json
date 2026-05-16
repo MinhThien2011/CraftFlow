@@ -1,0 +1,54 @@
+[
+  {
+    "requestCode": "PEX-20260516-001",
+    "createdByUsername": "napoleon.bonaparte",
+    "items": [
+      {
+        "productCode": "PROD-BEAR-01",
+        "requestedQuantity": 2,
+        "actualQuantity": 2
+      },
+      {
+        "productCode": "PROD-BAG-01",
+        "requestedQuantity": 5,
+        "actualQuantity": 5
+      }
+    ],
+    "status": "completed",
+    "adminApprovedByUsername": "thien.pham",
+    "khoManagerUsername": "hung.vu",
+    "reason": "Xuất hàng cho đơn hàng Shopee #SHP123456",
+    "notes": "Đã kiểm tra kỹ đóng gói trước khi xuất",
+    "approvedAt": "2026-05-16T08:30:00.000Z",
+    "completedAt": "2026-05-16T10:00:00.000Z"
+  },
+  {
+    "requestCode": "PEX-20260516-002",
+    "createdByUsername": "napoleon.bonaparte",
+    "items": [
+      {
+        "productCode": "PROD-HOME-01",
+        "requestedQuantity": 1,
+        "actualQuantity": 0
+      }
+    ],
+    "status": "pending",
+    "reason": "Mẫu gửi cho đối tác triển lãm",
+    "notes": "Cần gấp trước 4h chiều"
+  },
+  {
+    "requestCode": "PEX-20260515-001",
+    "createdByUsername": "napoleon.bonaparte",
+    "items": [
+      {
+        "productCode": "PROD-ACC-01",
+        "requestedQuantity": 10,
+        "actualQuantity": 10
+      }
+    ],
+    "status": "approved",
+    "adminApprovedByUsername": "thien.pham",
+    "reason": "Chuyển kho chi nhánh 2",
+    "approvedAt": "2026-05-15T14:20:00.000Z"
+  }
+]

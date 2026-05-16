@@ -8,6 +8,7 @@ import {
     seedProducts,
     seedProductionOrders,
     seedBoms,
+    seedProductExportRequests,
 } from "./seeds/seeders.js";
 
 export const initializeCollections = async () => {
@@ -40,6 +41,7 @@ const SEED_PIPELINE = [
     { name: "Products", fn: seedProducts },
     { name: "ProductionOrders", fn: seedProductionOrders },
     { name: "BOMs", fn: seedBoms },
+    { name: "ProductExportRequests", fn: seedProductExportRequests },
 ];
 
 export const runSeedPipeline = async () => {

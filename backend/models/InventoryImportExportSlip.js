@@ -64,6 +64,10 @@ const InventoryImportExportSlipSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'MaterialRequisition',
     },
+    relatedProductExportRequest: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'ProductExportRequest',
+    },
     warehouse: {
         name: { type: String, trim: true }, // "Nhập/Xuất tại kho (ngăn lô)"
         location: { type: String, trim: true }, // "Địa điểm"
@@ -180,6 +184,7 @@ InventoryImportExportSlipSchema.index({ type: 1, status: 1 });
 InventoryImportExportSlipSchema.index({ relatedProductionOrder: 1 });
 InventoryImportExportSlipSchema.index({ relatedPurchaseOrder: 1 });
 InventoryImportExportSlipSchema.index({ relatedRequisition: 1 });
+InventoryImportExportSlipSchema.index({ relatedProductExportRequest: 1 });
 InventoryImportExportSlipSchema.index({ 'signatures.creator': 1 });
 InventoryImportExportSlipSchema.index({ 'signatures.storekeeper': 1 });
 

@@ -1,10 +1,12 @@
 import ProductExportRequest from '../models/ProductExportRequest.js';
 import Product from '../models/Product.js';
 import { createSlipService } from './importExportSlipService.js';
-import { 
-    REQUISITION_STATUS, 
-    INVENTORY_IMPORT_EXPORT_SLIP_TYPE, 
-    INVENTORY_IMPORT_EXPORT_SLIP_STATUS 
+import { createNotification } from './notificationService.js';
+import {
+    REQUISITION_STATUS,
+    INVENTORY_IMPORT_EXPORT_SLIP_TYPE,
+    INVENTORY_IMPORT_EXPORT_SLIP_STATUS,
+    ROLES
 } from '../utils/constants.js';
 import mongoose from 'mongoose';
 import { generateAtomicCode } from '../utils/codeGenerator.js';
@@ -20,10 +22,10 @@ export const createExportRequest = async (requestData, userId) => {
         // 1. Check stock for each product
         for (const item of items) {
             const product = await Product.findById(item.product);
-            if (!product) throw new Error(`Product ${item.product} not found.`);
-            
+            if (!product) throw new Error(`Sản phẩm ${item.product} không tồn tại.`);
+
             if (product.currentStock < item.requestedQuantity) {
-                throw new Error(`Insufficient stock for product ${product.code}. Available: ${product.currentStock}, Requested: ${item.requestedQuantity}`);
+                throw new Error(`Không đủ tồn kho cho sản phẩm ${product.code}. Hiện có: ${product.currentStock}, Yêu cầu: ${item.requestedQuantity}`);
             }
         }
 
@@ -38,6 +40,21 @@ export const createExportRequest = async (requestData, userId) => {
         });
 
         await newRequest.save();
+
+        // Notify Admins
+        const adminRole = await mongoose.model('Role').findOne({ roleName: ROLES.ADMIN });
+        const admins = adminRole ? await mongoose.model('User').find({ role: adminRole._id }) : [];
+        for (const admin of admins) {
+            await createNotification({
+                recipient: admin._id,
+                title: 'Yêu cầu xuất sản phẩm mới',
+                message: `Quản lý sản xuất vừa tạo yêu cầu xuất sản phẩm mới (${requestCode}).`,
+                type: 'INVENTORY',
+                priority: 'MEDIUM',
+                metaData: { requestId: newRequest._id }
+            });
+        }
+
         return ServiceResponse(true, 'Yêu cầu xuất hàng đã được tạo và chờ Admin duyệt.', newRequest);
     } catch (error) {
         console.error('[ProductExportService] createExportRequest error:', error);
@@ -82,25 +99,56 @@ export const updateRequestStatus = async (requestId, status, adminId) => {
                 type: INVENTORY_IMPORT_EXPORT_SLIP_TYPE.EXPORT,
                 reason: `Xuất hàng theo yêu cầu ${request.requestCode}: ${request.reason || ''}`,
                 personName: 'Người vận chuyển/Khách hàng', // Default placeholder
-                relatedRequisition: request._id,
+                relatedProductExportRequest: request._id,
                 items: slipItems,
                 date: new Date(),
                 status: INVENTORY_IMPORT_EXPORT_SLIP_STATUS.PENDING
             };
 
-            // FIX ISSUE 1: Pass session to createSlipService
             const slipResult = await createSlipService(slipData, adminId, session);
             if (!slipResult.success) {
                 throw new Error(`Lỗi khi tạo phiếu xuất kho: ${slipResult.message}`);
             }
 
             request.relatedSlip = slipResult.data._id;
+
+            // Notify Production Manager and Kho Managers
+            await createNotification({
+                recipient: request.createdBy,
+                title: 'Yêu cầu xuất hàng đã được duyệt',
+                message: `Yêu cầu ${request.requestCode} của bạn đã được Admin phê duyệt.`,
+                type: 'INVENTORY',
+                priority: 'HIGH',
+                metaData: { requestId: request._id, slipId: slipResult.data._id }
+            });
+
+            const khoManagerRole = await mongoose.model('Role').findOne({ roleName: ROLES.KHO_MANAGER });
+            const khoManagers = khoManagerRole ? await mongoose.model('User').find({ role: khoManagerRole._id }) : [];
+            for (const km of khoManagers) {
+                await createNotification({
+                    recipient: km._id,
+                    title: 'Phiếu xuất kho mới cần xử lý',
+                    message: `Yêu cầu xuất hàng ${request.requestCode} đã được duyệt. Vui lòng xử lý phiếu xuất ${slipResult.data.slipNumber}.`,
+                    type: 'INVENTORY',
+                    priority: 'MEDIUM',
+                    metaData: { slipId: slipResult.data._id }
+                });
+            }
+        } else if (status === REQUISITION_STATUS.REJECTED) {
+            // Notify Production Manager
+            await createNotification({
+                recipient: request.createdBy,
+                title: 'Yêu cầu xuất hàng bị từ chối',
+                message: `Yêu cầu ${request.requestCode} của bạn đã bị từ chối.`,
+                type: 'INVENTORY',
+                priority: 'MEDIUM',
+                metaData: { requestId: request._id }
+            });
         }
 
         await request.save({ session });
         await session.commitTransaction();
-
-        return ServiceResponse(true, status === REQUISITION_STATUS.APPROVED ? 'Yêu cầu đã được duyệt và phiếu xuất kho đã được tạo.' : 'Yêu cầu đã bị từ chối.', request);
+        return ServiceResponse(true, `Yêu cầu đã được cập nhật trạng thái thành ${status}.`, request);
     } catch (error) {
         await session.abortTransaction();
         console.error('[ProductExportService] updateRequestStatus error:', error);
@@ -111,19 +159,52 @@ export const updateRequestStatus = async (requestId, status, adminId) => {
 };
 
 /**
- * Get export requests with filters
+ * Get all product export requests with filters
  */
-export const getExportRequests = async (filters = {}) => {
+export const getAllExportRequests = async (filters = {}, page = 1, limit = 10) => {
     try {
+        const skip = (page - 1) * limit;
         const requests = await ProductExportRequest.find(filters)
-            .populate('items.product', 'name code unit currentStock')
             .populate('createdBy', 'fullName')
             .populate('adminApprovedBy', 'fullName')
-            .sort({ createdAt: -1 });
-        
-        return ServiceResponse(true, 'Danh sách yêu cầu xuất hàng.', requests);
+            .populate('items.product', 'name code unit currentStock')
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit);
+
+        const total = await ProductExportRequest.countDocuments(filters);
+
+        return ServiceResponse(true, 'Lấy danh sách yêu cầu thành công.', {
+            requests,
+            pagination: {
+                total,
+                page,
+                limit,
+                pages: Math.ceil(total / limit)
+            }
+        });
     } catch (error) {
-        console.error('[ProductExportService] getExportRequests error:', error);
+        console.error('[ProductExportService] getAllExportRequests error:', error);
+        return ServiceResponse(false, error.message);
+    }
+};
+
+/**
+ * Get request by ID
+ */
+export const getRequestById = async (id) => {
+    try {
+        const request = await ProductExportRequest.findById(id)
+            .populate('createdBy', 'fullName')
+            .populate('adminApprovedBy', 'fullName')
+            .populate('items.product', 'name code unit currentStock shelf')
+            .populate('relatedSlip');
+
+        if (!request) return ServiceResponse(false, 'Yêu cầu không tồn tại.', null, 404);
+
+        return ServiceResponse(true, 'Lấy chi tiết yêu cầu thành công.', request);
+    } catch (error) {
+        console.error('[ProductExportService] getRequestById error:', error);
         return ServiceResponse(false, error.message);
     }
 };

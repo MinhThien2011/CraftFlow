@@ -14,6 +14,23 @@ const shelfSchema = new mongoose.Schema({
         trim: true,
         default: 'General'
     },
+    zone: {
+        type: String,
+        trim: true,
+        default: 'Zone A'
+    },
+    aisle: {
+        type: String,
+        trim: true,
+    },
+    level: {
+        type: String,
+        trim: true,
+    },
+    bin: {
+        type: String,
+        trim: true,
+    },
     category: {
         type: String,
         enum: ['Material', 'Product', 'General'],
@@ -21,7 +38,7 @@ const shelfSchema = new mongoose.Schema({
     },
     maxCapacity: {
         type: Number,
-        default: 1000, // Default units or weight
+        default: 1000,
         min: 0
     },
     currentLoad: {

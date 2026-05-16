@@ -11,6 +11,7 @@ import superLogger from './middleware/colorfulLogger.js';
 import { connectToDatabase } from './config/db/mongoDB.js';
 import { logJwtAuthStatus } from './middleware/jwtAuth.js';
 import { logSocketStatus } from './config/socket.js';
+import { securityAgent } from './middleware/securityAgentKit.js';
 
 const app = express();
 
@@ -94,8 +95,11 @@ app.use(helmet());
 app.use(morgan('dev'));
 
 // ─── Defense Layer 1: Request Guards (chạy trước body-parser) ─────────────────
+// app.use(securityAgent);
 app.use(slowBodyGuard);
 app.use(subnetLimiter);
+
+// ─── Defense Layer 2: Request Guards (chạy sau body-parser) ───────────────────
 app.use(concurrentLimiter);
 logSecurityStatus();
 logJwtAuthStatus();

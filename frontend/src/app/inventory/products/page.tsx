@@ -8,16 +8,16 @@ import { Button } from '@/components/ui/button'
 import { InventoryStats } from '@/features/inventory/components/inventory-stats'
 import { InventoryTable } from '@/features/inventory/components/inventory-table'
 import { InventoryFilters } from '@/features/inventory/components/inventory-filters'
-import { useInventoryMaterials } from '@/features/inventory/hooks/use-inventory-materials'
-import { Material } from '@/lib/types'
+import { useInventoryProducts } from '@/features/inventory/hooks/use-inventory-products'
+import { Product } from '@/lib/types'
 import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
 import { QRScanner } from "@/features/receiving/components/qr-scanner"
 import { TransactionHistoryDialog } from "@/components/shared/transaction-history-dialog"
 
-export default function InventoryMaterialsPage() {
+export default function InventoryProductsPage() {
   const [isScannerOpen, setIsScannerOpen] = useState(false)
-  const [historyItem, setHistoryItem] = useState<Material | null>(null)
+  const [historyItem, setHistoryItem] = useState<Product | null>(null)
   const {
     searchTerm,
     setSearchTerm,
@@ -27,23 +27,23 @@ export default function InventoryMaterialsPage() {
     setStatusFilter,
     isLoading,
     isError,
-    materials,
+    products,
     stats,
     categories,
     refetch
-  } = useInventoryMaterials()
+  } = useInventoryProducts()
 
   // Modal Handlers
-  const handleView = (material: any) => {
-    setHistoryItem(material)
+  const handleView = (product: any) => {
+    setHistoryItem(product)
   }
 
-  const handleEdit = (material: any) => {
-    toast.info(`Đang chỉnh sửa: ${material.name}`)
+  const handleEdit = (product: any) => {
+    toast.info(`Đang chỉnh sửa sản phẩm: ${product.name}`)
   }
 
   const handleAdd = () => {
-    toast.info("Thêm mới nguyên vật liệu")
+    toast.info("Thêm mới sản phẩm")
   }
 
   const handleExport = () => {
@@ -60,10 +60,10 @@ export default function InventoryMaterialsPage() {
 
   if (isError) {
     return (
-      <AppShell title="Tồn kho nguyên vật liệu">
+      <AppShell title="Tồn kho sản phẩm">
         <div className="flex flex-col items-center justify-center h-64 text-destructive gap-4">
           <AlertTriangle className="size-12" />
-          <p>Đã xảy ra lỗi khi tải dữ liệu. Vui lòng thử lại sau.</p>
+          <p>Đã xảy ra lỗi khi tải dữ liệu tồn kho sản phẩm. Vui lòng thử lại sau.</p>
           <Button variant="outline" onClick={() => refetch()}>Thử lại</Button>
         </div>
       </AppShell>
@@ -71,7 +71,7 @@ export default function InventoryMaterialsPage() {
   }
 
   return (
-    <AppShell title="Tồn kho nguyên vật liệu" subtitle="Quản lý tồn kho realtime">
+    <AppShell title="Tồn kho sản phẩm" subtitle="Quản lý tồn kho sản phẩm thành phẩm realtime">
       <div className="space-y-6">
 
         {isLoading ? (
@@ -85,7 +85,7 @@ export default function InventoryMaterialsPage() {
         <Card>
           <CardHeader className="pb-4">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <CardTitle className="text-lg font-semibold">Danh sách nguyên vật liệu</CardTitle>
+              <CardTitle className="text-lg font-semibold">Danh sách sản phẩm thành phẩm</CardTitle>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => setIsScannerOpen(true)}>
                   <QrCode className="mr-2 size-4" /> Quét QR
@@ -116,10 +116,10 @@ export default function InventoryMaterialsPage() {
               </div>
             ) : (
               <InventoryTable
-                items={materials}
+                items={products}
                 onView={handleView}
                 onEdit={handleEdit}
-                onHistory={(item) => setHistoryItem(item as Material)}
+                onHistory={(item) => setHistoryItem(item as Product)}
               />
             )}
           </CardContent>
@@ -136,7 +136,7 @@ export default function InventoryMaterialsPage() {
           onOpenChange={(open) => !open && setHistoryItem(null)}
           itemId={historyItem._id}
           itemName={historyItem.name}
-          itemType="material"
+          itemType="product"
         />
       )}
     </AppShell>

@@ -1,18 +1,17 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState } from "react"
 import {
   Package,
   Plus,
   Search,
-  Filter,
   RefreshCw,
   MoreVertical,
   Edit,
   Trash2,
-  ExternalLink,
+  Eye,
   AlertTriangle,
-  Loader2,
+  MapPin,
 } from "lucide-react"
 
 import { AppShell } from "@/components/app-shell"
@@ -34,39 +33,35 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { useMaterials, useDeleteMaterial } from "@/features/inventory/hooks/use-materials"
+import { MaterialDialog } from "@/features/inventory/components/material-dialog"
 import type { Material } from "@/lib/types"
 import { toast } from "sonner"
 import { Spinner } from "@/components/ui/spinner"
-import { format } from "date-fns"
-import { vi } from "date-fns/locale"
 import { cn } from "@/lib/utils"
+import { CurrencyDisplay } from "@/components/ui/currency-display"
 
 const STATUS_COLOR: Record<string, string> = {
-    'Bình thường': 'bg-emerald-100 text-emerald-700',
-    'Sắp hết': 'bg-amber-100 text-amber-700',
-    'Nguy cấp': 'bg-red-100 text-red-700',
-    'Tồn dư': 'bg-blue-100 text-blue-700',
+  'Bình thường': 'bg-emerald-100 text-emerald-700',
+  'Sắp hết': 'bg-amber-100 text-amber-700',
+  'Nguy cấp': 'bg-red-100 text-red-700',
+  'Tồn dư': 'bg-blue-100 text-blue-700',
 }
 
 export default function ManageMaterialsPage() {
   const [searchTerm, setSearchTerm] = useState("")
-  const [categoryFilter, setCategoryFilter] = useState("all")
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
+
+  // Dialog state
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [dialogMode, setDialogMode] = useState<"create" | "edit" | "view">("create")
+  const [selectedMaterial, setSelectedMaterial] = useState<Material | null>(null)
 
   const { data: response, isLoading, isError, refetch } = useMaterials({
     limit: itemsPerPage,
     page: currentPage,
     search: searchTerm,
-    category: categoryFilter === "all" ? undefined : categoryFilter,
   })
 
   const deleteMutation = useDeleteMaterial()
@@ -83,6 +78,12 @@ export default function ManageMaterialsPage() {
     if (confirm("Bạn có chắc chắn muốn xóa nguyên vật liệu này?")) {
       deleteMutation.mutate(id)
     }
+  }
+
+  const openDialog = (mode: "create" | "edit" | "view", material: Material | null = null) => {
+    setDialogMode(mode)
+    setSelectedMaterial(material)
+    setIsDialogOpen(true)
   }
 
   return (
@@ -103,23 +104,10 @@ export default function ManageMaterialsPage() {
             />
           </div>
           <div className="flex items-center gap-2">
-            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="w-[180px]">
-                <Filter className="mr-2 h-4 w-4" />
-                <SelectValue placeholder="Danh mục" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tất cả danh mục</SelectItem>
-                <SelectItem value="Vải">Vải</SelectItem>
-                <SelectItem value="Phụ kiện">Phụ kiện</SelectItem>
-                <SelectItem value="Chỉ khâu">Chỉ khâu</SelectItem>
-                <SelectItem value="Bông">Bông</SelectItem>
-              </SelectContent>
-            </Select>
             <Button variant="outline" size="icon" onClick={handleRefresh} disabled={isLoading}>
               <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
             </Button>
-            <Button className="bg-primary text-primary-foreground">
+            <Button onClick={() => openDialog("create")} className="bg-primary text-primary-foreground">
               <Plus className="mr-2 h-4 w-4" /> Thêm nguyên liệu
             </Button>
           </div>
@@ -156,8 +144,9 @@ export default function ManageMaterialsPage() {
                     <TableRow>
                       <TableHead className="w-[120px]">Mã NVL</TableHead>
                       <TableHead>Tên nguyên vật liệu</TableHead>
-                      <TableHead>Danh mục</TableHead>
+                      <TableHead>Đơn giá</TableHead>
                       <TableHead>Đơn vị</TableHead>
+                      <TableHead>Vị trí</TableHead>
                       <TableHead>Tồn kho</TableHead>
                       <TableHead>Trạng thái</TableHead>
                       <TableHead className="text-right">Thao tác</TableHead>
@@ -166,7 +155,7 @@ export default function ManageMaterialsPage() {
                   <TableBody>
                     {materials.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
+                        <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
                           Không tìm thấy nguyên vật liệu nào
                         </TableCell>
                       </TableRow>
@@ -180,16 +169,29 @@ export default function ManageMaterialsPage() {
                             <div className="flex flex-col">
                               <span className="font-medium">{material.name}</span>
                               <span className="text-xs text-muted-foreground line-clamp-1">
-                                {material.description || "Không có mô tả"}
+                                {material.color} · {material.supplier?.name || "N/A"}
                               </span>
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline" className="font-normal">
-                              {(material as any).category?.[0] || "Chưa phân loại"}
-                            </Badge>
+                            <CurrencyDisplay value={material.price} />
                           </TableCell>
                           <TableCell>{material.unit}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-0.5 text-xs">
+                              <div className="flex items-center gap-1">
+                                <MapPin className="size-3 text-muted-foreground" />
+                                <span className="font-medium">
+                                  {material.shelf?.shelfCode || 'N/A'}
+                                </span>
+                              </div>
+                              {material.locationDetails && (
+                                <span className="text-[10px] text-muted-foreground ml-4">
+                                  {material.locationDetails}
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
                           <TableCell>
                             <div className="flex flex-col">
                               <span className={cn(
@@ -219,13 +221,13 @@ export default function ManageMaterialsPage() {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                <DropdownMenuItem className="gap-2">
+                                <DropdownMenuItem className="gap-2" onClick={() => openDialog("view", material)}>
+                                  <Eye className="h-4 w-4 text-blue-600" /> Xem chi tiết
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="gap-2" onClick={() => openDialog("edit", material)}>
                                   <Edit className="h-4 w-4 text-amber-600" /> Chỉnh sửa
                                 </DropdownMenuItem>
-                                <DropdownMenuItem className="gap-2">
-                                  <ExternalLink className="h-4 w-4 text-blue-600" /> Xem chi tiết
-                                </DropdownMenuItem>
-                                <DropdownMenuItem 
+                                <DropdownMenuItem
                                   className="gap-2 text-destructive focus:text-destructive"
                                   onClick={() => handleDelete(material._id)}
                                 >
@@ -269,6 +271,13 @@ export default function ManageMaterialsPage() {
           </div>
         )}
       </div>
+
+      <MaterialDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        material={selectedMaterial}
+        mode={dialogMode}
+      />
     </AppShell>
   )
 }

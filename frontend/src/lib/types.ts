@@ -76,7 +76,12 @@ export interface Material {
   threshold: number
   minStock?: number
   maxStock?: number
-  location?: string
+  shelf?: {
+    _id: string
+    shelfCode: string
+    warehouseSection: string
+  }
+  locationDetails?: string
   supplier: Supplier
   description?: string
   isActive: boolean
@@ -253,8 +258,12 @@ export interface Product {
   productImage: string
   currentStock: number
   threshold: number
-  shelf?: any
-  location?: string
+  shelf?: {
+    _id: string
+    shelfCode: string
+    warehouseSection: string
+  }
+  locationDetails?: string
   totalProduced: number
   createdAt: string
   updatedAt: string

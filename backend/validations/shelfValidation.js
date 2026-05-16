@@ -11,6 +11,10 @@ export const createShelfSchema = Joi.object({
   warehouseSection: Joi.string().trim().required().messages({
     'string.empty': 'Warehouse section is required.'
   }),
+  zone: Joi.string().trim().allow('', null),
+  aisle: Joi.string().trim().allow('', null),
+  level: Joi.string().trim().allow('', null),
+  bin: Joi.string().trim().allow('', null),
   category: Joi.string().valid('Material', 'Product', 'General').default('General'),
   maxCapacity: Joi.number().min(0).default(1000),
   status: Joi.string().valid('Available', 'Full', 'Maintenance').default('Available'),
@@ -24,6 +28,10 @@ export const createShelfSchema = Joi.object({
 export const updateShelfSchema = Joi.object({
   shelfCode: Joi.string().trim().uppercase(),
   warehouseSection: Joi.string().trim(),
+  zone: Joi.string().trim().allow('', null),
+  aisle: Joi.string().trim().allow('', null),
+  level: Joi.string().trim().allow('', null),
+  bin: Joi.string().trim().allow('', null),
   category: Joi.string().valid('Material', 'Product', 'General'),
   maxCapacity: Joi.number().min(0),
   status: Joi.string().valid('Available', 'Full', 'Maintenance'),

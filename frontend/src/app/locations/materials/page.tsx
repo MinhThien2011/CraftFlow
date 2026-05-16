@@ -77,6 +77,10 @@ export default function MaterialLocationsPage() {
     defaultValues: {
       shelfCode: '',
       warehouseSection: '',
+      zone: '',
+      aisle: '',
+      level: '',
+      bin: '',
       category: 'Material',
       maxCapacity: 1000,
       status: 'Available',
@@ -89,6 +93,10 @@ export default function MaterialLocationsPage() {
     form.reset({
       shelfCode: '',
       warehouseSection: '',
+      zone: '',
+      aisle: '',
+      level: '',
+      bin: '',
       category: 'Material',
       maxCapacity: 1000,
       status: 'Available',
@@ -102,6 +110,10 @@ export default function MaterialLocationsPage() {
     form.reset({
       shelfCode: shelf.shelfCode,
       warehouseSection: shelf.warehouseSection,
+      zone: shelf.zone || '',
+      aisle: shelf.aisle || '',
+      level: shelf.level || '',
+      bin: shelf.bin || '',
       category: shelf.category,
       maxCapacity: shelf.maxCapacity,
       status: shelf.status,
@@ -363,6 +375,60 @@ export default function MaterialLocationsPage() {
                   </FormItem>
                 )}
               />
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="zone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Vùng (Zone)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Zone A" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="aisle"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Dãy (Aisle)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Dãy 1" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="level"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tầng (Level)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Tầng 3" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="bin"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Ô (Bin)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Ô 12" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={form.control}

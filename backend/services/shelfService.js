@@ -219,12 +219,12 @@ export const getShelfRecommendations = async (itemId, type = 'Material', quantit
 
     // Find shelves that already have this item or are empty, and score them
     const currentShelvesWithItem = await Shelf.aggregate([
-      {
-        $match: {
-          isActive: true,
-          category: type,
-          status: { $ne: 'Maintenance' }
-        }
+      { 
+        $match: { 
+          isActive: true, 
+          category: type, 
+          status: { $ne: 'Maintenance' } 
+        } 
       },
       {
         $lookup: {
@@ -238,14 +238,14 @@ export const getShelfRecommendations = async (itemId, type = 'Material', quantit
         $addFields: {
           hasSameItem: {
             $gt: [
-              {
-                $size: {
-                  $filter: {
-                    input: '$storedItems',
-                    as: 'i',
-                    cond: { $eq: ['$$i._id', new mongoose.Types.ObjectId(itemId)] }
-                  }
-                }
+              { 
+                $size: { 
+                  $filter: { 
+                    input: '$storedItems', 
+                    as: 'i', 
+                    cond: { $eq: ['$$i._id', new mongoose.Types.ObjectId(itemId)] } 
+                  } 
+                } 
               },
               0
             ]
@@ -256,13 +256,15 @@ export const getShelfRecommendations = async (itemId, type = 'Material', quantit
       {
         $addFields: {
           canFullyAccommodate: { $gte: ['$availableCapacity', qty] },
-          isEmpty: { $eq: ['$currentLoad', 0] }
+          isEmpty: { $eq: ['$currentLoad', 0] },
+          // Prioritize by same zone/section if possible (can be extended if item has preferred zone)
         }
       },
       {
         $project: {
           shelfCode: 1,
           warehouseSection: 1,
+          zone: 1,
           currentLoad: 1,
           maxCapacity: 1,
           availableCapacity: 1,
@@ -271,9 +273,10 @@ export const getShelfRecommendations = async (itemId, type = 'Material', quantit
           isEmpty: 1,
           recommendationScore: {
             $add: [
-              { $cond: { if: '$hasSameItem', then: 100, else: 0 } },
-              { $cond: { if: '$canFullyAccommodate', then: 50, else: 0 } },
-              { $cond: { if: '$isEmpty', then: 30, else: 0 } }
+              { $cond: { if: '$hasSameItem', then: 200, else: 0 } }, // Highest priority: Keep same items together
+              { $cond: { if: '$canFullyAccommodate', then: 100, else: 0 } }, // Second: Fits everything
+              { $cond: { if: { $gt: ['$availableCapacity', 0] }, then: 50, else: 0 } }, // Third: Has any space
+              { $cond: { if: '$isEmpty', then: 30, else: 0 } } // Fourth: Is empty
             ]
           }
         }

@@ -11,8 +11,11 @@ import {
     INVENTORY_IMPORT_EXPORT_SLIP_TYPE,
     TRANSACTION_TYPE,
     REQUISITION_STATUS,
-    REQUISITION_TYPE
+    REQUISITION_TYPE,
+    ROLES
 } from "../utils/constants.js";
+import { createNotification } from "./notificationService.js";
+import { emitToRoles } from "../config/socket.js";
 import { updateShelfLoad } from "./shelfService.js";
 import { createBatchesFromImport, generateBatchNumber, allocateBatchesForMaterial, allocateBatchesForItem } from "./fifoService.js";
 import { autoUpdateInsufficientOrders } from "./productionOrderService.js";
@@ -261,43 +264,82 @@ export const updateSlipStatusService = async (slipId, newStatus, updateData, use
 
         let warnings = [];
         const updatesMap = new Map();
-        inputItems.forEach(item => {
-            const itemData = {
-                provisionalQuantity: item.provisionalQuantity,
-                actualQuantity: item.actualQuantity,
-                itemNote: item.itemNote,
-                batchNumber: item.batchNumber,
-                expirationDate: item.expirationDate,
-                shelf: item.shelf
-            };
-            if (item.itemCode) updatesMap.set(item.itemCode.toString(), itemData);
-            if (item.material) updatesMap.set(item.material.toString(), itemData);
-            if (item.product) updatesMap.set(item.product.toString(), itemData);
-        });
 
-        for (const slipItem of slip.items) {
-            const updateInfo = updatesMap.get(slipItem.itemCode) ?? updatesMap.get(slipItem.material?.toString()) ?? updatesMap.get(slipItem.product?.toString());
-            if (updateInfo) {
-                // Always update quantities if provided to ensure data consistency across all steps
-                if (updateInfo.provisionalQuantity !== undefined && updateInfo.provisionalQuantity !== null) {
-                    slipItem.quantity.provisional = updateInfo.provisionalQuantity;
+        // --- Special Handling for IN_STOCK (Stocking with Split Line) ---
+        if (targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.IN_STOCK && isImport) {
+            const newItems = [];
+            for (const slipItem of slip.items) {
+                const assignments = inputItems.filter(item =>
+                    (item.itemCode && item.itemCode.toString() === slipItem.itemCode.toString()) ||
+                    (item.material && slipItem.material && item.material.toString() === slipItem.material.toString()) ||
+                    (item.product && slipItem.product && item.product.toString() === slipItem.product.toString())
+                );
+
+                if (assignments.length > 0) {
+                    const totalAssigned = assignments.reduce((sum, a) => sum + (Number(a.actualQuantity) || 0), 0);
+                    // Validation: Sum of split quantities must match inspected actual quantity
+                    if (Math.abs(totalAssigned - slipItem.quantity.actual) > 0.0001) {
+                        return ServiceResponse(false, `Tổng số lượng gán (${totalAssigned}) cho mã ${slipItem.itemCode} không khớp với số lượng thực nhập (${slipItem.quantity.actual})`);
+                    }
+
+                    // Replace original item with split items
+                    assignments.forEach(a => {
+                        const splitItem = slipItem.toObject();
+                        delete splitItem._id; // Let mongoose generate new IDs for split rows
+                        newItems.push({
+                            ...splitItem,
+                            quantity: {
+                                ...slipItem.quantity,
+                                actual: Number(a.actualQuantity)
+                            },
+                            batchNumber: a.batchNumber,
+                            shelf: a.shelf,
+                            itemNote: a.itemNote || slipItem.itemNote
+                        });
+                    });
+                } else {
+                    newItems.push(slipItem);
                 }
+            }
+            slip.items = newItems;
+        } else {
+            // --- Normal Status Update (1-to-1 Mapping) ---
+            inputItems.forEach(item => {
+                const itemData = {
+                    provisionalQuantity: item.provisionalQuantity,
+                    actualQuantity: item.actualQuantity,
+                    itemNote: item.itemNote,
+                    batchNumber: item.batchNumber,
+                    expirationDate: item.expirationDate,
+                    shelf: item.shelf
+                };
+                if (item.itemCode) updatesMap.set(item.itemCode.toString(), itemData);
+                if (item.material) updatesMap.set(item.material.toString(), itemData);
+                if (item.product) updatesMap.set(item.product.toString(), itemData);
+            });
 
-                if (updateInfo.actualQuantity !== undefined && updateInfo.actualQuantity !== null) {
-                    slipItem.quantity.actual = updateInfo.actualQuantity;
+            for (const slipItem of slip.items) {
+                const updateInfo = updatesMap.get(slipItem.itemCode) ?? updatesMap.get(slipItem.material?.toString()) ?? updatesMap.get(slipItem.product?.toString());
+                if (updateInfo) {
+                    if (updateInfo.provisionalQuantity !== undefined && updateInfo.provisionalQuantity !== null) {
+                        slipItem.quantity.provisional = updateInfo.provisionalQuantity;
+                    }
 
-                    // Add warning for discrepancies only during inspection phases
-                    if (targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.INSPECTED || targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.INSPECTING) {
-                        if (slipItem.quantity.actual !== slipItem.quantity.requested) {
-                            warnings.push(`Số lượng lệch cho mã ${slipItem.itemCode}: Yêu cầu ${slipItem.quantity.requested}, Thực tế ${slipItem.quantity.actual}`);
+                    if (updateInfo.actualQuantity !== undefined && updateInfo.actualQuantity !== null) {
+                        slipItem.quantity.actual = updateInfo.actualQuantity;
+
+                        if (targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.INSPECTED || targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.INSPECTING) {
+                            if (slipItem.quantity.actual !== slipItem.quantity.requested) {
+                                warnings.push(`Số lượng lệch cho mã ${slipItem.itemCode}: Yêu cầu ${slipItem.quantity.requested}, Thực tế ${slipItem.quantity.actual}`);
+                            }
                         }
                     }
-                }
 
-                if (updateInfo.itemNote) slipItem.itemNote = updateInfo.itemNote;
-                if (updateInfo.batchNumber) slipItem.batchNumber = updateInfo.batchNumber;
-                if (updateInfo.expirationDate) slipItem.expirationDate = updateInfo.expirationDate;
-                if (updateInfo.shelf) slipItem.shelf = updateInfo.shelf;
+                    if (updateInfo.itemNote) slipItem.itemNote = updateInfo.itemNote;
+                    if (updateInfo.batchNumber) slipItem.batchNumber = updateInfo.batchNumber;
+                    if (updateInfo.expirationDate) slipItem.expirationDate = updateInfo.expirationDate;
+                    if (updateInfo.shelf) slipItem.shelf = updateInfo.shelf;
+                }
             }
         }
 
@@ -349,6 +391,14 @@ export const updateSlipStatusService = async (slipId, newStatus, updateData, use
 
                 await slip.save({ session, ordered: true });
                 await session.commitTransaction();
+
+                // Notify Warehouse Managers real-time when a slip is finalized/in stock
+                emitToRoles([ROLES.ADMIN, ROLES.KHO_MANAGER], 'inventory_slip_updated', {
+                    slipId: slip._id,
+                    slipNumber: slip.slipNumber,
+                    status: targetStatus,
+                    message: `Phiếu ${slip.slipNumber} đã được cập nhật trạng thái: ${targetStatus}.`
+                });
 
                 inventoryEvents.emit('inventory_finalized', { slip, userId });
 
@@ -692,11 +742,17 @@ async function finalizeInventoryUpdate(slip, userId, session) {
     return warnings;
 }
 
-export const getSlipByIdService = async (id) => {
+export const getSlipByIdService = async (slipId) => {
     try {
-        const inventorySlips = await InventoryImportExportSlip.findById(id)
-            .populate('signatures.creator', 'name email')
-            .populate('signatures.storekeeper', 'name email')
+        const inventorySlips = await InventoryImportExportSlip.findById(slipId)
+            .populate('signatures.creator', 'fullName email')
+            .populate('signatures.storekeeper', 'fullName email')
+            .populate('signatures.chiefAccountant', 'fullName email')
+            .populate('signatures.manager', 'fullName email')
+            .populate('relatedProductionOrder', 'orderCode')
+            .populate('relatedPurchaseOrder', 'poNumber')
+            .populate('relatedRequisition', 'requisitionCode')
+            .populate('relatedProductExportRequest', 'requestCode')
             .populate('items.material')
             .populate('items.product');
 

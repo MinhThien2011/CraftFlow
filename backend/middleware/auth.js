@@ -21,7 +21,6 @@ export const verifyToken = async (req, res, next) => {
             return res.status(403).json({ message: "Forbidden: Account is inactive" });
         }
 
-        // Đính kèm thông tin user vào request để dùng ở controller/service
         req.user = {
             id: user._id,
             username: user.username,

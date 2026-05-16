@@ -4,15 +4,15 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Eye, Edit2, MapPin, History } from 'lucide-react'
-import { Material } from '@/lib/types'
+import { Material, Product } from '@/lib/types'
 import { format } from 'date-fns'
 import { vi } from 'date-fns/locale'
 
 interface InventoryTableProps {
-    materials: Material[];
-    onView: (material: Material) => void;
-    onEdit: (material: Material) => void;
-    onHistory?: (material: Material) => void;
+    items: (Material | Product)[];
+    onView: (item: Material | Product) => void;
+    onEdit: (item: Material | Product) => void;
+    onHistory?: (item: Material | Product) => void;
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -22,14 +22,14 @@ const STATUS_COLOR: Record<string, string> = {
     'Tồn dư': 'bg-blue-100 text-blue-700',
 }
 
-export function InventoryTable({ materials, onView, onEdit, onHistory }: InventoryTableProps) {
+export function InventoryTable({ items, onView, onEdit, onHistory }: InventoryTableProps) {
     return (
         <div className="rounded-md border bg-white">
             <Table>
                 <TableHeader>
                     <TableRow>
-                        <TableHead>Mã NVL</TableHead>
-                        <TableHead>Tên nguyên vật liệu</TableHead>
+                        <TableHead>Mã</TableHead>
+                        <TableHead>Tên mặt hàng</TableHead>
                         <TableHead>Tồn kho</TableHead>
                         <TableHead>Đơn vị</TableHead>
                         <TableHead>Vị trí</TableHead>
@@ -39,14 +39,14 @@ export function InventoryTable({ materials, onView, onEdit, onHistory }: Invento
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {materials.length === 0 ? (
+                    {items.length === 0 ? (
                         <TableRow>
                             <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
                                 Không tìm thấy kết quả nào.
                             </TableCell>
                         </TableRow>
                     ) : (
-                        materials.map((item) => (
+                        items.map((item) => (
                             <TableRow key={item._id}>
                                 <TableCell className="font-medium text-blue-600">{item.code}</TableCell>
                                 <TableCell>
@@ -62,9 +62,18 @@ export function InventoryTable({ materials, onView, onEdit, onHistory }: Invento
                                 </TableCell>
                                 <TableCell>{item.unit}</TableCell>
                                 <TableCell>
-                                    <div className="flex items-center gap-1 text-xs">
-                                        <MapPin className="size-3 text-muted-foreground" />
-                                        {item.location || 'N/A'}
+                                    <div className="flex flex-col gap-0.5 text-xs">
+                                        <div className="flex items-center gap-1">
+                                            <MapPin className="size-3 text-muted-foreground" />
+                                            <span className="font-medium">
+                                                {item.shelf?.shelfCode || 'N/A'}
+                                            </span>
+                                        </div>
+                                        {item.locationDetails && (
+                                            <span className="text-[10px] text-muted-foreground ml-4">
+                                                {item.locationDetails}
+                                            </span>
+                                        )}
                                     </div>
                                 </TableCell>
                                 <TableCell>

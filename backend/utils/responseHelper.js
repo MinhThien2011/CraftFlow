@@ -7,8 +7,12 @@ import { StatusCodes } from 'http-status-codes';
  * @returns {Object} Express response JSON.
  */
 export const handleServiceResponse = (res, result, successCode = StatusCodes.OK) => {
-  if (result.success || result.status === 'success') {
-    return res.status(successCode).json(result);
+  if (result.success) {
+    return res.status(successCode).json({
+      success: true,
+      message: result.message || 'Operation successful.',
+      data: result.data || null
+    });
   }
   let errorCode = StatusCodes.BAD_REQUEST;
 
@@ -25,7 +29,7 @@ export const handleServiceResponse = (res, result, successCode = StatusCodes.OK)
   }
 
   return res.status(errorCode).json({
-    status: 'error',
+    success: false,
     message: result.message || 'An unexpected error occurred.',
     data: result.data || null
   });

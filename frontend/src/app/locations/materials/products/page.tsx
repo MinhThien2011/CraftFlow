@@ -1,17 +1,20 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { AppShell } from '@/components/app-shell'
 import {
   Package,
   Maximize2,
+  Plus,
+  Edit2,
+  Trash2,
+  Search,
+  Loader2,
+  MapPin,
   Thermometer,
   ShieldCheck,
   Clock,
-  Plus,
-  Edit2,
-  AlertTriangle,
-  Trash2,
+  AlertTriangle
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -24,10 +27,16 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
 import {
   Select,
   SelectContent,
@@ -35,582 +44,483 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { cn } from '@/lib/utils'
+import { useShelves, useCreateShelf, useUpdateShelf, useDeleteShelf } from '@/features/inventory/hooks/use-shelves'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { shelfSchema, ShelfFormData } from '@/lib/schemas/shelf.schema'
+import { Shelf } from '@/api/shelf.api'
+import { toast } from 'sonner'
 
-type QCStatus = 'passed' | 'pending' | 'failed'
+export default function FinishedGoodsLocationsPage() {
+  const [searchQuery, setSearchQuery] = useState('')
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [editingShelf, setEditingShelf] = useState<Shelf | null>(null)
+  const [shelfToDelete, setShelfToDelete] = useState<Shelf | null>(null)
 
-type FinishedGoodsLocation = {
-  id: string
-  zone: string
-  shelf: string
-  description: string
-  used: number
-  capacity: number
-  qcStatus: QCStatus
-  expiryDate: string | null
-  manufactureDate: string | null
-  currentLot?: string
-  tempMin: number
-  tempMax: number
-}
-
-const finishedGoodsLocations: FinishedGoodsLocation[] = [
-  {
-    id: 'A01',
-    zone: 'A',
-    shelf: '1',
-    description: 'Kệ thành phẩm nhựa',
-    used: 120,
-    capacity: 150,
-    qcStatus: 'passed',
-    expiryDate: '2025-09-25',
-    manufactureDate: '2024-09-01',
-    currentLot: 'LOT-001',
-    tempMin: 2,
-    tempMax: 8,
-  },
-  {
-    id: 'B03',
-    zone: 'B',
-    shelf: '3',
-    description: 'Kệ thành phẩm gỗ',
-    used: 45,
-    capacity: 100,
-    qcStatus: 'pending',
-    expiryDate: '2024-10-15',
-    manufactureDate: '2024-08-12',
-    currentLot: 'LOT-002',
-    tempMin: 10,
-    tempMax: 18,
-  },
-  {
-    id: 'C07',
-    zone: 'C',
-    shelf: '7',
-    description: 'Kệ linh kiện điện tử',
-    used: 100,
-    capacity: 100,
-    qcStatus: 'failed',
-    expiryDate: '2024-11-10',
-    manufactureDate: '2024-07-28',
-    currentLot: 'LOT-003',
-    tempMin: 4,
-    tempMax: 12,
-  },
-  {
-    id: 'D02',
-    zone: 'D',
-    shelf: '2',
-    description: 'Kệ bao bì giấy',
-    used: 30,
-    capacity: 200,
-    qcStatus: 'passed',
-    expiryDate: null,
-    manufactureDate: null,
-    currentLot: undefined,
-    tempMin: 15,
-    tempMax: 25,
-  },
-  {
-    id: 'E05',
-    zone: 'E',
-    shelf: '5',
-    description: 'Kệ sản phẩm đông lạnh',
-    used: 85,
-    capacity: 100,
-    qcStatus: 'pending',
-    expiryDate: '2024-06-20',
-    manufactureDate: '2024-05-20',
-    currentLot: 'LOT-005',
-    tempMin: -5,
-    tempMax: 2,
-  },
-]
-
-type FilterStatus = 'all' | 'low' | 'high' | 'full' | 'pending-qc' | 'expiring'
-
-function getDaysUntilExpiry(expiryDate: string | null): number | null {
-  if (!expiryDate) return null
-  const diff = new Date(expiryDate).getTime() - Date.now()
-  return Math.ceil(diff / (1000 * 60 * 60 * 24))
-}
-
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('vi-VN', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  })
-}
-
-function getUsageStatus(location: FinishedGoodsLocation) {
-  const pct = (location.used / location.capacity) * 100
-  if (pct >= 100) return 'full'
-  if (pct >= 80) return 'high'
-  if (pct >= 40) return 'medium'
-  return 'low'
-}
-
-const QC_CONFIG: Record<QCStatus, { label: string; className: string; icon: React.ReactNode }> = {
-  passed: {
-    label: 'Đã QC',
-    className: 'bg-emerald-100 text-emerald-700',
-    icon: <ShieldCheck className="size-3" />,
-  },
-  pending: {
-    label: 'Chờ QC',
-    className: 'bg-amber-100 text-amber-700',
-    icon: <Clock className="size-3" />,
-  },
-  failed: {
-    label: 'Không đạt',
-    className: 'bg-red-100 text-red-700',
-    icon: <AlertTriangle className="size-3" />,
-  },
-}
-
-const FILTER_OPTIONS: { value: FilterStatus; label: string }[] = [
-  { value: 'all', label: 'Tất cả' },
-  { value: 'low', label: 'Còn trống' },
-  { value: 'high', label: 'Gần đầy' },
-  { value: 'full', label: 'Đã đầy' },
-  { value: 'pending-qc', label: 'Chờ QC' },
-  { value: 'expiring', label: 'Sắp hết hạn' },
-]
-
-export default function FinishedGoodsPage() {
-  const [activeFilter, setActiveFilter] = useState<FilterStatus>('all')
-  const [locations, setLocations] = useState<FinishedGoodsLocation[]>(finishedGoodsLocations)
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
-  const [editingLocation, setEditingLocation] = useState<FinishedGoodsLocation | null>(null)
-  const [formData, setFormData] = useState({
-    zone: '',
-    shelf: '',
-    description: '',
-    capacity: '',
-    tempMin: '',
-    tempMax: '',
+  const { data: response, isLoading } = useShelves({
+    category: 'Product',
+    search: searchQuery
   })
 
-  const resetForm = () => {
-    setFormData({
+  const shelves = response?.data || []
+
+  const createShelf = useCreateShelf()
+  const updateShelf = useUpdateShelf()
+  const deleteShelf = useDeleteShelf()
+
+  const form = useForm<ShelfFormData>({
+    resolver: zodResolver(shelfSchema),
+    defaultValues: {
+      shelfCode: '',
+      warehouseSection: '',
       zone: '',
-      shelf: '',
+      aisle: '',
+      level: '',
+      bin: '',
+      category: 'Product',
+      maxCapacity: 1000,
+      status: 'Available',
       description: '',
-      capacity: '',
-      tempMin: '',
-      tempMax: '',
+    },
+  })
+
+  const handleAddClick = () => {
+    setEditingShelf(null)
+    form.reset({
+      shelfCode: '',
+      warehouseSection: '',
+      zone: '',
+      aisle: '',
+      level: '',
+      bin: '',
+      category: 'Product',
+      maxCapacity: 1000,
+      status: 'Available',
+      description: '',
     })
-    setEditingLocation(null)
+    setIsDialogOpen(true)
   }
 
-  const handleAddLocation = () => {
-    if (!formData.zone || !formData.shelf || !formData.capacity) {
-      alert('Vui lòng điền đầy đủ thông tin bắt buộc')
-      return
-    }
-
-    const newLocation: FinishedGoodsLocation = {
-      id: `${formData.zone}${formData.shelf}`,
-      zone: formData.zone.toUpperCase(),
-      shelf: formData.shelf,
-      description: formData.description || `Kệ khu ${formData.zone}`,
-      used: 0,
-      capacity: parseInt(formData.capacity),
-      qcStatus: 'pending',
-      expiryDate: null,
-      manufactureDate: null,
-      currentLot: undefined,
-      tempMin: parseInt(formData.tempMin) || 15,
-      tempMax: parseInt(formData.tempMax) || 25,
-    }
-
-    setLocations(prev => [...prev, newLocation])
-    setIsAddDialogOpen(false)
-    resetForm()
-  }
-
-  const handleEditLocation = (location: FinishedGoodsLocation) => {
-    setEditingLocation(location)
-    setFormData({
-      zone: location.zone,
-      shelf: location.shelf,
-      description: location.description,
-      capacity: location.capacity.toString(),
-      tempMin: location.tempMin.toString(),
-      tempMax: location.tempMax.toString(),
+  const handleEditClick = (shelf: Shelf) => {
+    setEditingShelf(shelf)
+    form.reset({
+      shelfCode: shelf.shelfCode,
+      warehouseSection: shelf.warehouseSection,
+      zone: shelf.zone || '',
+      aisle: shelf.aisle || '',
+      level: shelf.level || '',
+      bin: shelf.bin || '',
+      category: shelf.category,
+      maxCapacity: shelf.maxCapacity,
+      status: shelf.status,
+      description: shelf.description || '',
     })
-    setIsAddDialogOpen(true)
+    setIsDialogOpen(true)
   }
 
-  const handleUpdateLocation = () => {
-    if (!editingLocation) return
-
-    const updatedLocation: FinishedGoodsLocation = {
-      ...editingLocation,
-      zone: formData.zone.toUpperCase(),
-      shelf: formData.shelf,
-      description: formData.description,
-      capacity: parseInt(formData.capacity),
-      tempMin: parseInt(formData.tempMin) || 15,
-      tempMax: parseInt(formData.tempMax) || 25,
+  const onSubmit = async (data: ShelfFormData) => {
+    if (editingShelf) {
+      await updateShelf.mutateAsync({ id: editingShelf._id, data })
+    } else {
+      await createShelf.mutateAsync(data)
     }
-
-    setLocations(prev => prev.map(loc => 
-      loc.id === editingLocation.id ? updatedLocation : loc
-    ))
-    setIsAddDialogOpen(false)
-    resetForm()
+    setIsDialogOpen(false)
   }
 
-  const handleDeleteLocation = (locationId: string) => {
-    if (confirm('Bạn có chắc muốn xóa vị trí này?')) {
-      setLocations(prev => prev.filter(loc => loc.id !== locationId))
+  const handleDeleteConfirm = async () => {
+    if (shelfToDelete) {
+      await deleteShelf.mutateAsync(shelfToDelete._id)
+      setShelfToDelete(null)
     }
   }
 
-  const summary = useMemo(() => ({
-    total: locations.length,
-    available: locations.filter((l: FinishedGoodsLocation) => (l.used / l.capacity) < 0.8).length,
-    high: locations.filter((l: FinishedGoodsLocation) => {
-      const p = l.used / l.capacity
-      return p >= 0.8 && p < 1
-    }).length,
-    full: locations.filter((l: FinishedGoodsLocation) => l.used / l.capacity >= 1).length,
-    pendingQC: locations.filter((l: FinishedGoodsLocation) => l.qcStatus === 'pending').length,
-    expiring: locations.filter((l: FinishedGoodsLocation) => {
-      const days = getDaysUntilExpiry(l.expiryDate)
-      return days !== null && days <= 30 && days > 0
-    }).length,
-  }), [locations])
-
-  const filtered = useMemo<FinishedGoodsLocation[]>(() => {
-    return locations.filter((loc: FinishedGoodsLocation) => {
-      const status = getUsageStatus(loc)
-      const days = getDaysUntilExpiry(loc.expiryDate)
-      if (activeFilter === 'all') return true
-      if (activeFilter === 'low') return status === 'low'
-      if (activeFilter === 'high') return status === 'high'
-      if (activeFilter === 'full') return status === 'full'
-      if (activeFilter === 'pending-qc') return loc.qcStatus === 'pending'
-      if (activeFilter === 'expiring') return days !== null && days <= 30 && days > 0
-      return true
-    })
-  }, [activeFilter, locations])
+  // Summary stats
+  const totalLocations = shelves.length
+  const lowUsage = shelves.filter(l => (l.currentLoad / l.maxCapacity) < 0.5).length
+  const highUsage = shelves.filter(l => (l.currentLoad / l.maxCapacity) >= 0.8 && (l.currentLoad / l.maxCapacity) < 1).length
+  const fullLocations = shelves.filter(l => (l.currentLoad / l.maxCapacity) >= 1).length
 
   return (
-    <AppShell title="Kệ thành phẩm" subtitle="Quản lý kệ và vị trí lưu trữ sản phẩm hoàn thiện">
+    <AppShell title="Vị trí kho thành phẩm" subtitle="Quản lý khu vực và kệ lưu trữ sản phẩm hoàn thiện">
       <div className="space-y-6">
-
         {/* Summary */}
-        <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
-          <SummaryCard label="Tổng vị trí" value={summary.total} color="blue" icon={<Package className="size-5 text-blue-600" />} bg="bg-blue-50" />
-          <SummaryCard label="Còn trống" value={summary.available} color="emerald" icon={<Package className="size-5 text-emerald-600" />} bg="bg-emerald-50" />
-          <SummaryCard label="Gần đầy" value={summary.high} color="amber" icon={<Package className="size-5 text-amber-600" />} bg="bg-amber-50" />
-          <SummaryCard label="Đã đầy" value={summary.full} color="red" icon={<Maximize2 className="size-5 text-red-600" />} bg="bg-red-50" />
-          <SummaryCard label="Chờ QC" value={summary.pendingQC} color="amber" icon={<Clock className="size-5 text-amber-600" />} bg="bg-amber-50" />
-          <SummaryCard label="Sắp hết hạn" value={summary.expiring} color="red" icon={<AlertTriangle className="size-5 text-red-600" />} bg="bg-red-50" />
-        </div>
-
-        {/* Actions row */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {/* Filter chips */}
-          <div className="flex flex-wrap gap-2">
-            {FILTER_OPTIONS.map(opt => (
-              <button
-                key={opt.value}
-                onClick={() => setActiveFilter(opt.value)}
-                className={cn(
-                  'rounded-full border px-3 py-1 text-xs transition-colors',
-                  activeFilter === opt.value
-                    ? 'border-primary bg-primary/10 text-primary font-medium'
-                    : 'border-border bg-background text-muted-foreground hover:bg-muted',
-                )}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Add location dialog */}
-          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" onClick={() => { resetForm(); setIsAddDialogOpen(true); }}>
-                <Plus className="mr-2 size-4" />
-                Thêm vị trí mới
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>{editingLocation ? 'Chỉnh sửa vị trí kệ thành phẩm' : 'Thêm vị trí kệ thành phẩm'}</DialogTitle>
-                <DialogDescription>{editingLocation ? 'Cập nhật thông tin vị trí lưu trữ' : 'Tạo vị trí lưu trữ mới cho thành phẩm'}</DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <FormRow label="Khu vực" htmlFor="zone">
-                  <Input 
-                    id="zone" 
-                    placeholder="P, Q, R..." 
-                    value={formData.zone}
-                    onChange={(e) => setFormData(prev => ({ ...prev, zone: e.target.value }))}
-                  />
-                </FormRow>
-                <FormRow label="Số kệ" htmlFor="shelf">
-                  <Input 
-                    id="shelf" 
-                    type="number" 
-                    placeholder="1, 2, 3..." 
-                    value={formData.shelf}
-                    onChange={(e) => setFormData(prev => ({ ...prev, shelf: e.target.value }))}
-                  />
-                </FormRow>
-                <FormRow label="Mô tả" htmlFor="desc">
-                  <Input 
-                    id="desc" 
-                    placeholder="Kệ thành phẩm..." 
-                    value={formData.description}
-                    onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                  />
-                </FormRow>
-                <FormRow label="Sức chứa" htmlFor="cap">
-                  <Input 
-                    id="cap" 
-                    type="number" 
-                    placeholder="200" 
-                    value={formData.capacity}
-                    onChange={(e) => setFormData(prev => ({ ...prev, capacity: e.target.value }))}
-                  />
-                </FormRow>
-                <FormRow label="Nhiệt độ" htmlFor="temp">
-                  <div className="flex items-center gap-2">
-                    <Input 
-                      id="temp-min" 
-                      type="number" 
-                      placeholder="Min (°C)" 
-                      value={formData.tempMin}
-                      onChange={(e) => setFormData(prev => ({ ...prev, tempMin: e.target.value }))}
-                    />
-                    <span className="text-muted-foreground">–</span>
-                    <Input 
-                      id="temp-max" 
-                      type="number" 
-                      placeholder="Max (°C)" 
-                      value={formData.tempMax}
-                      onChange={(e) => setFormData(prev => ({ ...prev, tempMax: e.target.value }))}
-                    />
-                  </div>
-                </FormRow>
+        <div className="grid gap-4 sm:grid-cols-4">
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-4">
+                <div className="rounded-lg bg-primary/10 p-3">
+                  <MapPin className="size-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Tổng vị trí</p>
+                  <p className="text-2xl font-bold">{totalLocations}</p>
+                </div>
               </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-                  Hủy
-                </Button>
-                <Button onClick={editingLocation ? handleUpdateLocation : handleAddLocation}>
-                  {editingLocation ? 'Cập nhật' : 'Thêm'} vị trí
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-4">
+                <div className="rounded-lg bg-emerald-100 p-3">
+                  <Package className="size-5 text-emerald-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Sử dụng thấp</p>
+                  <p className="text-2xl font-bold text-emerald-600">{lowUsage}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-4">
+                <div className="rounded-lg bg-amber-100 p-3">
+                  <Package className="size-5 text-amber-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Gần đầy</p>
+                  <p className="text-2xl font-bold text-amber-600">{highUsage}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-4">
+                <div className="rounded-lg bg-red-100 p-3">
+                  <Maximize2 className="size-5 text-red-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Đã đầy</p>
+                  <p className="text-2xl font-bold text-red-600">{fullLocations}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Shelf grid */}
+        {/* Actions & Search */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Tìm kiếm mã kệ..."
+              className="pl-9"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <Button onClick={handleAddClick}>
+            <Plus className="mr-2 size-4" />
+            Thêm vị trí mới
+          </Button>
+        </div>
+
+        {/* Warehouse Map */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg font-semibold">Sơ đồ kệ thành phẩm</CardTitle>
+            <CardTitle className="text-lg font-semibold">Sơ đồ kệ kho thành phẩm</CardTitle>
           </CardHeader>
           <CardContent>
-            {filtered.length === 0 ? (
-              <p className="py-10 text-center text-sm text-muted-foreground">
-                Không có vị trí nào phù hợp với bộ lọc.
-              </p>
+            {isLoading ? (
+              <div className="flex h-40 items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : shelves.length === 0 ? (
+              <div className="flex h-40 items-center justify-center text-muted-foreground">
+                Không tìm thấy vị trí kho nào
+              </div>
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {filtered.map(loc => (
-                  <ShelfCard 
-                    key={loc.id} 
-                    location={loc} 
-                    onEdit={handleEditLocation}
-                    onDelete={handleDeleteLocation}
-                  />
-                ))}
+                {shelves.map((location) => {
+                  const usagePercent = (location.currentLoad / location.maxCapacity) * 100
+                  const status = usagePercent >= 100 ? 'full' : usagePercent >= 80 ? 'high' : usagePercent >= 50 ? 'medium' : 'low'
+
+                  return (
+                    <Card key={location._id} className={cn(
+                      "relative overflow-hidden transition-all hover:shadow-md",
+                      status === 'full' && "border-red-300",
+                      status === 'high' && "border-amber-300",
+                    )}>
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <div className={cn(
+                              "size-10 rounded-lg flex items-center justify-center font-bold text-white text-xs",
+                              status === 'full' ? "bg-red-500" :
+                                status === 'high' ? "bg-amber-500" :
+                                  status === 'medium' ? "bg-primary" : "bg-emerald-500"
+                            )}>
+                              {location.shelfCode}
+                            </div>
+                            <div>
+                              <p className="font-medium text-sm">Khu {location.warehouseSection}</p>
+                              <div className="flex items-center gap-2">
+                                <p className="text-xs text-muted-foreground truncate max-w-[120px]">{location.description || 'Không có mô tả'}</p>
+                                {location.items && location.items.length > 0 && (
+                                  <HoverCard>
+                                    <HoverCardTrigger asChild>
+                                      <Badge variant="outline" className="text-[10px] px-1 h-4 cursor-help">
+                                        {location.items.length} sản phẩm
+                                      </Badge>
+                                    </HoverCardTrigger>
+                                    <HoverCardContent className="w-80">
+                                      <div className="space-y-2">
+                                        <h4 className="text-sm font-semibold">Sản phẩm đang lưu trữ</h4>
+                                        <div className="max-h-[200px] overflow-auto space-y-2">
+                                          {location.items.map((item, idx) => (
+                                            <div key={idx} className="flex justify-between items-center text-xs border-b pb-1 last:border-0">
+                                              <span>{item.name} ({item.code})</span>
+                                              <span className="font-medium">{item.currentStock.toLocaleString()} {item.unit}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    </HoverCardContent>
+                                  </HoverCard>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="icon" className="size-8" onClick={() => handleEditClick(location)}>
+                              <Edit2 className="size-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="size-8 text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => setShelfToDelete(location)}>
+                              <Trash2 className="size-4" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">Sử dụng</span>
+                            <span className="font-medium">{location.currentLoad.toLocaleString()} / {location.maxCapacity.toLocaleString()}</span>
+                          </div>
+                          <Progress
+                            value={Math.min(usagePercent, 100)}
+                            className={cn(
+                              "h-1.5",
+                              status === 'full' && "[&>div]:bg-red-500",
+                              status === 'high' && "[&>div]:bg-amber-500",
+                              status === 'medium' && "[&>div]:bg-primary",
+                              status === 'low' && "[&>div]:bg-emerald-500"
+                            )}
+                          />
+                          <div className="flex justify-between items-center">
+                            <Badge variant="secondary" className={cn(
+                              "text-[10px] px-1.5 py-0 h-5",
+                              status === 'full' && "bg-red-100 text-red-700",
+                              status === 'high' && "bg-amber-100 text-amber-700",
+                              status === 'medium' && "bg-primary/10 text-primary",
+                              status === 'low' && "bg-emerald-100 text-emerald-700"
+                            )}>
+                              {status === 'full' ? 'Đã đầy' :
+                                status === 'high' ? 'Gần đầy' :
+                                  status === 'medium' ? 'Trung bình' : 'Còn trống'}
+                            </Badge>
+                            <span className="text-[10px] text-muted-foreground">
+                              {Math.round(usagePercent)}%
+                            </span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
               </div>
             )}
           </CardContent>
         </Card>
       </div>
+
+      {/* Add/Edit Dialog */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>{editingShelf ? 'Cập nhật vị trí kho' : 'Thêm vị trí kho mới'}</DialogTitle>
+            <DialogDescription>
+              {editingShelf ? 'Chỉnh sửa thông tin vị trí lưu trữ' : 'Tạo vị trí lưu trữ mới cho thành phẩm'}
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
+              <FormField
+                control={form.control}
+                name="shelfCode"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Mã kệ</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Ví dụ: P1-01" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="warehouseSection"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Khu vực</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Ví dụ: A, B, C..." {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="zone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Vùng (Zone)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Zone A" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="aisle"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Dãy (Aisle)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Dãy 1" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="level"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tầng (Level)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Tầng 3" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="bin"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Ô (Bin)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Ô 12" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="maxCapacity"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Sức chứa tối đa</FormLabel>
+                      <FormControl>
+                        <Input type="number" {...field} onChange={e => field.onChange(Number(e.target.value))} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="status"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Trạng thái</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Chọn trạng thái" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="Available">Sẵn dùng</SelectItem>
+                          <SelectItem value="Full">Đã đầy</SelectItem>
+                          <SelectItem value="Maintenance">Bảo trì</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Mô tả</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Kệ thành phẩm đóng gói..." {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Hủy</Button>
+                <Button type="submit" disabled={createShelf.isPending || updateShelf.isPending}>
+                  {(createShelf.isPending || updateShelf.isPending) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {editingShelf ? 'Cập nhật' : 'Thêm vị trí'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!shelfToDelete} onOpenChange={(open) => !open && setShelfToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Bạn có chắc chắn muốn xóa kệ này?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Hành động này không thể hoàn tác. Kệ chỉ có thể bị xóa nếu không chứa bất kỳ nguyên vật liệu hay sản phẩm nào.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Hủy</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteConfirm} className="bg-red-600 hover:bg-red-700">
+              {deleteShelf.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Xóa kệ
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppShell>
-  )
-}
-
-/* ─── Sub-components ─────────────────────────────────────────────────────── */
-
-function SummaryCard({
-  label,
-  value,
-  color,
-  icon,
-  bg,
-}: {
-  label: string
-  value: number
-  color: string
-  icon: React.ReactNode
-  bg: string
-}) {
-  return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="flex items-center gap-3">
-          <div className={cn('rounded-lg p-2.5', bg)}>{icon}</div>
-          <div>
-            <p className="text-xs text-muted-foreground">{label}</p>
-            <p className={cn('text-2xl font-bold', `text-${color}-600`)}>{value}</p>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-function ShelfCard({ 
-  location,
-  onEdit,
-  onDelete,
-}: { 
-  location: FinishedGoodsLocation
-  onEdit: (location: FinishedGoodsLocation) => void
-  onDelete: (locationId: string) => void
-}) {
-  const usagePct = (location.used / location.capacity) * 100
-  const status = getUsageStatus(location)
-  const daysLeft = getDaysUntilExpiry(location.expiryDate)
-  const isExpiringSoon = daysLeft !== null && daysLeft <= 30 && daysLeft > 0
-  const qc = QC_CONFIG[location.qcStatus]
-
-  const COLOR = {
-    full:   { id: 'bg-red-500',     border: 'border-red-300',   bar: '[&>div]:bg-red-500',   badge: 'bg-red-100 text-red-700',   label: 'Đã đầy' },
-    high:   { id: 'bg-amber-500',   border: 'border-amber-300', bar: '[&>div]:bg-amber-500', badge: 'bg-amber-100 text-amber-700', label: 'Gần đầy' },
-    medium: { id: 'bg-primary',     border: '',                 bar: '',                      badge: 'bg-primary/10 text-primary', label: 'Trung bình' },
-    low:    { id: 'bg-emerald-500', border: '',                 bar: '[&>div]:bg-emerald-500', badge: 'bg-emerald-100 text-emerald-700', label: 'Còn trống' },
-  }[status]
-
-  return (
-    <Card className={cn('relative overflow-hidden transition-all hover:shadow-md', COLOR.border)}>
-      <CardContent className="p-4">
-        {/* Header */}
-        <div className="mb-3 flex items-start justify-between">
-          <div className="flex items-center gap-2">
-            <div className={cn('flex size-10 items-center justify-center rounded-lg font-bold text-white text-sm', COLOR.id)}>
-              {location.id}
-            </div>
-            <div>
-              <p className="font-medium text-sm">Khu {location.zone} - Kệ {location.shelf}</p>
-              <p className="text-xs text-muted-foreground">{location.description}</p>
-            </div>
-          </div>
-          <div className="flex gap-1">
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="size-8 shrink-0"
-              onClick={() => onEdit(location)}
-            >
-              <Edit2 className="size-4" />
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="size-8 shrink-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-              onClick={() => onDelete(location.id)}
-            >
-              <Trash2 className="size-4" />
-            </Button>
-          </div>
-        </div>
-
-        {/* Badges row */}
-        <div className="mb-2 flex flex-wrap gap-1.5">
-          {/* QC status */}
-          <Badge variant="secondary" className={cn('flex items-center gap-1 text-xs', qc.className)}>
-            {qc.icon}
-            {qc.label}
-          </Badge>
-
-          {/* Lot code */}
-          {location.currentLot && (
-            <Badge variant="secondary" className="text-xs">
-              {location.currentLot}
-            </Badge>
-          )}
-
-          {/* Expiry warning */}
-          {isExpiringSoon && (
-            <Badge variant="secondary" className="flex items-center gap-1 bg-red-100 text-red-700 text-xs">
-              <AlertTriangle className="size-3" />
-              Còn {daysLeft} ngày
-            </Badge>
-          )}
-        </div>
-
-        {/* Dates */}
-        {location.currentLot && (
-          <div className="mb-3 grid grid-cols-2 gap-x-3 text-xs text-muted-foreground">
-            <div>
-              <span className="text-[10px] uppercase tracking-wide">NSX</span>
-              <p className="font-medium text-foreground">{formatDate(location.manufactureDate)}</p>
-            </div>
-            <div>
-              <span className="text-[10px] uppercase tracking-wide">HSD</span>
-              <p className={cn('font-medium', isExpiringSoon ? 'text-red-600' : 'text-foreground')}>
-                {formatDate(location.expiryDate)}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Temperature */}
-        <div className="mb-3 flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Thermometer className="size-3.5" />
-          <span>Bảo quản: {location.tempMin}°C – {location.tempMax}°C</span>
-        </div>
-
-        {/* Usage bar */}
-        <div className="space-y-1.5">
-          <div className="flex justify-between text-xs">
-            <span className="text-muted-foreground">Sử dụng</span>
-            <span className="font-medium">{location.used} / {location.capacity}</span>
-          </div>
-          <Progress
-            value={Math.min(usagePct, 100)}
-            className={cn('h-2', COLOR.bar)}
-          />
-          <div className="flex justify-between items-center">
-            <Badge variant="secondary" className={cn('text-xs', COLOR.badge)}>
-              {COLOR.label}
-            </Badge>
-            <span className="text-xs text-muted-foreground">{Math.round(usagePct)}%</span>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-function FormRow({
-  label,
-  htmlFor,
-  children,
-}: {
-  label: string
-  htmlFor: string
-  children: React.ReactNode
-}) {
-  return (
-    <div className="grid grid-cols-4 items-center gap-4">
-      <Label htmlFor={htmlFor} className="text-right text-sm">
-        {label}
-      </Label>
-      <div className="col-span-3">{children}</div>
-    </div>
   )
 }

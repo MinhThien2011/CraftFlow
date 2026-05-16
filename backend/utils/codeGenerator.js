@@ -19,7 +19,7 @@ export const getNextSequence = async (key, resetDaily = false) => {
     const counter = await Counter.findOneAndUpdate(
         query,
         { $inc: { seq: 1 }, $set: { date: today } },
-        { returnDocument: 'after' }
+        { returnDocument: 'after', upsert: true }
     );
 
     return counter.seq;

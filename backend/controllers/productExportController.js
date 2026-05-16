@@ -16,7 +16,7 @@ export const createExportRequest = async (req, res) => {
         if (error) {
             return res.status(StatusCodes.BAD_REQUEST).json({
                 status: 'error',
-                message: 'Invalid data.',
+                message: 'Dữ liệu không hợp lệ.',
                 details: error.details.map(d => d.message)
             });
         }
@@ -24,7 +24,7 @@ export const createExportRequest = async (req, res) => {
         const userId = req.userId;
         const result = await productExportService.createExportRequest(value, userId);
 
-        if (result.status === 'error') {
+        if (!result.success) {
             return res.status(StatusCodes.BAD_REQUEST).json(result);
         }
 
@@ -36,16 +36,12 @@ export const createExportRequest = async (req, res) => {
             targetId: result.data._id
         }, req);
 
-        return res.status(StatusCodes.CREATED).json({
-            success: true,
-            message: 'Yêu cầu xuất hàng đã được tạo.',
-            data: result.data
-        });
+        return res.status(StatusCodes.CREATED).json(result);
     } catch (error) {
         console.error('[ProductExportController] createExportRequest error:', error);
         return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
             status: 'error',
-            message: 'error when system create export request.'
+            message: 'Lỗi hệ thống khi tạo yêu cầu xuất hàng.'
         });
     }
 };
@@ -60,7 +56,7 @@ export const updateRequestStatus = async (req, res) => {
         if (error) {
             return res.status(StatusCodes.BAD_REQUEST).json({
                 status: 'error',
-                message: 'Invalid data.',
+                message: 'Dữ liệu không hợp lệ.',
                 details: error.details.map(d => d.message)
             });
         }
@@ -68,7 +64,7 @@ export const updateRequestStatus = async (req, res) => {
         const userId = req.userId;
         const result = await productExportService.updateRequestStatus(id, value.status, userId);
 
-        if (result.status === 'error') {
+        if (!result.success) {
             return res.status(StatusCodes.BAD_REQUEST).json(result);
         }
 
@@ -80,7 +76,7 @@ export const updateRequestStatus = async (req, res) => {
             author: userId,
             action: 'UPDATE_PRODUCT_EXPORT_STATUS',
             module: 'INVENTORY',
-            details: `Updated export request ${id} status to ${value.status}`,
+            details: `Cập nhật trạng thái yêu cầu xuất hàng ${id} thành ${value.status}`,
             targetId: id
         }, req);
 
@@ -89,7 +85,7 @@ export const updateRequestStatus = async (req, res) => {
         console.error('[ProductExportController] updateRequestStatus error:', error);
         return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
             status: 'error',
-            message: 'error when system update export request status.'
+            message: 'Lỗi hệ thống khi cập nhật trạng thái yêu cầu.'
         });
     }
 };
@@ -99,19 +95,41 @@ export const updateRequestStatus = async (req, res) => {
  */
 export const getAllExportRequests = async (req, res) => {
     try {
-        const filters = req.query || {};
-        const result = await productExportService.getExportRequests(filters);
+        const { page = 1, limit = 10, status, requestCode } = req.query;
+        const filters = {};
 
-        if (result.status === 'error') {
-            return res.status(StatusCodes.BAD_REQUEST).json(result);
-        }
+        if (status) filters.status = status;
+        if (requestCode) filters.requestCode = new RegExp(requestCode, 'i');
 
+        const result = await productExportService.getAllExportRequests(filters, parseInt(page), parseInt(limit));
         return res.status(StatusCodes.OK).json(result);
     } catch (error) {
         console.error('[ProductExportController] getAllExportRequests error:', error);
         return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
             status: 'error',
-            message: 'error when system get export requests.'
+            message: 'Lỗi hệ thống khi lấy danh sách yêu cầu.'
+        });
+    }
+};
+
+/**
+ * Get product export request by ID
+ */
+export const getExportRequestById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const result = await productExportService.getRequestById(id);
+
+        if (!result.success) {
+            return res.status(result.statusCode || StatusCodes.NOT_FOUND).json(result);
+        }
+
+        return res.status(StatusCodes.OK).json(result);
+    } catch (error) {
+        console.error('[ProductExportController] getExportRequestById error:', error);
+        return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+            status: 'error',
+            message: 'Lỗi hệ thống khi lấy chi tiết yêu cầu.'
         });
     }
 };

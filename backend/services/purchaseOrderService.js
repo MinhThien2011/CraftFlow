@@ -2,9 +2,11 @@ import PurchaseOrder from "../models/PurchaseOrder.js";
 import Material from "../models/Material.js";
 import MaterialAlert from "../models/MaterialAlert.js";
 import InventoryImportExportSlip from "../models/InventoryImportExportSlip.js";
-import { PURCHASE_ORDER_STATUS, PRIORITY, INVENTORY_IMPORT_EXPORT_SLIP_TYPE, INVENTORY_IMPORT_EXPORT_SLIP_STATUS } from "../utils/constants.js";
+import { PURCHASE_ORDER_STATUS, PRIORITY, INVENTORY_IMPORT_EXPORT_SLIP_TYPE, INVENTORY_IMPORT_EXPORT_SLIP_STATUS, ROLES } from "../utils/constants.js";
 import { processMaterialCosts } from "../utils/productHelpers.js";
 import { generateSlipNumber } from "../utils/slipHelper.js";
+import { emitToRoles } from "../config/socket.js";
+import { createNotification } from "./notificationService.js";
 
 export const createPurchaseOrderService = async (data, userId) => {
     try {
@@ -183,6 +185,33 @@ export const updatePurchaseOrderService = async (orderId, data) => {
         if (!purchaseOrderUpdate) {
             return { success: false, message: 'Purchase order not found', data: null };
         }
+
+        // Notify Production Managers and Admins real-time when PO status changes (e.g., approved/rejected)
+        if (updatePayload.status) {
+            const statusLabel = updatePayload.status === PURCHASE_ORDER_STATUS.APPROVED ? 'được duyệt' :
+                updatePayload.status === PURCHASE_ORDER_STATUS.REJECTED ? 'bị từ chối' :
+                    updatePayload.status;
+
+            emitToRoles([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.KHO_MANAGER], 'purchase_order_status_updated', {
+                orderId: purchaseOrderUpdate._id,
+                orderCode: purchaseOrderUpdate.orderCode,
+                status: updatePayload.status,
+                message: `Đơn mua hàng ${purchaseOrderUpdate.orderCode} đã ${statusLabel}.`
+            });
+
+            // Also create persistent notification for the creator if status changed
+            if (purchaseOrderUpdate.creator) {
+                await createNotification({
+                    recipient: purchaseOrderUpdate.creator,
+                    title: 'Cập nhật đơn mua hàng',
+                    message: `Đơn mua hàng ${purchaseOrderUpdate.orderCode} của bạn đã ${statusLabel}.`,
+                    type: 'PURCHASE_ORDER',
+                    priority: updatePayload.status === PURCHASE_ORDER_STATUS.APPROVED ? 'MEDIUM' : 'HIGH',
+                    metaData: { orderId: purchaseOrderUpdate._id, orderCode: purchaseOrderUpdate.orderCode }
+                });
+            }
+        }
+
         return { success: true, data: purchaseOrderUpdate, message: 'Purchase order updated successfully' };
     }
     catch (error) {

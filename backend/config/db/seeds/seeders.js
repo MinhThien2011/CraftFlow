@@ -10,6 +10,7 @@ import Shelf from "../../../models/Shelf.js";
 import Bom from "../../../models/BOM.js";
 import ProductionOrder from "../../../models/ProductionOrder.js";
 import InventoryBatch from "../../../models/InventoryBatch.js";
+import ProductExportRequest from "../../../models/ProductExportRequest.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SEEDS_DIR = path.join(__dirname, "..", "..", "..", "seeds");
@@ -222,4 +223,49 @@ export const seedBoms = async () => {
 
     await Bom.insertMany(docs);
     console.log(`✅ Seeded ${docs.length} BOMs`);
+};
+
+export const seedProductExportRequests = async () => {
+    if (await ProductExportRequest.countDocuments()) return;
+
+    const data = readSeedFile("productExportRequestSeed.json");
+    const products = await Product.find({}).lean();
+    const productMap = buildMap(products, (p) => p.code, (p) => p);
+    const users = await User.find({}).lean();
+    const userMap = buildMap(users, (u) => u.username);
+
+    const docs = data
+        .map((request) => {
+            if (!userMap[request.createdByUsername]) {
+                console.warn(`⚠️  Creator "${request.createdByUsername}" not found for request "${request.requestCode}"`);
+                return null;
+            }
+
+            const items = request.items.map(item => {
+                const product = productMap[item.productCode];
+                if (!product) {
+                    console.warn(`⚠️  Product "${item.productCode}" not found for request "${request.requestCode}"`);
+                    return null;
+                }
+                return {
+                    product: product._id,
+                    requestedQuantity: item.requestedQuantity,
+                    actualQuantity: item.actualQuantity || 0
+                };
+            }).filter(Boolean);
+
+            if (items.length === 0) return null;
+
+            return {
+                ...request,
+                createdBy: userMap[request.createdByUsername],
+                adminApprovedBy: request.adminApprovedByUsername ? userMap[request.adminApprovedByUsername] : undefined,
+                khoManager: request.khoManagerUsername ? userMap[request.khoManagerUsername] : undefined,
+                items
+            };
+        })
+        .filter(Boolean);
+
+    await ProductExportRequest.insertMany(docs);
+    console.log(`✅ Seeded ${docs.length} product export requests`);
 };

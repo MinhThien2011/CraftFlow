@@ -62,6 +62,7 @@ const navigation = [
   // --- Inventory & Warehouse ---
   { name: "Kho hàng", href: "/inventory", icon: Package, roles: ["admin", "kho_manager"] },
   { name: "Kho nguyên liệu", href: "/inventory/materials", icon: Package, roles: ["kho_manager"] },
+  { name: "Kho thành phẩm", href: "/inventory/products", icon: Boxes, roles: ["kho_manager"] },
   { name: "Quản lý nguyên liệu", href: "/production-management/materials", icon: Package, roles: ["production_manager"] },
   { name: "Kiểm kê kho", href: "/inventory/stocktake", icon: ClipboardList, roles: ["kho_manager"] },
   { name: "Nhập kho", href: "/receiving", icon: PackagePlus, roles: ["kho_manager"] },
@@ -69,11 +70,12 @@ const navigation = [
 
   // --- Requisitions & Orders ---
   { name: "Yêu cầu vật liệu", href: "/requisitions/materials", icon: ClipboardList, roles: ["admin", "kho_manager", "production_manager"] },
+  { name: "Xuất thành phẩm", href: "/requisitions/products", icon: PackageMinus, roles: ["admin", "production_manager"] },
   { name: "Yêu cầu mua hàng", href: "/production-management/purchase-orders", icon: PackagePlus, roles: ["admin", "production_manager"] },
 
   // --- Alerts & Issues ---
   { name: "Cảnh báo tồn kho", href: "/alerts", icon: AlertTriangle, roles: ["kho_manager", "admin"] },
-  { name: "Cảnh báo vật tư", href: "/alerts", icon: Bell, roles: ["production_manager"] },
+  { name: "Cảnh báo tồn kho", href: "/alerts", icon: Bell, roles: ["production_manager"] },
   { name: "Hao hụt", href: "/production-management/issues", icon: AlertTriangle, roles: ["production_manager"] },
 
   // --- Reports ---
@@ -93,6 +95,7 @@ const warehouseGroupedNavigation = [
     roles: ["admin", "kho_manager", "production_manager"],
     children: [
       { name: "Nguyên vật liệu", href: "/inventory/materials" },
+      { name: "Thành phẩm", href: "/inventory/products" },
       { name: "Kiểm kê kho", href: "/inventory/stocktake" },
       { name: "Cảnh báo tồn kho", href: "/alerts" },
     ],
@@ -104,6 +107,7 @@ const warehouseGroupedNavigation = [
     children: [
       { name: "Kệ nguyên liệu", href: "/locations/materials" },
       { name: "Kệ thành phẩm", href: "/locations/materials/products" },
+      { name: "Truy xuất lô hàng", href: "/inventory/traceability" },
       { name: "Gắn vị trí lô hàng", href: "/locations/materials/assign" },
     ],
   },
@@ -125,6 +129,7 @@ const warehouseGroupedNavigation = [
     children: [
       { name: "Cấp vật tư", href: "/requisitions/materials" },
       { name: "Hoàn trả vật tư", href: "/requisitions/returns" },
+      { name: "Xuất thành phẩm", href: "/requisitions/products" },
     ],
   },
   {

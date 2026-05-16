@@ -5,6 +5,10 @@ export interface Shelf {
     _id: string;
     shelfCode: string;
     warehouseSection: string;
+    zone?: string;
+    aisle?: string;
+    level?: string;
+    bin?: string;
     category: 'Material' | 'Product' | 'General';
     maxCapacity: number;
     currentLoad: number;

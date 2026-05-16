@@ -123,6 +123,8 @@ export const createBatchesFromImport = async (importData, session) => {
     try {
         const { items, relatedPurchaseOrder, relatedImportSlip, relatedProductionOrder } = importData;
         const createdBatches = [];
+        const batchCounterMap = new Map(); // Track counts per item code for auto-gen
+        const usedBatchNumbers = new Set(); // Track all batch numbers used in this transaction
 
         for (const item of items) {
             const isMaterial = !!item.material;
@@ -136,8 +138,48 @@ export const createBatchesFromImport = async (importData, session) => {
                 const doc = await Model.findById(item.material || item.product).session(session);
                 code = doc?.code || (isMaterial ? 'MAT' : 'PROD');
             }
+            code = code.toUpperCase();
 
-            const batchNumber = item.batchNumber || await generateBatchNumber(code);
+            // Handle Batch Number generation
+            let batchNumber = item.batchNumber;
+            if (!batchNumber) {
+                // Auto-generation logic
+                const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+                const basePattern = `${BATCH_PREFIX}-${code}-${dateStr}-`;
+
+                if (!batchCounterMap.has(code)) {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const dbCount = await InventoryBatch.countDocuments({
+                        batchNumber: { $regex: `^${basePattern}` },
+                        createdAt: { $gte: today }
+                    }).session(session);
+                    batchCounterMap.set(code, dbCount);
+                }
+
+                let currentCount = batchCounterMap.get(code);
+                let candidate;
+                do {
+                    currentCount++;
+                    candidate = `${basePattern}${currentCount.toString().padStart(4, '0')}`;
+                } while (usedBatchNumbers.has(candidate)); // Ensure unique in this run
+
+                batchCounterMap.set(code, currentCount);
+                batchNumber = candidate;
+            } else {
+                // User provided batch number - handle potential duplicates in same import
+                let baseBatch = batchNumber;
+                let candidate = batchNumber;
+                let suffix = 1;
+
+                // If this number was already used in this run, append suffix
+                while (usedBatchNumbers.has(candidate)) {
+                    candidate = `${baseBatch}-${suffix++}`;
+                }
+                batchNumber = candidate;
+            }
+
+            usedBatchNumbers.add(batchNumber);
 
             const batch = new InventoryBatch({
                 batchNumber,
@@ -187,6 +229,108 @@ export const getBatchesByMaterial = async (materialId, includeExhausted = false)
     }
 };
 
+/**
+ * Assign or move a batch to a new shelf.
+ * Records a MOVE transaction.
+ */
+export const assignBatchLocation = async (batchId, shelfId, userId, note = '') => {
+    try {
+        const batch = await InventoryBatch.findById(batchId);
+        if (!batch) {
+            return { success: false, message: 'Batch not found', data: null };
+        }
+
+        const shelf = await Shelf.findById(shelfId);
+        if (!shelf) {
+            return { success: false, message: 'Shelf not found', data: null };
+        }
+
+        if (shelf.status === 'Maintenance') {
+            return { success: false, message: 'Shelf is under maintenance', data: null };
+        }
+
+        const oldShelfId = batch.shelf;
+        const oldShelf = oldShelfId ? await Shelf.findById(oldShelfId) : null;
+
+        // Update batch shelf
+        batch.shelf = shelfId;
+        await batch.save();
+
+        // Update shelf loads
+        // Decrement old shelf if it existed
+        if (oldShelf) {
+            oldShelf.currentLoad = Math.max(0, oldShelf.currentLoad - batch.quantityRemaining);
+            if (oldShelf.currentLoad < oldShelf.maxCapacity && oldShelf.status === 'Full') {
+                oldShelf.status = 'Available';
+            }
+            await oldShelf.save();
+        }
+
+        // Increment new shelf
+        shelf.currentLoad += batch.quantityRemaining;
+        if (shelf.currentLoad >= shelf.maxCapacity) {
+            shelf.status = 'Full';
+        }
+        await shelf.save();
+
+        // Record transaction
+        await mongoose.model('InventoryTransaction').create({
+            material: batch.material,
+            product: batch.product,
+            batch: batch._id,
+            type: 'MOVE',
+            quantity: 0, // Movement doesn't change quantity
+            beforeStock: batch.quantityRemaining,
+            afterStock: batch.quantityRemaining,
+            performedBy: userId,
+            location: shelf.shelfCode,
+            note: note || `Moved from ${oldShelf ? oldShelf.shelfCode : 'Unassigned'} to ${shelf.shelfCode}`
+        });
+
+        return {
+            success: true,
+            message: `Batch ${batch.batchNumber} assigned to shelf ${shelf.shelfCode}`,
+            data: batch
+        };
+    } catch (error) {
+        console.error('[FIFOService] assignBatchLocation error:', error);
+        return { success: false, message: error.message, data: null };
+    }
+};
+
+/**
+ * Get all active batches with filters (for assignment UI)
+ */
+export const getActiveBatches = async (params = {}) => {
+    try {
+        const { search, unassignedOnly, type } = params;
+        const query = { isExhausted: false };
+
+        if (unassignedOnly === 'true') {
+            query.shelf = null;
+        }
+
+        if (type === 'Material') query.material = { $ne: null };
+        if (type === 'Product') query.product = { $ne: null };
+
+        if (search) {
+            query.batchNumber = { $regex: search, $options: 'i' };
+        }
+
+        const batches = await InventoryBatch.find(query)
+            .populate('material', 'name code unit')
+            .populate('product', 'name code unit')
+            .populate('shelf', 'shelfCode warehouseSection')
+            .sort({ receivedDate: -1 })
+            .lean();
+
+        return { success: true, data: batches, message: 'Active batches retrieved successfully' };
+    } catch (error) {
+        console.error('[FIFOService] getActiveBatches error:', error);
+        return { success: false, message: error.message, data: null };
+    }
+};
+
 export const getExpiringBatches = async (daysAhead = 30) => {
     try {
         const futureDate = new Date();
@@ -206,6 +350,48 @@ export const getExpiringBatches = async (daysAhead = 30) => {
         return { success: true, data: batches, message: 'Expiring batches retrieved successfully' };
     } catch (error) {
         console.error('[FIFOService] getExpiringBatches error:', error);
+        return { success: false, message: error.message, data: null };
+    }
+};
+
+/**
+ * Trace a batch by its batch number.
+ * Returns batch details, current location, and transaction history.
+ */
+export const traceBatchByNumber = async (batchNumber) => {
+    try {
+        // 1. Find the batch
+        const batch = await InventoryBatch.findOne({ batchNumber })
+            .populate('material', 'name code unit')
+            .populate('product', 'name code unit')
+            .populate({
+                path: 'shelf',
+                select: 'shelfCode warehouseSection zone aisle level bin'
+            })
+            .populate('relatedImportSlip', 'slipNumber type status')
+            .populate('relatedPurchaseOrder', 'orderCode')
+            .lean();
+
+        if (!batch) {
+            return { success: false, message: `Batch ${batchNumber} not found`, data: null };
+        }
+
+        // 2. Find transaction history for this batch
+        const history = await mongoose.model('InventoryTransaction').find({ batch: batch._id })
+            .populate('performedBy', 'fullName username')
+            .sort({ createdAt: -1 })
+            .lean();
+
+        return {
+            success: true,
+            message: 'Batch traceability data retrieved successfully',
+            data: {
+                batch,
+                history
+            }
+        };
+    } catch (error) {
+        console.error('[FIFOService] traceBatchByNumber error:', error);
         return { success: false, message: error.message, data: null };
     }
 };

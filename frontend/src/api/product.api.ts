@@ -54,6 +54,17 @@ export const productApi = {
     },
 
     /**
+     * Get products with low stock
+     */
+    getLowStockProducts: async (params: {
+        search?: string;
+        page?: number;
+        limit?: number;
+    } = {}): Promise<ProductListResponse> => {
+        return axiosInstance.get("/products/low-stock", { params });
+    },
+
+    /**
      * Get product movement history
      */
     getHistory: async (id: string, params: {

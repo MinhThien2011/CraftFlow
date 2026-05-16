@@ -2,7 +2,8 @@ import { Router } from 'express';
 import {
     createExportRequest,
     updateRequestStatus,
-    getAllExportRequests
+    getAllExportRequests,
+    getExportRequestById
 } from '../controllers/productExportController.js';
 import { jwtAuth } from '../middleware/jwtAuth.js';
 import { rolePermission } from '../middleware/rolePermission.js';
@@ -16,6 +17,11 @@ productExportRouter.use(jwtAuth);
 productExportRouter.get('/', 
     rolePermission([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.KHO_MANAGER]), 
     getAllExportRequests
+);
+
+productExportRouter.get('/:id',
+    rolePermission([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.KHO_MANAGER]),
+    getExportRequestById
 );
 
 // --- Operations (Managers) ---

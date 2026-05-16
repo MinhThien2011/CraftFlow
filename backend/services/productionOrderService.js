@@ -11,6 +11,7 @@ import { createNotification } from './notificationService.js';
 import { ORDER_STATUS, ROLES, TRANSACTION_TYPE, REQUISITION_STATUS, REQUISITION_TYPE, INVENTORY_IMPORT_EXPORT_SLIP_TYPE, INVENTORY_IMPORT_EXPORT_SLIP_STATUS, PRIORITY } from '../utils/constants.js'; // Import TRANSACTION_TYPE
 import { generateSlipNumber } from '../utils/slipHelper.js';
 import mongoose from 'mongoose';
+import { emitToRoles } from '../config/socket.js';
 
 
 /**
@@ -357,6 +358,13 @@ export const createProductionOrder = async (orderData, creatorId) => {
       type: 'ORDER',
       priority: hasInsufficientStock ? 'HIGH' : 'MEDIUM',
       metaData: { orderId: newOrder._id, orderCode }
+    });
+
+    // Notify Production Managers and Admins real-time
+    emitToRoles([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER], 'production_order_created', {
+      orderId: newOrder._id,
+      orderCode,
+      message: notificationMessage
     });
 
     await session.commitTransaction();

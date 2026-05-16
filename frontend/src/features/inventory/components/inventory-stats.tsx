@@ -14,7 +14,7 @@ interface InventoryStatsProps {
 
 export function InventoryStats({ stats }: InventoryStatsProps) {
     const statItems = [
-        { label: 'Tổng loại NVL', value: stats.total, icon: TrendingUp, color: 'text-blue-600', bg: 'bg-blue-50' },
+        { label: 'Tổng số loại', value: stats.total, icon: TrendingUp, color: 'text-blue-600', bg: 'bg-blue-50' },
         { label: 'Tồn kho ổn định', value: stats.normal, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50' },
         { label: 'Sắp hết hàng', value: stats.low, icon: TrendingDown, color: 'text-amber-600', bg: 'bg-amber-50' },
         { label: 'Mức nguy cấp', value: stats.critical, icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-50' },

@@ -36,37 +36,93 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
 
         const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:4000";
+
         const newSocket = io(socketUrl, {
-            query: { userId: user._id },
-            transports: ['websocket'],
-            withCredentials: true
+            transports: ['websocket', 'polling'],
+            reconnection: true,
+            reconnectionAttempts: 5,
+            reconnectionDelay: 1000,
+            withCredentials: true,
         });
 
+        // ==================== EVENT HANDLERS ====================
         newSocket.on('connect', () => {
-            console.log('[Socket] Connected to server');
+            console.log(`[Socket] ✅ Connected successfully | User: ${user._id}`);
             setIsConnected(true);
         });
 
-        newSocket.on('disconnect', () => {
-            console.log('[Socket] Disconnected from server');
+        newSocket.on('connect_error', (err) => {
+            console.error('[Socket] Connection error:', err.message);
+            setIsConnected(false);
+
+            if (err.message === "Authentication required" || err.message === "Invalid token") {
+                toast.error("Phiên socket hết hạn, đang reconnect...");
+            }
+        });
+
+        newSocket.on('disconnect', (reason) => {
+            console.log(`[Socket] Disconnected | Reason: ${reason}`);
             setIsConnected(false);
         });
 
         newSocket.on('notification', (notification: Notification) => {
             console.log('[Socket] New notification received:', notification);
-            
-            // Invalidate notification queries to refresh list
+
             queryClient.invalidateQueries({ queryKey: ['notifications'] });
-            
-            // Show toast notification
+
             toast.info(notification.title, {
                 description: notification.message,
-                duration: 5000,
+                duration: 6000,
             });
+        });
+
+        newSocket.on('production_order_created', (data: any) => {
+            console.log('[Socket] Production order created:', data);
+            queryClient.invalidateQueries({ queryKey: ['production-orders'] });
+            toast.success('Đơn sản xuất mới', {
+                description: data.message,
+                duration: 8000,
+                action: {
+                    label: 'Xem ngay',
+                    onClick: () => window.location.href = `/production-management/production-orders`
+                }
+            });
+        });
+
+        newSocket.on('production_order_status_updated', (data: any) => {
+            console.log('[Socket] Production order status updated:', data);
+            queryClient.invalidateQueries({ queryKey: ['production-orders'] });
+            toast.info('Cập nhật đơn sản xuất', {
+                description: data.message,
+                duration: 8000,
+            });
+        });
+
+        newSocket.on('purchase_order_status_updated', (data: any) => {
+            console.log('[Socket] Purchase order status updated:', data);
+            queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+            toast.info('Cập nhật đơn mua hàng', {
+                description: data.message,
+                duration: 8000,
+            });
+        });
+
+        newSocket.on('inventory_slip_updated', (data: any) => {
+            console.log('[Socket] Inventory slip updated:', data);
+            queryClient.invalidateQueries({ queryKey: ['slips'] });
+            toast.info('Cập nhật kho', {
+                description: data.message,
+                duration: 6000,
+            });
+        });
+
+        newSocket.on('error', (error) => {
+            console.error('[Socket] Server error:', error);
         });
 
         setSocket(newSocket);
 
+        // Cleanup
         return () => {
             newSocket.disconnect();
         };
