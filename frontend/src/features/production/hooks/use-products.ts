@@ -1,9 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { productApi } from "@/api/product.api";
 import { toast } from "sonner";
+import { queryKeys } from "@/lib/query-keys";
 
 export const productKeys = {
-    all: ['products'] as const,
+    all: queryKeys.products.all,
     lists: () => [...productKeys.all, 'list'] as const,
     list: (params: any) => [...productKeys.lists(), { params }] as const,
     details: () => [...productKeys.all, 'detail'] as const,

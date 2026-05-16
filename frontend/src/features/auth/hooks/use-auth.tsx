@@ -1,11 +1,13 @@
 "use client";
 
-import React, { createContext, useContext, useState, useCallback, useMemo } from "react";
+import React, { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { authApi } from "../api/auth.api";
 import { User } from "@/lib/types";
 import { toast } from "sonner";
+import { AUTH_UNAUTHORIZED_EVENT } from "@/lib/axios";
+import { queryKeys } from "@/lib/query-keys";
 
 export type UserRole = "admin" | "kho_manager" | "production_manager" | "staff"
 
@@ -36,6 +38,17 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const queryClient = useQueryClient();
     const router = useRouter();
+    const authRedirectInProgress = useRef(false);
+
+    const clearSessionCache = useCallback(async () => {
+        await queryClient.cancelQueries();
+        queryClient.setQueryData(queryKeys.auth.user, null);
+        queryClient.removeQueries({
+            predicate: (query) =>
+                query.queryKey[0] !== queryKeys.auth.user[0] &&
+                query.getObserversCount() === 0,
+        });
+    }, [queryClient]);
 
     const {
         data: authResponse,
@@ -43,7 +56,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: queryError,
         refetch: refreshUser
     } = useQuery({
-        queryKey: ['auth-user'],
+        queryKey: queryKeys.auth.user,
         queryFn: () => authApi.getMe(),
         retry: false,
         staleTime: 1000 * 60 * 5,
@@ -51,6 +64,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const user = authResponse?.success ? authResponse.data.user : null;
     const [loginError, setLoginError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const handleUnauthorized = () => {
+            if (authRedirectInProgress.current) return;
+            authRedirectInProgress.current = true;
+            void clearSessionCache();
+            router.replace("/");
+        };
+
+        window.addEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
+        return () => window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
+    }, [clearSessionCache, router]);
 
     const login = useCallback(async (identifier: string, password: string) => {
         if (!identifier.trim() || !password) {
@@ -61,7 +86,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
             const response = await authApi.login(identifier, password);
             if (response.success && response.data?.user) {
-                queryClient.setQueryData(['auth-user'], response);
+                authRedirectInProgress.current = false;
+                queryClient.setQueryData(queryKeys.auth.user, response);
                 return { success: true, message: "Đăng nhập thành công", role: getRoleName(response.data.user) };
             }
             return { success: false, message: response.message || "Đăng nhập thất bại" };
@@ -75,18 +101,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const logout = useCallback(async () => {
         try {
             await authApi.logout();
-            queryClient.setQueryData(['auth-user'], null);
-            queryClient.clear();
+            authRedirectInProgress.current = true;
+            await clearSessionCache();
             toast.success("Đăng xuất thành công");
-            router.push("/");
+            router.replace("/");
         } catch (err) {
             console.log("Logout failed:", err);
             // Vẫn redirect về login kể cả khi API logout lỗi (ví dụ do session đã hết hạn)
-            queryClient.setQueryData(['auth-user'], null);
-            queryClient.clear();
-            router.push("/");
+            authRedirectInProgress.current = true;
+            await clearSessionCache();
+            router.replace("/");
         }
-    }, [queryClient, router]);
+    }, [clearSessionCache, router]);
 
     const role = getRoleName(user)
 

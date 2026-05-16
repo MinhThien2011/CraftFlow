@@ -80,6 +80,12 @@ function StatCardSkeleton() {
   )
 }
 
+function getInventoryLocation(item: Material | Product) {
+  if (item.locationDetails) return item.locationDetails
+  if (item.shelf?.shelfCode) return item.shelf.shelfCode
+  return "Chưa gán vị trí"
+}
+
 export default function InventoryPage() {
   const [activeTab, setActiveTab] = useState<TabType>("materials")
   const [searchQuery, setSearchQuery] = useState("")
@@ -502,7 +508,7 @@ export default function InventoryPage() {
                         <TableCell className="py-4">
                           <div className="flex flex-col">
                             <span className="font-bold text-foreground group-hover:text-primary transition-colors">{m.name}</span>
-                            <span className="text-[10px] text-muted-foreground font-mono uppercase tracking-tighter">Mã: {m.code} | {m.location || "Chưa gán vị trí"}</span>
+                            <span className="text-[10px] text-muted-foreground font-mono uppercase tracking-tighter">Mã: {m.code} | {getInventoryLocation(m)}</span>
                           </div>
                         </TableCell>
                         <TableCell><Badge variant="outline" className="font-medium text-muted-foreground">{m.supplier?.name || "N/A"}</Badge></TableCell>
@@ -528,7 +534,7 @@ export default function InventoryPage() {
                         <TableCell className="py-4">
                           <div className="flex flex-col">
                             <span className="font-bold text-foreground group-hover:text-primary transition-colors">{p.name}</span>
-                            <span className="text-[10px] text-muted-foreground font-mono uppercase tracking-tighter">Mã: {p.code} | {p.location || "Chưa gán vị trí"}</span>
+                            <span className="text-[10px] text-muted-foreground font-mono uppercase tracking-tighter">Mã: {p.code} | {getInventoryLocation(p)}</span>
                           </div>
                         </TableCell>
                         <TableCell><Badge variant="outline" className="font-medium text-muted-foreground">{p.category}</Badge></TableCell>
@@ -655,3 +661,4 @@ export default function InventoryPage() {
     </AppShell>
   )
 }
+

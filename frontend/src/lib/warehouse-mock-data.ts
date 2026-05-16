@@ -76,6 +76,10 @@ export interface ActivityLog {
 }
 
 export const dashboardStats = {
+  materialsInStock: 124,
+  productsInProduction: 18,
+  completedProducts: 86,
+  inventoryAlerts: 8,
   pendingRequisitions: 12,
   lowStockItems: 8,
   pendingDefects: 5,

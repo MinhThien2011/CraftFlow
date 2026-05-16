@@ -375,7 +375,7 @@ export default function OrderDetailPage() {
             <DashboardLayout title="Chi tiết đơn sản xuất">
                 <div className="text-center py-12">
                     <p className="text-muted-foreground">Không tìm thấy đơn sản xuất</p>
-                    <Button variant="ghost" onClick={() => router.back()} className="mt-4">
+                    <Button variant="ghost" onClick={() => router.push("/production-management/orders")} className="mt-4">
                         Quay lại
                     </Button>
                 </div>

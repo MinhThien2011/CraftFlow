@@ -1,9 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { inventoryApi } from "@/api/inventory.api";
 import { toast } from "sonner";
+import { queryKeys } from "@/lib/query-keys";
 
 export const inventoryKeys = {
-    all: ['inventory'] as const,
+    all: queryKeys.inventory.all,
     overview: () => [...inventoryKeys.all, 'overview'] as const,
     materials: (params: any) => [...inventoryKeys.all, 'materials', { params }] as const,
     products: (params: any) => [...inventoryKeys.all, 'products', { params }] as const,

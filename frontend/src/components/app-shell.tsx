@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useMemo, memo } from "react"
+"use client"
+
+import React, { useEffect, useMemo, memo } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { AppSidebar } from "./app-sidebar"
 import { AppHeader } from "./app-header"
 import { useAuth } from "@/features/auth/hooks/use-auth"
-import { Spinner } from "@/components/ui/spinner"
+import { Skeleton } from "@/components/ui/skeleton"
 import { useUIStore } from "@/hooks/use-ui-store"
 
 interface AppShellProps {
@@ -16,11 +18,62 @@ interface AppShellProps {
 const MemoizedSidebar = memo(AppSidebar)
 const MemoizedHeader = memo(AppHeader)
 
+function AppShellSkeleton() {
+  return (
+    <div className="flex h-dvh overflow-hidden bg-background text-foreground">
+      <aside className="hidden w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar md:flex">
+        <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-6">
+          <Skeleton className="h-8 w-8 rounded-lg" />
+          <Skeleton className="h-5 w-32" />
+        </div>
+        <div className="border-b border-sidebar-border p-4">
+          <div className="flex items-center gap-3 rounded-lg p-2">
+            <Skeleton className="h-10 w-10 rounded-lg" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-3 w-20" />
+            </div>
+          </div>
+        </div>
+        <div className="flex-1 space-y-2 px-3 py-6">
+          {Array.from({ length: 9 }).map((_, index) => (
+            <Skeleton key={index} className="h-10 w-full rounded-xl" />
+          ))}
+        </div>
+      </aside>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex h-16 items-center justify-between border-b border-border bg-card px-6">
+          <div className="space-y-2">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-3 w-56" />
+          </div>
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-9 w-9 rounded-full" />
+            <Skeleton className="h-9 w-9 rounded-full" />
+            <Skeleton className="h-9 w-28 rounded-full" />
+          </div>
+        </header>
+        <main className="flex-1 overflow-hidden bg-background/50">
+          <div className="container mx-auto space-y-6 p-4 md:p-6 lg:p-8">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <Skeleton key={index} className="h-28 rounded-lg" />
+              ))}
+            </div>
+            <Skeleton className="h-[420px] rounded-lg" />
+          </div>
+        </main>
+      </div>
+    </div>
+  )
+}
+
 export function AppShell({ children, title, subtitle }: AppShellProps) {
   const { sidebarCollapsed, toggleSidebar } = useUIStore()
   const { isAuthenticated, loading, role } = useAuth()
   const router = useRouter()
   const pathname = usePathname()
+  const [isRedirecting, setIsRedirecting] = React.useState(false)
 
   // Use useMemo to optimize path configuration and avoid redundant computations on each render
   const pathConfig = useMemo(() => {
@@ -50,14 +103,14 @@ export function AppShell({ children, title, subtitle }: AppShellProps) {
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
-      router.push("/")
+      setIsRedirecting(true)
+      router.replace("/")
     }
   }, [isAuthenticated, loading, router])
 
   useEffect(() => {
     if (loading || !isAuthenticated || !role || !pathname) return
-
-    console.log("[AppShell] Checking permissions:", { role, pathname, pathConfig });
+    setIsRedirecting(false)
 
     const {
       isKhoManagerOnlyPath, isAdminPath, isProductionManagerPath,
@@ -68,13 +121,13 @@ export function AppShell({ children, title, subtitle }: AppShellProps) {
     // Unified redirection logic
     if (role === "admin") {
       if (isKhoManagerOnlyPath) {
-        console.log("[AppShell] Admin redirecting to dashboard");
-        router.push("/dashboard")
+        setIsRedirecting(true)
+        router.replace("/dashboard")
       }
     } else if (role === "kho_manager") {
       if ((isAdminPath || isAdminReportsPath || isInventoryRootPath || isProductionManagerPath) && !isKhoInventoryAllowedPath) {
-        console.log("[AppShell] Kho Manager redirecting to dashboard_warehouse");
-        router.push("/dashboard_warehouse")
+        setIsRedirecting(true)
+        router.replace("/dashboard_warehouse")
       }
     } else if (role === "production_manager") {
       // Cho phép PM truy cập các trang production-management, alerts, và settings
@@ -82,38 +135,33 @@ export function AppShell({ children, title, subtitle }: AppShellProps) {
       const isRequisitionsPath = pathname.startsWith("/requisitions")
       const isAllowedPMPath = isProductionManagerPath || isProductsPath || isRequisitionsPath || pathname === "/alerts" || pathname.startsWith("/alerts/") || pathname === "/settings";
       if (!isAllowedPMPath) {
-        console.log("[AppShell] PM redirecting to dashboard");
-        router.push("/production-management/dashboard")
+        setIsRedirecting(true)
+        router.replace("/production-management/dashboard")
       }
     } else {
       // Handle other roles or restricted access
       if (isProductionManagerPath || isAdminPath || isWarehouseFeaturePath) {
-        console.log("[AppShell] Other role redirecting to dashboard");
-        router.push("/dashboard")
+        setIsRedirecting(true)
+        router.replace("/dashboard")
       }
     }
   }, [loading, isAuthenticated, role, pathname, pathConfig, router])
 
-  if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <Spinner className="h-8 w-8 text-primary" />
-      </div>
-    )
+  if (loading || isRedirecting) {
+    return <AppShellSkeleton />
   }
 
   if (!isAuthenticated) {
-    return null
+    return <AppShellSkeleton />
   }
 
   return (
-    <div className="flex h-screen bg-background text-foreground overflow-hidden">
+    <div className="flex h-dvh overflow-hidden bg-background text-foreground">
       <MemoizedSidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <MemoizedHeader title={title} subtitle={subtitle} />
         <main className="flex-1 overflow-y-auto overflow-x-hidden bg-background/50 scroll-smooth">
-          {/* Add a fade-in animation to make tab switching feel smoother */}
-          <div className="container mx-auto p-4 md:p-6 lg:p-8 animate-in fade-in slide-in-from-bottom-1 duration-300">
+          <div className="container mx-auto p-4 md:p-6 lg:p-8">
             {children}
           </div>
         </main>

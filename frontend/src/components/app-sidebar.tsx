@@ -1,10 +1,9 @@
 "use client"
 
-import React, { useMemo } from "react"
+import React, { useCallback, useMemo } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
-import { usePrefetch } from "@/hooks/use-prefetch"
+import { usePathname } from "next/navigation"
 import {
   LayoutDashboard,
   Package,
@@ -15,7 +14,6 @@ import {
   Factory,
   AlertTriangle,
   Sparkles,
-  Megaphone,
   BarChart3,
   Settings,
   PanelLeftClose,
@@ -164,26 +162,26 @@ const warehouseGroupedNavigation = [
   },
 ]
 
+const allNavigationHrefs = [
+  ...navigation.map((item) => item.href),
+  ...warehouseGroupedNavigation.flatMap((group) => group.children.map((child) => child.href)),
+].map((href) => href.replace(/\/$/, "") || "/")
+
 export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
   const pathname = usePathname()
-  const { user, isAdmin, isKhoManager, isProductionManager, role } = useAuth()
-  const prefetch = usePrefetch()
-
+  const { user, isAdmin, isKhoManager, role } = useAuth()
+  const normalizedPath = useMemo(() => pathname.replace(/\/$/, "") || "/", [pathname])
+  const avatarUrl = useMemo(() => getAvatarUrl(user?.avatar), [user?.avatar])
+  const roleLabel = role === "kho_manager" ? "Quản lý kho" : role.replace("_", " ")
   // Logic kiểm tra tab đang active chính xác hơn sử dụng nguyên tắc Longest Prefix Match
-  const checkActive = (href: string) => {
+  const checkActive = useCallback((href: string) => {
     // Chuẩn hóa path (loại bỏ trailing slash)
-    const normalizedPath = pathname.replace(/\/$/, "") || "/"
     const normalizedHref = href.replace(/\/$/, "") || "/"
 
     if (normalizedPath === normalizedHref) return true
 
     if (normalizedPath.startsWith(`${normalizedHref}/`)) {
-      const allPossibleHrefs = [
-        ...navigation.map((n) => n.href),
-        ...warehouseGroupedNavigation.flatMap((g) => g.children.map((c) => c.href)),
-      ].map(h => h.replace(/\/$/, "") || "/")
-
-      const isBetterMatchExists = allPossibleHrefs.some(
+      const isBetterMatchExists = allNavigationHrefs.some(
         (otherHref) =>
           otherHref !== normalizedHref &&
           otherHref.length > normalizedHref.length &&
@@ -194,7 +192,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
     }
 
     return false
-  }
+  }, [normalizedPath])
 
   const filteredNavigation = useMemo(() => {
     if (!role) return []
@@ -207,12 +205,10 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
   }, [role])
 
   const isKhoRole = isKhoManager && !isAdmin // Admin dùng flat navigation cho đầy đủ
-  const isPMORAdmin = isProductionManager || isAdmin
-
   return (
     <aside
       className={cn(
-        "flex h-screen flex-col border-r border-sidebar-border bg-sidebar transition-all duration-300",
+        "flex h-dvh shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200 ease-out",
         collapsed ? "w-16" : "w-64"
       )}
     >
@@ -239,6 +235,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
           size="icon"
           onClick={onToggle}
           className="hidden lg:flex h-8 w-8 rounded-full hover:bg-sidebar-accent"
+          aria-label={collapsed ? "Mở rộng sidebar" : "Thu gọn sidebar"}
         >
           {collapsed ? (
             <PanelLeft className="h-4 w-4 text-muted-foreground" />
@@ -259,9 +256,9 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
               )}
             >
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted overflow-hidden relative">
-                {getAvatarUrl(user?.avatar) ? (
+                {avatarUrl ? (
                   <Image
-                    src={getAvatarUrl(user?.avatar)!}
+                    src={avatarUrl}
                     alt={user?.fullName || "User avatar"}
                     fill
                     className="object-cover"
@@ -277,7 +274,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
                       {user?.fullName || user?.username || "Người dùng"}
                     </p>
                     <span className="inline-flex items-center rounded-md bg-primary px-2 py-0.5 text-[10px] font-bold text-primary-foreground">
-                      {role === "kho_manager" ? "Quản lý kho" : role.replace("_", " ")}
+                      {roleLabel}
                     </span>
                   </div>
                   <ChevronDown className="h-4 w-4 text-muted-foreground" />
@@ -289,6 +286,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
             <CollapsibleContent className="mt-2 space-y-1">
               <Link
                 href="/settings"
+                prefetch={false}
                 className="block rounded-lg px-4 py-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent"
               >
                 Cài đặt tài khoản
@@ -343,7 +341,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
                           <Link
                             key={child.href}
                             href={child.href}
-                            prefetch={true}
+                            prefetch={false}
                             className={cn(
                               "block rounded-lg px-3 py-1.5 text-sm transition-all duration-200",
                               isChildActive
@@ -370,7 +368,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
                 <Link
                   key={item.name}
                   href={item.href}
-                  prefetch={true}
+                  prefetch={false}
                   className={cn(
                     "group flex items-center rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200",
                     isActive
@@ -405,6 +403,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
       <div className="border-t border-sidebar-border p-3">
         <Link
           href="/settings"
+          prefetch={false}
           className={cn(
             "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent",
             collapsed && "justify-center px-2"

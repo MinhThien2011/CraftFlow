@@ -116,7 +116,7 @@ export default function ProductDetailPage() {
         category: p.category,
         unit: p.unit,
         estimatedProductionTime: p.estimatedProductionTime,
-        shelf: p.shelf?._id || p.shelf || "",
+        shelf: typeof p.shelf === "string" ? p.shelf : p.shelf?._id || "",
         threshold: p.threshold || 5,
         isActive: p.isActive,
       })

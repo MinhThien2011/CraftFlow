@@ -1,9 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { productionApi } from "@/api/production.api";
 import { toast } from "sonner";
+import { queryKeys } from "@/lib/query-keys";
 
 export const productionKeys = {
-    all: ['production'] as const,
+    all: queryKeys.production.all,
     orders: (params: any) => [...productionKeys.all, 'orders', { params }] as const,
     order: (id: string) => [...productionKeys.all, 'order', id] as const,
     suggestions: () => [...productionKeys.all, 'suggestions'] as const,

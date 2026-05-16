@@ -2,9 +2,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { materialApi } from "@/api/material.api";
 import { Material } from "@/lib/types";
 import { toast } from "sonner";
+import { queryKeys } from "@/lib/query-keys";
 
 export const materialKeys = {
-    all: ['materials'] as const,
+    all: queryKeys.materials.all,
     lists: () => [...materialKeys.all, 'list'] as const,
     list: (params: any) => [...materialKeys.lists(), { params }] as const,
     details: () => [...materialKeys.all, 'detail'] as const,

@@ -100,7 +100,27 @@ export default function AdminProductionOrderDetailPage() {
         )
     }
 
-    if (!order) return null
+    if (!order) {
+        return (
+            <AppShell title="Chi tiết Đơn sản xuất" subtitle="Không tìm thấy dữ liệu">
+                <div className="flex h-[60vh] flex-col items-center justify-center gap-4 text-center">
+                    <div className="rounded-full bg-muted p-4">
+                        <Package className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                    <div className="space-y-1">
+                        <h2 className="text-lg font-semibold">Không tìm thấy đơn sản xuất</h2>
+                        <p className="text-sm text-muted-foreground">
+                            Đơn có thể đã bị xóa, hoặc bạn không còn quyền truy cập.
+                        </p>
+                    </div>
+                    <Button variant="outline" onClick={() => router.push("/production")}>
+                        <ChevronLeft className="mr-2 h-4 w-4" />
+                        Quay lại danh sách
+                    </Button>
+                </div>
+            </AppShell>
+        )
+    }
 
     const statusConfig = getStatusConfig(order.status)
     const priorityConfig = getPriorityConfig(order.priority)

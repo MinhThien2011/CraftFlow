@@ -42,7 +42,7 @@ export function useProductionOrdersModule() {
 
   const createMutation = useCreateProductionOrder()
 
-  const orders = useMemo(() => ordersResponse?.data?.items || (ordersResponse?.data as any)?.orders || [], [ordersResponse])
+  const orders = useMemo(() => ordersResponse?.data?.orders || [], [ordersResponse])
 
   const resetForm = () => {
     setSelectedItems([{ productId: "", quantity: "" }])

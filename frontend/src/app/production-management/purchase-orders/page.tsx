@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { Suspense, useState, useEffect, useCallback, useRef } from 'react'
+import dynamic from 'next/dynamic'
 import {
   PackagePlus,
   Search,
@@ -52,8 +53,19 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import { useSearchParams } from 'next/navigation'
-import { QRScanner } from "@/features/receiving/components/qr-scanner"
-import { QRCodeSVG } from 'qrcode.react'
+
+const QRScanner = dynamic(
+  () => import("@/features/receiving/components/qr-scanner").then((m) => m.QRScanner),
+  { ssr: false }
+)
+
+const QRCodeSVG = dynamic(
+  () => import('qrcode.react').then((m) => m.QRCodeSVG),
+  {
+    ssr: false,
+    loading: () => <div className="h-[110px] w-[110px] rounded-md bg-muted animate-pulse" />,
+  }
+)
 
 const CustomPagination = ({ page, total, pageSize, onChange }: { page: number; total: number; pageSize: number; onChange: (p: number) => void }) => {
   const totalPages = Math.ceil(total / pageSize)
@@ -79,8 +91,23 @@ const CustomPagination = ({ page, total, pageSize, onChange }: { page: number; t
 }
 
 export default function PurchaseOrdersPage() {
+  return (
+    <Suspense fallback={
+      <AppShell title="YÃªu cáº§u mua hÃ ng" subtitle="Quáº£n lÃ½ cÃ¡c yÃªu cáº§u mua nguyÃªn váº­t liá»‡u tá»« bá»™ pháº­n sáº£n xuáº¥t">
+        <div className="flex h-64 items-center justify-center">
+          <Spinner />
+        </div>
+      </AppShell>
+    }>
+      <PurchaseOrdersContent />
+    </Suspense>
+  )
+}
+
+function PurchaseOrdersContent() {
   const { role, isAdmin } = useAuth()
   const searchParams = useSearchParams()
+  const autoCreateKeyRef = useRef<string | null>(null)
   const [orders, setOrders] = useState<PurchaseOrder[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -134,22 +161,26 @@ export default function PurchaseOrdersPage() {
   useEffect(() => {
     const shouldCreate = searchParams.get('create') === 'true'
     const orderId = searchParams.get('orderId')
+    const autoCreateKey = `${shouldCreate}:${orderId || ''}`
 
-    if (shouldCreate) {
-      handleOpenCreate()
-      if (orderId) {
-        // We need to wait for insufficientOrders and materialAlerts to be loaded
-        // before we can set the specific order
-        const checkAndSet = setInterval(() => {
-          if (insufficientOrders.length > 0 || materialAlerts.length > 0) {
-            handleCreateOrderChange(orderId)
-            clearInterval(checkAndSet)
-          }
-        }, 500)
+    if (!shouldCreate) {
+      autoCreateKeyRef.current = null
+      return
+    }
 
-        // Timeout after 10 seconds to avoid infinite loop
-        setTimeout(() => clearInterval(checkAndSet), 10000)
-      }
+    if (autoCreateKeyRef.current === autoCreateKey) return
+    autoCreateKeyRef.current = autoCreateKey
+
+    handleOpenCreate()
+    if (orderId) {
+      const checkAndSet = setInterval(() => {
+        if (insufficientOrders.length > 0 || materialAlerts.length > 0) {
+          handleCreateOrderChange(orderId)
+          clearInterval(checkAndSet)
+        }
+      }, 500)
+
+      setTimeout(() => clearInterval(checkAndSet), 10000)
     }
   }, [searchParams, insufficientOrders.length, materialAlerts.length])
 

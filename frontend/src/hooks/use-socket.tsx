@@ -1,11 +1,13 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 import { io, Socket } from "socket.io-client";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Notification } from "@/api/notification.api";
+import { queryKeys } from "@/lib/query-keys";
 
 interface SocketContextType {
     socket: Socket | null;
@@ -24,6 +26,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const [socket, setSocket] = useState<Socket | null>(null);
     const [isConnected, setIsConnected] = useState(false);
     const queryClient = useQueryClient();
+    const router = useRouter();
 
     useEffect(() => {
         if (!isAuthenticated || !user?._id) {
@@ -68,7 +71,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         newSocket.on('notification', (notification: Notification) => {
             console.log('[Socket] New notification received:', notification);
 
-            queryClient.invalidateQueries({ queryKey: ['notifications'] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
 
             toast.info(notification.title, {
                 description: notification.message,
@@ -78,20 +81,20 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         newSocket.on('production_order_created', (data: any) => {
             console.log('[Socket] Production order created:', data);
-            queryClient.invalidateQueries({ queryKey: ['production-orders'] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.production.all });
             toast.success('Đơn sản xuất mới', {
                 description: data.message,
                 duration: 8000,
                 action: {
                     label: 'Xem ngay',
-                    onClick: () => window.location.href = `/production-management/production-orders`
+                    onClick: () => router.push(`/production-management/orders`)
                 }
             });
         });
 
         newSocket.on('production_order_status_updated', (data: any) => {
             console.log('[Socket] Production order status updated:', data);
-            queryClient.invalidateQueries({ queryKey: ['production-orders'] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.production.all });
             toast.info('Cập nhật đơn sản xuất', {
                 description: data.message,
                 duration: 8000,
@@ -100,7 +103,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         newSocket.on('purchase_order_status_updated', (data: any) => {
             console.log('[Socket] Purchase order status updated:', data);
-            queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.purchaseOrders.all });
             toast.info('Cập nhật đơn mua hàng', {
                 description: data.message,
                 duration: 8000,
@@ -109,7 +112,10 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         newSocket.on('inventory_slip_updated', (data: any) => {
             console.log('[Socket] Inventory slip updated:', data);
-            queryClient.invalidateQueries({ queryKey: ['slips'] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.slips.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.inventory.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.materials.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.products.all });
             toast.info('Cập nhật kho', {
                 description: data.message,
                 duration: 6000,
@@ -126,7 +132,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         return () => {
             newSocket.disconnect();
         };
-    }, [isAuthenticated, user?._id, queryClient]);
+    }, [isAuthenticated, user?._id, queryClient, router]);
 
     return (
         <SocketContext.Provider value={{ socket, isConnected }}>

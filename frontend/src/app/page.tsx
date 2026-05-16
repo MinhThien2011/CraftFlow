@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Factory, User, Lock, Eye, EyeOff, HelpCircle } from "lucide-react"
 
@@ -17,6 +17,7 @@ export default function LoginPage() {
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const loginInFlight = useRef(false)
 
   const getHomeByRole = (userRole: string) => {
     if (userRole === "kho_manager") return "/dashboard_warehouse"
@@ -33,24 +34,27 @@ export default function LoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isLoading || loginInFlight.current) return
+
     if (!username || !password) {
       toast.error("Vui lòng nhập tài khoản và mật khẩu")
       return
     }
 
     setIsLoading(true)
+    loginInFlight.current = true
 
     try {
       const result = await login(username, password)
       if (result.success) {
         toast.success("Đăng nhập thành công")
-        router.push(getHomeByRole(result.role || ""))
       } else {
         toast.error(result.message || "Đăng nhập thất bại")
       }
     } catch (error) {
       toast.error("Đã xảy ra lỗi kết nối")
     } finally {
+      loginInFlight.current = false
       setIsLoading(false)
     }
   }

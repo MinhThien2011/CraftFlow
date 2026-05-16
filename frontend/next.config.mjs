@@ -2,9 +2,6 @@
 const nextConfig = {
   // Tắt nút Next.js màu đỏ / menu Dev Tools khi chạy `next dev` (chỉ môi trường dev)
   devIndicators: false,
-  typescript: {
-    ignoreBuildErrors: true,
-  },
   images: {
     unoptimized: true,
   },

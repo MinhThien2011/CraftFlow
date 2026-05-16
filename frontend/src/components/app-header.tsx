@@ -23,6 +23,7 @@ import { notificationApi, Notification } from "@/api/notification.api"
 import { formatDistanceToNow } from "date-fns"
 import { vi } from "date-fns/locale"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { queryKeys } from "@/lib/query-keys"
 
 interface AppHeaderProps {
   title: string
@@ -36,7 +37,7 @@ export function AppHeader({ title, subtitle }: AppHeaderProps) {
   const queryClient = useQueryClient()
 
   const { data: notificationData } = useQuery({
-    queryKey: ['notifications'],
+    queryKey: queryKeys.notifications.all,
     queryFn: () => notificationApi.getNotifications({ limit: 10 }),
     enabled: !!user,
   })
@@ -44,14 +45,14 @@ export function AppHeader({ title, subtitle }: AppHeaderProps) {
   const markReadMutation = useMutation({
     mutationFn: (id: string) => notificationApi.markAsRead(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all })
     }
   })
 
   const markAllReadMutation = useMutation({
     mutationFn: () => notificationApi.markAllAsRead(),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all })
       toast.success("Đã đánh dấu tất cả là đã đọc")
     }
   })
@@ -85,8 +86,6 @@ export function AppHeader({ title, subtitle }: AppHeaderProps) {
   const handleLogout = async () => {
     try {
       await logout()
-      toast.success("Đăng xuất thành công")
-      router.push("/")
     } catch (error) {
       toast.error("Đã xảy ra lỗi khi đăng xuất")
     }

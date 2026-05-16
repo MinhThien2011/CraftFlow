@@ -166,7 +166,7 @@ export default function NewProductPage() {
               type="button"
               variant="outline"
               className="border-border"
-              onClick={() => router.back()}
+              onClick={() => router.push("/production-management/products")}
             >
               Hủy
             </Button>
