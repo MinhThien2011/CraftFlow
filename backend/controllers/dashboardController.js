@@ -46,3 +46,46 @@ export const getDashboardStats = async (req, res) => {
     });
   }
 };
+
+/**
+ * Controller to get specific statistics for the Warehouse Manager dashboard.
+ */
+export const getWarehouseDashboardStats = async (req, res) => {
+  try {
+    const [warehouseStats, recentActivity, alerts, charts] = await Promise.all([
+      dashboardService.getWarehouseStats(),
+      dashboardService.getWarehouseRecentActivity(10),
+      dashboardService.getRecentAlerts(5),
+      dashboardService.getChartData(7)
+    ]);
+
+    if (!warehouseStats.success || !recentActivity.success || !alerts.success || !charts.success) {
+      console.log('Warehouse dashboard stats retrieval errors:', {
+        warehouseError: warehouseStats.message,
+        activityError: recentActivity.message,
+        alertsError: alerts.message,
+        chartsError: charts.message
+      });
+      return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+        success: false,
+        message: 'Failed to retrieve some warehouse statistics.'
+      });
+    }
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      data: {
+        stats: warehouseStats.data,
+        recentActivity: recentActivity.data,
+        alerts: alerts.data,
+        charts: charts.data
+      }
+    });
+  } catch (error) {
+    console.log('[DashboardController] getWarehouseDashboardStats error:', error);
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: 'Internal server error while fetching warehouse dashboard statistics.'
+    });
+  }
+};

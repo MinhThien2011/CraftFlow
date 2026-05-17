@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { io, Socket } from "socket.io-client";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/features/auth/hooks/use-auth";
@@ -27,6 +27,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const [isConnected, setIsConnected] = useState(false);
     const queryClient = useQueryClient();
     const router = useRouter();
+    const lastConnectErrorRef = useRef<{ message: string; at: number } | null>(null);
 
     useEffect(() => {
         if (!isAuthenticated || !user?._id) {
@@ -41,36 +42,42 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:4000";
 
         const newSocket = io(socketUrl, {
-            transports: ['websocket', 'polling'],
+            transports: ["websocket", "polling"],
             reconnection: true,
             reconnectionAttempts: 5,
             reconnectionDelay: 1000,
             withCredentials: true,
         });
 
-        // ==================== EVENT HANDLERS ====================
-        newSocket.on('connect', () => {
-            console.log(`[Socket] ✅ Connected successfully | User: ${user._id}`);
+        newSocket.on("connect", () => {
+            console.log(`[Socket] Connected successfully | User: ${user._id}`);
             setIsConnected(true);
+            lastConnectErrorRef.current = null;
         });
 
-        newSocket.on('connect_error', (err) => {
-            console.error('[Socket] Connection error:', err.message);
+        newSocket.on("connect_error", (err) => {
             setIsConnected(false);
+            const now = Date.now();
+            const previous = lastConnectErrorRef.current;
+            const shouldReport = !previous || previous.message !== err.message || now - previous.at > 15000;
 
-            if (err.message === "Authentication required" || err.message === "Invalid token") {
-                toast.error("Phiên socket hết hạn, đang reconnect...");
+            if (shouldReport) {
+                console.error("[Socket] Connection error:", err.message);
+                lastConnectErrorRef.current = { message: err.message, at: now };
+            }
+
+            if (shouldReport && (err.message === "Authentication required" || err.message === "Invalid token")) {
+                toast.error("Phien socket het han, dang reconnect...");
             }
         });
 
-        newSocket.on('disconnect', (reason) => {
+        newSocket.on("disconnect", (reason) => {
             console.log(`[Socket] Disconnected | Reason: ${reason}`);
             setIsConnected(false);
         });
 
-        newSocket.on('notification', (notification: Notification) => {
-            console.log('[Socket] New notification received:', notification);
-
+        newSocket.on("notification", (notification: Notification) => {
+            console.log("[Socket] New notification received:", notification);
             queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
 
             toast.info(notification.title, {
@@ -79,64 +86,60 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             });
         });
 
-        newSocket.on('production_order_created', (data: any) => {
-            console.log('[Socket] Production order created:', data);
+        newSocket.on("production_order_created", (data: any) => {
+            console.log("[Socket] Production order created:", data);
             queryClient.invalidateQueries({ queryKey: queryKeys.production.all });
-            toast.success('Đơn sản xuất mới', {
+            toast.success("Don san xuat moi", {
                 description: data.message,
                 duration: 8000,
                 action: {
-                    label: 'Xem ngay',
-                    onClick: () => router.push(`/production-management/orders`)
-                }
+                    label: "Xem ngay",
+                    onClick: () => router.push(`/production-management/orders`),
+                },
             });
         });
 
-        newSocket.on('production_order_status_updated', (data: any) => {
-            console.log('[Socket] Production order status updated:', data);
+        newSocket.on("production_order_status_updated", (data: any) => {
+            console.log("[Socket] Production order status updated:", data);
             queryClient.invalidateQueries({ queryKey: queryKeys.production.all });
-            toast.info('Cập nhật đơn sản xuất', {
+            toast.info("Cap nhat don san xuat", {
                 description: data.message,
                 duration: 8000,
             });
         });
 
-        newSocket.on('purchase_order_status_updated', (data: any) => {
-            console.log('[Socket] Purchase order status updated:', data);
+        newSocket.on("purchase_order_status_updated", (data: any) => {
+            console.log("[Socket] Purchase order status updated:", data);
             queryClient.invalidateQueries({ queryKey: queryKeys.purchaseOrders.all });
-            toast.info('Cập nhật đơn mua hàng', {
+            toast.info("Cap nhat don mua hang", {
                 description: data.message,
                 duration: 8000,
             });
         });
 
-        newSocket.on('inventory_slip_updated', (data: any) => {
-            console.log('[Socket] Inventory slip updated:', data);
+        newSocket.on("inventory_slip_updated", (data: any) => {
+            console.log("[Socket] Inventory slip updated:", data);
             queryClient.invalidateQueries({ queryKey: queryKeys.slips.all });
             queryClient.invalidateQueries({ queryKey: queryKeys.inventory.all });
             queryClient.invalidateQueries({ queryKey: queryKeys.materials.all });
             queryClient.invalidateQueries({ queryKey: queryKeys.products.all });
-            toast.info('Cập nhật kho', {
+            toast.info("Cap nhat kho", {
                 description: data.message,
                 duration: 6000,
             });
         });
 
-        newSocket.on('error', (error) => {
-            console.error('[Socket] Server error:', error);
+        newSocket.on("error", (error) => {
+            console.error("[Socket] Server error:", error);
         });
 
         setSocket(newSocket);
 
-        // Cleanup
         return () => {
             newSocket.disconnect();
         };
     }, [isAuthenticated, user?._id, queryClient, router]);
 
-    return (
-        <SocketContext.Provider value={{ socket, isConnected }}>
-            {children}
-        </SocketContext.Provider>
-    );
+    return <SocketContext.Provider value={{ socket, isConnected }}>{children}</SocketContext.Provider>;
 };
+

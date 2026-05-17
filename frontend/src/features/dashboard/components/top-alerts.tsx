@@ -1,140 +1,129 @@
 'use client'
 
-import { AlertTriangle, PackageX, Clock, RotateCcw, Truck } from 'lucide-react'
+import { AlertTriangle, PackageX, MoveRight } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { formatDistanceToNow } from 'date-fns'
-import { vi } from 'date-fns/locale'
-
-interface Alert {
-  id: string
-  type: 'requisition' | 'low_stock' | 'defect' | 'timeout' | 'rma'
-  title: string
-  description: string
-  timestamp: Date
-  priority: 'high' | 'medium' | 'low'
-}
-
-const alerts: Alert[] = [
-  {
-    id: '1',
-    type: 'requisition',
-    title: 'Yêu cầu vật liệu mới',
-    description: 'REQ-2024-015 từ Bộ phận Sản xuất - Ưu tiên cao',
-    timestamp: new Date(Date.now() - 5 * 60 * 1000),
-    priority: 'high'
-  },
-  {
-    id: '2',
-    type: 'low_stock',
-    title: 'Cảnh báo tồn kho thấp',
-    description: 'Mắt thú nhồi bông 8mm - Còn 15/50 hộp',
-    timestamp: new Date(Date.now() - 15 * 60 * 1000),
-    priority: 'high'
-  },
-  {
-    id: '3',
-    type: 'defect',
-    title: 'Báo cáo hàng lỗi mới',
-    description: 'Gấu bông Teddy - 5 sản phẩm lỗi đường may',
-    timestamp: new Date(Date.now() - 30 * 60 * 1000),
-    priority: 'medium'
-  },
-  {
-    id: '4',
-    type: 'timeout',
-    title: 'Requisition sắp timeout',
-    description: 'REQ-2024-012 - Còn 30 phút để xử lý',
-    timestamp: new Date(Date.now() - 45 * 60 * 1000),
-    priority: 'high'
-  },
-  {
-    id: '5',
-    type: 'rma',
-    title: 'Hàng trả từ khách',
-    description: 'RMA-2024-008 - 3 sản phẩm cần kiểm tra QC',
-    timestamp: new Date(Date.now() - 60 * 60 * 1000),
-    priority: 'medium'
-  }
-]
-
-const getAlertIcon = (type: Alert['type']) => {
-  switch (type) {
-    case 'requisition':
-      return <Truck className="size-4" />
-    case 'low_stock':
-      return <PackageX className="size-4" />
-    case 'defect':
-      return <AlertTriangle className="size-4" />
-    case 'timeout':
-      return <Clock className="size-4" />
-    case 'rma':
-      return <RotateCcw className="size-4" />
-  }
-}
-
-const getAlertColor = (type: Alert['type']) => {
-  switch (type) {
-    case 'requisition':
-      return 'bg-blue-50 text-blue-700 border-blue-200'
-    case 'low_stock':
-      return 'bg-orange-50 text-orange-700 border-orange-200'
-    case 'defect':
-      return 'bg-red-50 text-red-700 border-red-200'
-    case 'timeout':
-      return 'bg-rose-50 text-rose-700 border-rose-200'
-    case 'rma':
-      return 'bg-purple-50 text-purple-700 border-purple-200'
-  }
-}
-
-const getPriorityBadge = (priority: Alert['priority']) => {
-  switch (priority) {
-    case 'high':
-      return <Badge variant="destructive" className="text-[10px]">Cao</Badge>
-    case 'medium':
-      return <Badge variant="secondary" className="text-[10px] bg-amber-100 text-amber-700">TB</Badge>
-    case 'low':
-      return <Badge variant="secondary" className="text-[10px]">Thấp</Badge>
-  }
-}
+import { Progress } from '@/components/ui/progress'
+import { useWarehouseDashboard, AlertItem } from '../api/get-warehouse-dashboard'
+import { Skeleton } from '@/components/ui/skeleton'
+import Link from 'next/link'
 
 export function TopAlerts() {
+  const { data, isLoading, isError } = useWarehouseDashboard()
+
+  if (isLoading) {
+    return (
+      <Card className="col-span-1 h-[450px] bg-card/80 backdrop-blur-xl border-white/20 dark:border-white/10 shadow-lg">
+        <CardHeader>
+          <CardTitle className="text-lg">Cảnh báo tồn kho</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="space-y-2">
+                <div className="flex justify-between">
+                  <Skeleton className="h-4 w-1/3" />
+                  <Skeleton className="h-4 w-1/4" />
+                </div>
+                <Skeleton className="h-2 w-full" />
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (isError || !data?.success) {
+    return (
+      <Card className="col-span-1 h-[450px]">
+        <CardContent className="flex items-center justify-center h-full text-muted-foreground">
+          Không thể tải dữ liệu cảnh báo.
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const alerts = data.data.alerts || []
+
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <Card className="col-span-1 h-[450px] flex flex-col bg-card/80 backdrop-blur-xl border-white/20 dark:border-white/10 shadow-lg relative overflow-hidden">
+      <div className="absolute top-0 left-0 w-40 h-40 bg-red-500/5 rounded-br-full -z-10 blur-3xl"></div>
+
+      <CardHeader className="pb-3 border-b border-border/50 bg-muted/20">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base font-semibold flex items-center gap-2">
-            <AlertTriangle className="size-4 text-amber-500" />
-            Cảnh báo quan trọng (Top 5)
-          </CardTitle>
-          <Button variant="ghost" size="sm" className="text-xs">
-            Xem tất cả
-          </Button>
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="size-5 text-red-500" />
+            <CardTitle className="text-lg font-bold">Cảnh báo Tồn kho</CardTitle>
+          </div>
+          {alerts.length > 0 && (
+            <Badge variant="destructive" className="animate-pulse shadow-[0_0_10px_rgba(220,38,38,0.5)]">
+              {alerts.length} Mục
+            </Badge>
+          )}
         </div>
       </CardHeader>
-      <CardContent className="space-y-3">
-        {alerts.map((alert) => (
-          <div
-            key={alert.id}
-            className={`flex items-start gap-3 p-3 rounded-lg border ${getAlertColor(alert.type)} transition-colors hover:opacity-80 cursor-pointer`}
-          >
-            <div className="mt-0.5">
-              {getAlertIcon(alert.type)}
-            </div>
-            <div className="flex-1 min-w-0 space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="font-medium text-sm truncate">{alert.title}</span>
-                {getPriorityBadge(alert.priority)}
+      
+      <CardContent className="flex-1 p-5 overflow-y-auto scrollbar-thin scrollbar-thumb-muted">
+        <div className="space-y-5">
+          {alerts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-40 text-center space-y-3">
+              <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                <PackageX className="size-6 text-emerald-500" />
               </div>
-              <p className="text-xs opacity-80 truncate">{alert.description}</p>
-              <p className="text-[10px] opacity-60">
-                {formatDistanceToNow(alert.timestamp, { addSuffix: true, locale: vi })}
-              </p>
+              <p className="text-sm text-muted-foreground">Tất cả hàng hóa đều ở mức an toàn.</p>
             </div>
+          ) : (
+            alerts.map((item) => {
+              const isCritical = item.currentStock === 0
+              const percentage = item.minStock > 0 ? (item.currentStock / item.minStock) * 100 : 0
+              
+              return (
+                <div key={item.id} className="group p-3 -mx-3 rounded-xl transition-colors hover:bg-muted/40">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex flex-col">
+                      <span className="text-sm font-semibold text-foreground">{item.name}</span>
+                      <span className="text-[11px] text-muted-foreground uppercase tracking-wider">{item.type}</span>
+                    </div>
+                    <Badge 
+                      variant={isCritical ? 'destructive' : 'outline'} 
+                      className={isCritical ? 'bg-red-500 text-white shadow-sm' : 'border-orange-500/50 text-orange-600 bg-orange-500/10'}
+                    >
+                      {item.status}
+                    </Badge>
+                  </div>
+                  
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-xs font-medium">
+                      <span className={isCritical ? 'text-red-500 font-bold' : 'text-foreground'}>
+                        Tồn: {item.currentStock} {item.unit}
+                      </span>
+                      <span className="text-muted-foreground">
+                        Tối thiểu: {item.minStock} {item.unit}
+                      </span>
+                    </div>
+                    <Progress 
+                      value={percentage} 
+                      className="h-2 bg-muted overflow-hidden" 
+                      indicatorClassName={isCritical ? 'bg-red-500' : 'bg-orange-500'}
+                    />
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </div>
+        
+        {alerts.length > 0 && (
+          <div className="mt-6 pt-4 border-t border-border/50 text-center">
+            <Link 
+              href="/inventory" 
+              className="inline-flex items-center text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+            >
+              Xem tất cả kho <MoveRight className="ml-1 size-4" />
+            </Link>
           </div>
-        ))}
+        )}
       </CardContent>
     </Card>
   )

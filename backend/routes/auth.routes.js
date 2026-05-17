@@ -11,15 +11,13 @@ import { loginLimiter, strictLimiter } from "../middleware/rateLimit.js";
 
 const authRouter = Router();
 
-// Public Authentication
 authRouter.post('/login', loginLimiter, login);
-authRouter.post('/refresh-password', strictLimiter, refreshPassword);
 
-// Authenticated Routes
 authRouter.use(jwtAuth);
 
-authRouter.get('/user', getUserInfo);
+authRouter.get('/user', strictLimiter, getUserInfo);
 authRouter.post('/logout', logout);
 authRouter.post('/change-password', strictLimiter, changePassword);
+authRouter.post('/refresh-password', strictLimiter, refreshPassword);
 
 export default authRouter;

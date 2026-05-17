@@ -508,9 +508,17 @@ export const updateRequisitionStatus = async (requisitionId, managerId, status, 
             }], { session });
           }
 
-          material.currentStock = beforeStock - item.requestedQuantity;
-          await material.save({ session });
-          if (material.shelf) await updateShelfLoad(material.shelf);
+          const updatedMaterial = await Material.findOneAndUpdate(
+            { _id: material._id, currentStock: { $gte: item.requestedQuantity } },
+            { $inc: { currentStock: -item.requestedQuantity } },
+            { new: true, session }
+          );
+
+          if (!updatedMaterial) {
+            throw new Error(`Insufficient stock for material ${material.name}.`);
+          }
+
+          if (material.shelf) await updateShelfLoad(material.shelf, session);
           item.actualQuantity = item.requestedQuantity;
         }
 

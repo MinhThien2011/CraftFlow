@@ -18,7 +18,6 @@ export const login = async (req, res) => {
         },
       });
     }
-    console.log(value);
     const { identifier, password } = value;
 
     const user = await User.findOne({
@@ -115,47 +114,11 @@ export const login = async (req, res) => {
 };
 
 export const refreshPassword = async (req, res) => {
-  try {
-    const { error, value } = handlerPasswordValidator(req.body, 'refresh');
-
-    if (error) {
-      return res.status(StatusCodes.BAD_REQUEST).json({
-        success: false,
-        message: error.details.map(detail => detail.message).join(', '),
-        data: null
-      });
-    }
-    const newPassword = value.newPassword;
-    const user = await User.findOne({ $or: [{ username: value.identifier.trim() }, { email: value.identifier.trim() }] }).select('-password');
-    if (!user || !user.isActive) {
-      return res.status(StatusCodes.NOT_FOUND).json({
-        success: false,
-        message: 'User not found.',
-        data: null
-      });
-    }
-    user.password = newPassword;
-    await user.save();
-    await logActivity({
-      author: user._id,
-      action: 'PASSWORD_REFRESHED',
-      module: 'AUTH',
-      details: `Password refreshed for user: ${user.username}`
-    }, req, true);
-    return res.status(StatusCodes.OK).json({
-      success: true,
-      message: 'Password refreshed successfully.',
-      data: { user },
-    });
-
-  } catch (error) {
-    console.log('[AuthController] refreshPassword error:', error);
-    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      success: false,
-      message: 'Error in server. Please try again later.',
-      data: null
-    });
-  }
+  return res.status(StatusCodes.GONE).json({
+    success: false,
+    message: 'Password reset is not available from this endpoint. Please use the authenticated change-password flow.',
+    data: null
+  });
 }
 
 export const changePassword = async (req, res) => {
@@ -169,8 +132,8 @@ export const changePassword = async (req, res) => {
         data: null
       });
     }
-    const newPassword = value.newPassword;
-    const user = await User.findOne({ _id: req.userId }).select('-password');
+    const { currentPassword, newPassword } = value;
+    const user = await User.findById(req.userId);
     if (!user || !user.isActive) {
       return res.status(StatusCodes.NOT_FOUND).json({
         success: false,
@@ -178,6 +141,16 @@ export const changePassword = async (req, res) => {
         data: null
       });
     }
+
+    const isCurrentPasswordValid = await User.comparePassword(currentPassword, user.password);
+    if (!isCurrentPasswordValid) {
+      return res.status(StatusCodes.UNAUTHORIZED).json({
+        success: false,
+        message: 'Current password is incorrect.',
+        data: null
+      });
+    }
+
     user.password = newPassword;
     await user.save();
     await logActivity({

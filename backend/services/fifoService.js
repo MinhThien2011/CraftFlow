@@ -2,11 +2,14 @@ import InventoryBatch from '../models/InventoryBatch.js';
 import Material from '../models/Material.js';
 import Product from '../models/Product.js';
 import InventoryTransaction from '../models/InventoryTransaction.js';
+import Shelf from '../models/Shelf.js';
 import { TRANSACTION_TYPE } from '../utils/constants.js';
 import mongoose from 'mongoose';
 
 const BATCH_PREFIX = 'BATCH';
 const MAX_RETRY_ATTEMPTS = 10;
+
+const toObjectId = (id) => id instanceof mongoose.Types.ObjectId ? id : new mongoose.Types.ObjectId(id);
 
 export const generateBatchNumber = async (materialCode = 'MAT') => {
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -55,54 +58,83 @@ export const createBatch = async (batchData) => {
  */
 export const allocateBatchesForItem = async ({ materialId, productId, quantityNeeded, session }) => {
     try {
+        const requestedQuantity = Number(quantityNeeded);
+        if (!Number.isFinite(requestedQuantity) || requestedQuantity <= 0) {
+            throw new Error('quantityNeeded must be a positive number.');
+        }
+
         const query = {
             isExhausted: false,
+            quantityRemaining: { $gt: 0 },
             $or: [
                 { expirationDate: null },
                 { expirationDate: { $gt: new Date() } }
             ]
         };
 
-        if (materialId) query.material = materialId;
-        else if (productId) query.product = productId;
+        if (materialId) query.material = toObjectId(materialId);
+        else if (productId) query.product = toObjectId(productId);
         else throw new Error('Either materialId or productId must be provided for batch allocation.');
 
-        const batches = await InventoryBatch.find(query)
-            .sort({ receivedDate: 1, expirationDate: 1 })
-            .session(session);
+        const totalAvailableResult = await InventoryBatch.aggregate([
+            { $match: query },
+            { $group: { _id: null, total: { $sum: '$quantityRemaining' } } }
+        ]).session(session);
+
+        const totalAvailable = totalAvailableResult[0]?.total || 0;
+        if (totalAvailable < requestedQuantity) {
+            return {
+                success: false,
+                message: `Not enough stock. Still need ${requestedQuantity - totalAvailable} more units.`,
+                data: { allocations: [], shortfall: requestedQuantity - totalAvailable }
+            };
+        }
 
         const allocations = [];
-        let remainingQuantity = quantityNeeded;
+        let remainingQuantity = requestedQuantity;
 
-        for (const batch of batches) {
-            if (remainingQuantity <= 0) break;
+        while (remainingQuantity > 0) {
+            const batch = await InventoryBatch.findOne(query)
+                .sort({ receivedDate: 1, expirationDate: 1, _id: 1 })
+                .session(session);
+
+            if (!batch) {
+                throw new Error(`Stock changed during allocation. Still need ${remainingQuantity} more units.`);
+            }
 
             const availableInBatch = batch.quantityRemaining;
             const quantityToAllocate = Math.min(availableInBatch, remainingQuantity);
 
-            if (quantityToAllocate > 0) {
-                allocations.push({
-                    batch: batch._id,
-                    batchNumber: batch.batchNumber,
-                    quantityAllocated: quantityToAllocate,
-                    expirationDate: batch.expirationDate
-                });
+            const updatedBatch = await InventoryBatch.findOneAndUpdate(
+                {
+                    _id: batch._id,
+                    isExhausted: false,
+                    quantityRemaining: { $gte: quantityToAllocate }
+                },
+                { $inc: { quantityRemaining: -quantityToAllocate } },
+                { new: true, session }
+            );
 
-                batch.quantityRemaining -= quantityToAllocate;
-                if (batch.quantityRemaining <= 0) {
-                    batch.isExhausted = true;
-                }
-                await batch.save({ session });
-                remainingQuantity -= quantityToAllocate;
+            if (!updatedBatch) {
+                continue;
             }
-        }
 
-        if (remainingQuantity > 0) {
-            return {
-                success: false,
-                message: `Not enough stock. Still need ${remainingQuantity} more units.`,
-                data: { allocations, shortfall: remainingQuantity }
-            };
+            if (updatedBatch.quantityRemaining <= 0 && !updatedBatch.isExhausted) {
+                await InventoryBatch.updateOne(
+                    { _id: updatedBatch._id },
+                    { $set: { isExhausted: true } },
+                    { session }
+                );
+            }
+
+            allocations.push({
+                batch: batch._id,
+                batchNumber: batch.batchNumber,
+                quantityAllocated: quantityToAllocate,
+                expirationDate: batch.expirationDate
+            });
+
+            remainingQuantity -= quantityToAllocate;
         }
 
         return { success: true, data: allocations, message: 'Batches allocated successfully' };
@@ -111,7 +143,6 @@ export const allocateBatchesForItem = async ({ materialId, productId, quantityNe
         return { success: false, message: error.message, data: null };
     }
 };
-
 /**
  * Legacy wrapper for allocateBatchesForMaterial
  */
@@ -234,27 +265,38 @@ export const getBatchesByMaterial = async (materialId, includeExhausted = false)
  * Records a MOVE transaction.
  */
 export const assignBatchLocation = async (batchId, shelfId, userId, note = '') => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
     try {
-        const batch = await InventoryBatch.findById(batchId);
+        const batch = await InventoryBatch.findById(batchId).session(session);
         if (!batch) {
+            await session.abortTransaction();
             return { success: false, message: 'Batch not found', data: null };
         }
 
-        const shelf = await Shelf.findById(shelfId);
+        const shelf = await Shelf.findById(shelfId).session(session);
         if (!shelf) {
+            await session.abortTransaction();
             return { success: false, message: 'Shelf not found', data: null };
         }
 
         if (shelf.status === 'Maintenance') {
+            await session.abortTransaction();
             return { success: false, message: 'Shelf is under maintenance', data: null };
         }
 
         const oldShelfId = batch.shelf;
-        const oldShelf = oldShelfId ? await Shelf.findById(oldShelfId) : null;
+        if (oldShelfId?.toString() === shelfId.toString()) {
+            await session.abortTransaction();
+            return { success: true, message: `Batch ${batch.batchNumber} is already assigned to shelf ${shelf.shelfCode}`, data: batch };
+        }
+
+        const oldShelf = oldShelfId ? await Shelf.findById(oldShelfId).session(session) : null;
 
         // Update batch shelf
         batch.shelf = shelfId;
-        await batch.save();
+        await batch.save({ session });
 
         // Update shelf loads
         // Decrement old shelf if it existed
@@ -263,7 +305,7 @@ export const assignBatchLocation = async (batchId, shelfId, userId, note = '') =
             if (oldShelf.currentLoad < oldShelf.maxCapacity && oldShelf.status === 'Full') {
                 oldShelf.status = 'Available';
             }
-            await oldShelf.save();
+            await oldShelf.save({ session });
         }
 
         // Increment new shelf
@@ -271,21 +313,23 @@ export const assignBatchLocation = async (batchId, shelfId, userId, note = '') =
         if (shelf.currentLoad >= shelf.maxCapacity) {
             shelf.status = 'Full';
         }
-        await shelf.save();
+        await shelf.save({ session });
 
         // Record transaction
-        await mongoose.model('InventoryTransaction').create({
+        await mongoose.model('InventoryTransaction').create([{
             material: batch.material,
             product: batch.product,
             batch: batch._id,
-            type: 'MOVE',
+            type: TRANSACTION_TYPE.MOVE,
             quantity: 0, // Movement doesn't change quantity
             beforeStock: batch.quantityRemaining,
             afterStock: batch.quantityRemaining,
             performedBy: userId,
             location: shelf.shelfCode,
             note: note || `Moved from ${oldShelf ? oldShelf.shelfCode : 'Unassigned'} to ${shelf.shelfCode}`
-        });
+        }], { session });
+
+        await session.commitTransaction();
 
         return {
             success: true,
@@ -293,8 +337,11 @@ export const assignBatchLocation = async (batchId, shelfId, userId, note = '') =
             data: batch
         };
     } catch (error) {
+        if (session.inTransaction()) await session.abortTransaction();
         console.error('[FIFOService] assignBatchLocation error:', error);
         return { success: false, message: error.message, data: null };
+    } finally {
+        session.endSession();
     }
 };
 

@@ -2,7 +2,17 @@ import Material from '../models/Material.js';
 import Product from '../models/Product.js';
 import ProductionOrder from '../models/ProductionOrder.js';
 import InventoryTransaction from '../models/InventoryTransaction.js';
-import { ORDER_STATUS, TRANSACTION_TYPE } from '../utils/constants.js';
+import MaterialRequisition from '../models/MaterialRequisition.js';
+import InventoryShrinkageReport from '../models/InventoryShrinkageReport.js';
+import InventoryImportExportSlip from '../models/InventoryImportExportSlip.js';
+import { 
+    ORDER_STATUS, 
+    TRANSACTION_TYPE, 
+    REQUISITION_STATUS, 
+    REQUISITION_TYPE, 
+    SHRINKAGE_STATUS, 
+    INVENTORY_IMPORT_EXPORT_SLIP_STATUS 
+} from '../utils/constants.js';
 import mongoose from 'mongoose';
 
 import { client, getRedisHealth } from '../config/redisClient.js';
@@ -323,5 +333,83 @@ export const getTopPerformanceStats = async () => {
     } catch (error) {
         console.log('[DashboardService] getTopPerformanceStats error:', error);
         return { success: false, message: error.message };
+    }
+};
+
+/**
+ * Service to get specific statistics for the Warehouse Manager dashboard.
+ */
+export const getWarehouseStats = async () => {
+    try {
+        const [
+            pendingRequisitions,
+            pendingReturns,
+            lowStockMaterials,
+            pendingDefects,
+            pendingSlips
+        ] = await Promise.all([
+            // 1. Pending Requisitions (Issue/Supplementary) that need action
+            MaterialRequisition.countDocuments({ status: { $in: [REQUISITION_STATUS.PENDING, REQUISITION_STATUS.APPROVED] } }),
+            
+            // 2. Pending Returns
+            MaterialRequisition.countDocuments({ type: REQUISITION_TYPE.RETURN, status: REQUISITION_STATUS.RETURN_PENDING }),
+
+            // 3. Low stock materials (below threshold)
+            Material.countDocuments({ isActive: true, $expr: { $lte: ['$currentStock', '$threshold'] } }),
+
+            // 4. Pending Defects/Shrinkage
+            InventoryShrinkageReport.countDocuments({ status: SHRINKAGE_STATUS.PENDING }),
+
+            // 5. Pending Import/Export Slips
+            InventoryImportExportSlip.countDocuments({ status: { $in: [INVENTORY_IMPORT_EXPORT_SLIP_STATUS.PENDING, INVENTORY_IMPORT_EXPORT_SLIP_STATUS.INSPECTED] } })
+        ]);
+
+        return {
+            success: true,
+            data: {
+                pendingRequisitions,
+                pendingReturns,
+                lowStockItems: lowStockMaterials,
+                pendingDefects,
+                pendingSlips,
+                timeoutRequisitions: 0 // Default for now, can implement specific logic if needed
+            }
+        };
+    } catch (error) {
+        console.log('[DashboardService] getWarehouseStats error:', error);
+        return { success: false, message: error.message };
+    }
+};
+
+/**
+ * Service to get recent inventory transactions for the warehouse.
+ */
+export const getWarehouseRecentActivity = async (limit = 10) => {
+    try {
+        const activities = await InventoryTransaction.find()
+            .sort({ createdAt: -1 })
+            .limit(limit)
+            .populate('material', 'name code unit')
+            .populate('product', 'name code unit')
+            .populate('user', 'fullName')
+            .lean();
+        
+        return {
+            success: true,
+            data: activities.map(act => ({
+                id: act._id,
+                type: act.type,
+                quantity: act.quantity,
+                itemName: act.material?.name || act.product?.name || 'N/A',
+                itemCode: act.material?.code || act.product?.code || 'N/A',
+                unit: act.material?.unit || act.product?.unit || '',
+                user: act.user?.fullName || 'System',
+                notes: act.notes,
+                createdAt: act.createdAt
+            }))
+        };
+    } catch (error) {
+        console.log('[DashboardService] getWarehouseRecentActivity error:', error);
+        return { success: false, message: error.message, data: [] };
     }
 };

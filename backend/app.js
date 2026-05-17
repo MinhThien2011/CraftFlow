@@ -7,6 +7,7 @@ import mainRouter from './routes/main.routes.js';
 import cookieParser from 'cookie-parser';
 import { redisConnect, redisDisconnect, getRedisHealth } from './config/redisClient.js';
 import { slowBodyGuard, concurrentLimiter, subnetLimiter, logSecurityStatus } from './middleware/requestGuard.js';
+import { logRateLimitStatus } from './middleware/rateLimit.js';
 import superLogger from './middleware/colorfulLogger.js';
 import { connectToDatabase } from './config/db/mongoDB.js';
 import { logJwtAuthStatus } from './middleware/jwtAuth.js';
@@ -43,7 +44,7 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 
 // ─── Service Initialization ───────────────────────────────────────────────────
-const initializeServices = async () => {
+export const initializeServices = async () => {
   try {
     await redisConnect();
 
@@ -64,10 +65,9 @@ const initializeServices = async () => {
     await connectToDatabase();
   } catch (err) {
     console.error('❌ Failed to initialize services:', err);
+    throw err;
   }
 };
-
-initializeServices();
 
 // ─── App Config ───────────────────────────────────────────────────────────────
 app.set('port', process.env.PORT || 4000);
@@ -95,17 +95,21 @@ app.use(helmet());
 app.use(morgan('dev'));
 
 // ─── Defense Layer 1: Request Guards (chạy trước body-parser) ─────────────────
-// app.use(securityAgent);
 app.use(slowBodyGuard);
 app.use(subnetLimiter);
 
 // ─── Defense Layer 2: Request Guards (chạy sau body-parser) ───────────────────
 app.use(concurrentLimiter);
 logSecurityStatus();
+logRateLimitStatus();
 logJwtAuthStatus();
 logSocketStatus();
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+if (process.env.SECURITY_AGENT_ENABLED === 'true') {
+  app.use(securityAgent);
+}
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api', mainRouter);

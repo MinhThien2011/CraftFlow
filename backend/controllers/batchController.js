@@ -129,7 +129,7 @@ export const assignLocation = async (req, res) => {
     try {
         const { batchId } = req.params;
         const { shelfId, note } = req.body;
-        const userId = req.user.id;
+        const userId = req.userId;
 
         if (!batchId || !shelfId) {
             return res.status(StatusCodes.BAD_REQUEST).json({

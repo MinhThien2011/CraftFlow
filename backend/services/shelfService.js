@@ -299,20 +299,20 @@ export const getShelfRecommendations = async (itemId, type = 'Material', quantit
 /**
  * Recalculate and update the current load of a shelf.
  */
-export const updateShelfLoad = async (shelfId) => {
+export const updateShelfLoad = async (shelfId, session = null) => {
   try {
     const [materials, products] = await Promise.all([
-      Material.find({ shelf: shelfId, isActive: true }).select('currentStock').lean(),
-      Product.find({ shelf: shelfId, isActive: true }).select('currentStock').lean()
+      Material.find({ shelf: shelfId, isActive: true }).select('currentStock').session(session).lean(),
+      Product.find({ shelf: shelfId, isActive: true }).select('currentStock').session(session).lean()
     ]);
 
     const totalLoad = [...materials, ...products].reduce((sum, item) => sum + (item.currentStock || 0), 0);
 
-    const shelf = await Shelf.findById(shelfId);
+    const shelf = await Shelf.findById(shelfId).session(session);
     if (shelf) {
       shelf.currentLoad = totalLoad;
       shelf.status = totalLoad >= shelf.maxCapacity ? 'Full' : 'Available';
-      await shelf.save();
+      await shelf.save({ session });
     }
   } catch (error) {
     console.error(`[ShelfService] updateShelfLoad error for shelf ${shelfId}:`, error);

@@ -1,10 +1,11 @@
-import { useProductsStock } from './use-inventory'
+﻿import { useProductsStock } from './use-inventory'
 import { useMemo, useState } from 'react'
+import { getItemStockLevelKey, INVENTORY_STATUS_OPTIONS, StockFilterKey } from '../utils/stock-level'
 
 export function useInventoryProducts() {
   const [searchTerm, setSearchTerm] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('all')
-  const [statusFilter, setStatusFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState<StockFilterKey>('all')
 
   const { data: response, isLoading, isError, refetch } = useProductsStock({
     search: searchTerm,
@@ -15,18 +16,23 @@ export function useInventoryProducts() {
 
   const stats = useMemo(() => ({
     total: products.length,
-    normal: products.filter((i) => (i as any).stockLevel === 'Bình thường').length,
-    low: products.filter((i) => (i as any).stockLevel === 'Sắp hết').length,
-    critical: products.filter((i) => (i as any).stockLevel === 'Nguy cấp').length,
+    normal: products.filter((i) => getItemStockLevelKey(i) === 'normal').length,
+    low: products.filter((i) => getItemStockLevelKey(i) === 'low').length,
+    critical: products.filter((i) => {
+      const level = getItemStockLevelKey(i)
+      return level === 'critical' || level === 'out_of_stock'
+    }).length,
   }), [products])
 
-  const categories = useMemo(() => 
+  const categories = useMemo(() =>
     Array.from(new Set(products.map((i) => (i as any).category || ''))).filter(Boolean)
   , [products])
 
-  const filteredProducts = useMemo(() => 
-    products.filter((item) => statusFilter === 'all' || (item as any).stockLevel === statusFilter)
+  const filteredProducts = useMemo(() =>
+    products.filter((item) => statusFilter === 'all' || getItemStockLevelKey(item) === statusFilter)
   , [products, statusFilter])
+
+  const statusOptions = useMemo(() => INVENTORY_STATUS_OPTIONS, [])
 
   return {
     searchTerm,
@@ -40,6 +46,7 @@ export function useInventoryProducts() {
     products: filteredProducts,
     stats,
     categories,
+    statusOptions,
     refetch
   }
 }

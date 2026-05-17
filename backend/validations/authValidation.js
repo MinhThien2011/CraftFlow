@@ -33,6 +33,14 @@ export const handlerPasswordSchema = Joi.object({
         'string.empty': 'username or email is required.',
         'any.required': 'username or email is required.'
     }),
+    currentPassword: passwordComplexity.when('$type', {
+        is: 'change',
+        then: Joi.required(),
+        otherwise: Joi.optional()
+    }).messages({
+        'string.empty': 'current password is required.',
+        'any.required': 'current password is required.'
+    }),
     newPassword: passwordComplexity.required().messages({
         'string.empty': 'new password is required.',
         'any.required': 'new password is required.'

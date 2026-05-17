@@ -123,25 +123,44 @@ async function processMaterialUpdate(item, slip, userId, session, transactionDoc
             });
             beforeStock -= allocation.quantityAllocated;
         }
-        material.currentStock -= quantity;
+        const updatedMaterial = await Material.findOneAndUpdate(
+            { _id: item.material, currentStock: { $gte: quantity } },
+            { $inc: { currentStock: -quantity } },
+            { new: true, session }
+        );
+        if (!updatedMaterial) {
+            throw new Error(`Insufficient stock for material ${material.code}.`);
+        }
+
+        beforeStock = updatedMaterial.currentStock + quantity;
     } else {
-        material.currentStock += quantity;
+        const update = { $inc: { currentStock: quantity } };
+        if (item.shelf) update.$set = { shelf: item.shelf };
+
+        const updatedMaterial = await Material.findByIdAndUpdate(
+            item.material,
+            update,
+            { new: true, session }
+        );
+        if (!updatedMaterial) {
+            throw new Error(`Material ${item.material} not found.`);
+        }
+
         if (item.shelf) material.shelf = item.shelf;
         transactionDocs.push({
             material: item.material,
             type: TRANSACTION_TYPE.PRODUCTION_IN,
             quantity,
             beforeStock,
-            afterStock: material.currentStock,
+            afterStock: updatedMaterial.currentStock,
             performedBy: userId,
             note: `Import via ${slip.slipNumber}${item.batchNumber ? '. Batch: ' + item.batchNumber : ''}`,
             orderRef: slip.slipNumber,
-            location: item.shelf ? (await Shelf.findById(item.shelf))?.shelfCode : null,
-            batch: item.batchNumber ? (await mongoose.model('InventoryBatch').findOne({ batchNumber: item.batchNumber }))?._id : null
+            location: item.shelf ? (await Shelf.findById(item.shelf).session(session))?.shelfCode : null,
+            batch: item.batchNumber ? (await mongoose.model('InventoryBatch').findOne({ batchNumber: item.batchNumber }).session(session))?._id : null
         });
     }
-    await material.save({ session });
-    if (material.shelf) await updateShelfLoad(material.shelf);
+    if (material.shelf) await updateShelfLoad(material.shelf, session);
 }
 
 /**
@@ -158,19 +177,30 @@ async function processProductUpdate(item, slip, userId, session, transactionDocs
     const quantity = item.quantity.actual;
 
     if (slip.type === INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT) {
-        product.currentStock += quantity;
+        const update = { $inc: { currentStock: quantity } };
+        if (item.shelf) update.$set = { shelf: item.shelf };
+
+        const updatedProduct = await Product.findByIdAndUpdate(
+            item.product,
+            update,
+            { new: true, session }
+        );
+        if (!updatedProduct) {
+            throw new Error(`Product ${item.product} not found.`);
+        }
+
         if (item.shelf) product.shelf = item.shelf;
         transactionDocs.push({
             product: item.product,
             type: TRANSACTION_TYPE.PRODUCTION_IN,
             quantity,
             beforeStock,
-            afterStock: product.currentStock,
+            afterStock: updatedProduct.currentStock,
             performedBy: userId,
             note: `Product import via ${slip.slipNumber}${item.batchNumber ? '. Batch: ' + item.batchNumber : ''}`,
             orderRef: slip.slipNumber,
-            location: item.shelf ? (await Shelf.findById(item.shelf))?.shelfCode : null,
-            batch: item.batchNumber ? (await mongoose.model('InventoryBatch').findOne({ batchNumber: item.batchNumber }))?._id : null
+            location: item.shelf ? (await Shelf.findById(item.shelf).session(session))?.shelfCode : null,
+            batch: item.batchNumber ? (await mongoose.model('InventoryBatch').findOne({ batchNumber: item.batchNumber }).session(session))?._id : null
         });
     } else {
         const fifoResult = await allocateBatchesForItem({ productId: item.product, quantityNeeded: quantity, session });
@@ -190,10 +220,16 @@ async function processProductUpdate(item, slip, userId, session, transactionDocs
             });
             beforeStock -= allocation.quantityAllocated;
         }
-        product.currentStock -= quantity;
+        const updatedProduct = await Product.findOneAndUpdate(
+            { _id: item.product, currentStock: { $gte: quantity } },
+            { $inc: { currentStock: -quantity } },
+            { new: true, session }
+        );
+        if (!updatedProduct) {
+            throw new Error(`Insufficient stock for product ${product.code}.`);
+        }
     }
-    await product.save({ session });
-    if (product.shelf) await updateShelfLoad(product.shelf);
+    if (product.shelf) await updateShelfLoad(product.shelf, session);
 }
 
 /**
@@ -358,9 +394,19 @@ export const updateSlipStatusService = async (slipId, newStatus, updateData, use
         session.startTransaction();
 
         try {
+            const transitionClaim = await InventoryImportExportSlip.updateOne(
+                { _id: slip._id, status: currentStatus },
+                { $set: { status: targetStatus } },
+                { session }
+            );
+
+            if (transitionClaim.modifiedCount !== 1) {
+                throw new Error(`Slip ${slip.slipNumber} status changed while processing. Please reload and try again.`);
+            }
+
             if (targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.IN_STOCK || targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.COMPLETED) {
                 if (isImport) {
-                    await createBatchesFromImport({
+                    const batchResult = await createBatchesFromImport({
                         items: slip.items.map(item => ({
                             material: item.material,
                             product: item.product,
@@ -376,6 +422,10 @@ export const updateSlipStatusService = async (slipId, newStatus, updateData, use
                         relatedImportSlip: slip._id,
                         relatedProductionOrder: slip.relatedProductionOrder
                     }, session);
+
+                    if (!batchResult.success) {
+                        throw new Error(`Failed to create inventory batches: ${batchResult.message}`);
+                    }
                 }
 
                 const transactionDocs = [];

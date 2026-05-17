@@ -27,8 +27,8 @@ materialRouter.get('/:id', getMaterialById);
 materialRouter.get('/:id/history', getMaterialHistory);
 
 // --- Admin & Warehouse Manager: Management ---
-materialRouter.post('/', rolePermission([ROLES.ADMIN, ROLES.KHO_MANAGER]), createMaterial);
-materialRouter.patch('/:id', rolePermission([ROLES.ADMIN, ROLES.KHO_MANAGER]), updateMaterial);
+materialRouter.post('/', rolePermission([ROLES.PRODUCTION_MANAGER]), createMaterial);
+materialRouter.patch('/:id', rolePermission([ROLES.PRODUCTION_MANAGER]), updateMaterial);
 
 // --- Admin: Inventory Adjustments ---
 materialRouter.post('/adjust-by-code', rolePermission([ROLES.ADMIN]), adjustStockByCode);

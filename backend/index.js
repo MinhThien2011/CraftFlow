@@ -1,4 +1,4 @@
-import app from './app.js';
+import app, { initializeServices } from './app.js';
 import { createServer } from 'http';
 import { initSocket } from './config/socket.js';
 import { handleRequisitionTimeouts } from './services/materialRequisitionService.js';
@@ -17,13 +17,24 @@ process.on('uncaughtException', (error) => {
   setTimeout(() => process.exit(1), 1000);
 });
 
-setInterval(async () => {
-  console.log('[BackgroundJob] Checking for material requisition timeouts...');
-  await handleRequisitionTimeouts();
-}, 15 * 60 * 1000);
+try {
+  await initializeServices();
 
-httpServer.listen(app.get('port'), () => {
-  console.log(`Server is running on port ${app.get('port')}`);
-}).on('error', (err) => {
-  console.log('Server startup error:', err);
-});
+  setInterval(async () => {
+    try {
+      console.log('[BackgroundJob] Checking for material requisition timeouts...');
+      await handleRequisitionTimeouts();
+    } catch (error) {
+      console.error('[BackgroundJob] material requisition timeout check failed:', error);
+    }
+  }, 15 * 60 * 1000);
+
+  httpServer.listen(app.get('port'), () => {
+    console.log(`Server is running on port ${app.get('port')}`);
+  }).on('error', (err) => {
+    console.log('Server startup error:', err);
+  });
+} catch (error) {
+  console.error('Server startup aborted:', error);
+  process.exit(1);
+}

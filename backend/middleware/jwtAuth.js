@@ -1,23 +1,23 @@
 import jwt from 'jsonwebtoken';
+import { trackJwtUserId } from './requestGuard.js';
 
 // ====================== CONFIGURATION ======================
 const CONFIG = {
-    maxTokenLength: 2048,           // Ngăn memory exhaustion attack
-    clockTolerance: 30,             // Giây
+    maxTokenLength: 2048,
+    clockTolerance: 30,      
     algorithm: 'HS256',
-    // Có thể thêm sau: issuer, audience
-    // issuer: 'your-app',
-    // audience: 'your-frontend',
+    // issuer: '',
+    // audience: '',
 };
 
-const VALID_USER_ID_RE = /^[a-f0-9]{24}$/i; // MongoDB ObjectId
+const VALID_USER_ID_RE = /^[a-f0-9]{24}$/i;
 
 // ====================== SECURITY LOGGER (Throttled) ======================
 let lastSuspiciousLog = 0;
 
 const logSuspiciousToken = (reason, req) => {
     const now = Date.now();
-    if (now - lastSuspiciousLog < 30_000) return; // Throttle 30 giây
+    if (now - lastSuspiciousLog < 30_000) return; 
 
     console.warn(`🚨 SECURITY: Suspicious JWT detected - ${reason} | IP: ${req.ip}`);
     lastSuspiciousLog = now;
@@ -26,19 +26,15 @@ const logSuspiciousToken = (reason, req) => {
 // ====================== MAIN JWT AUTH MIDDLEWARE ======================
 export const jwtAuth = (req, res, next) => {
     const token = req.cookies?.accessToken;
-
-    // Không có token
     if (!token) {
         return res.status(401).json({ message: 'Unauthorized' });
     }
 
-    // 1. Kiểm tra độ dài token
     if (token.length > CONFIG.maxTokenLength) {
         logSuspiciousToken('Token too large', req);
         return res.status(401).json({ message: 'Unauthorized' });
     }
 
-    // 2. Kiểm tra cấu trúc JWT cơ bản
     const parts = token.split('.');
     if (parts.length !== 3) {
         logSuspiciousToken('Invalid JWT format', req);
@@ -46,7 +42,6 @@ export const jwtAuth = (req, res, next) => {
     }
 
     try {
-        // 3. Verify token với cấu hình nghiêm ngặt
         const decoded = jwt.verify(token, process.env.JWT_SECRET, {
             algorithms: [CONFIG.algorithm],
             clockTolerance: CONFIG.clockTolerance,
@@ -54,7 +49,6 @@ export const jwtAuth = (req, res, next) => {
             // audience: CONFIG.audience,
         });
 
-        // 4. Validate payload
         const userId = decoded.id || decoded.userId;
 
         if (!userId || !isValidUserId(userId)) {
@@ -62,13 +56,12 @@ export const jwtAuth = (req, res, next) => {
             return res.status(401).json({ message: 'Unauthorized' });
         }
 
-        // 5. Gán thông tin user vào request
         req.userId = userId;
-        req.decodedToken = decoded; // Optional: nếu cần thêm thông tin sau này
+        if (!trackJwtUserId(req, res)) return;
+        req.decodedToken = decoded;
 
         next();
     } catch (err) {
-        // Phân loại lỗi để logging nội bộ (không expose ra client)
         let reason = 'Invalid token';
 
         if (err.name === 'TokenExpiredError') {
