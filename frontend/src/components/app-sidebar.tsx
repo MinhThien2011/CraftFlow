@@ -61,7 +61,7 @@ const navigation = [
   { name: "Kho hàng", href: "/inventory", icon: Package, roles: ["admin", "kho_manager"] },
   { name: "Kho nguyên liệu", href: "/inventory/materials", icon: Package, roles: ["kho_manager"] },
   { name: "Kho thành phẩm", href: "/inventory/products", icon: Boxes, roles: ["kho_manager"] },
-  { name: "Quản lý nguyên liệu", href: "/production-management/materials", icon: Package, roles: ["admin", "production_manager"] },
+  { name: "Quản lý nguyên liệu", href: "/production-management/materials", icon: Package, roles: ["production_manager"] },
   { name: "Kiểm kê kho", href: "/inventory/stocktake", icon: ClipboardList, roles: ["kho_manager"] },
   { name: "Nhập kho", href: "/receiving", icon: PackagePlus, roles: ["kho_manager"] },
   { name: "Xuất kho", href: "/issuing/materials", icon: PackageMinus, roles: ["kho_manager"] },
@@ -72,8 +72,8 @@ const navigation = [
   { name: "Yêu cầu mua hàng", href: "/production-management/purchase-orders", icon: PackagePlus, roles: ["admin", "production_manager"] },
 
   // --- Alerts & Issues ---
-  { name: "Cảnh báo tồn kho", href: "/alerts", icon: AlertTriangle, roles: ["kho_manager", "admin"] },
-  { name: "Cảnh báo tồn kho", href: "/alerts", icon: Bell, roles: ["admin", "production_manager"] },
+  {
+    name: "Cảnh báo tồn kho", href: "/alerts", icon: Bell, roles: ["admin", "production_manager", "kho_manager"] },
   { name: "Hao hụt", href: "/production-management/issues", icon: AlertTriangle, roles: ["admin", "production_manager"] },
 
   // --- Reports ---

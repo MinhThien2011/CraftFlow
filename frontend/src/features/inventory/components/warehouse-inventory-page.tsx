@@ -244,12 +244,6 @@ export function WarehouseInventoryPage({ mode, title, subtitle, enableMaterialMa
     <AppShell title={title} subtitle={subtitle}>
       <div className="space-y-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className="text-3xl font-bold bg-gradient-to-r from-[#8B7355] to-[#4A7C23] bg-clip-text text-transparent">
-              Quản lý kho hàng
-            </h2>
-            <p className="text-sm text-muted-foreground mt-1">Theo dõi tồn kho và biến động theo vai trò</p>
-          </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="icon" onClick={handleRefresh} disabled={isRefreshing}>
               <RefreshCw className={cn('h-4 w-4', isRefreshing && 'animate-spin')} />

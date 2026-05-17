@@ -1,7 +1,16 @@
 import ai, { modelConfig } from '../config/gemini.js';
 import { getToolsForRole, executeTool } from '../tools/toolRegistry.js';
 
+const getChunkParts = (chunk) => {
+    if (!chunk) return [];
+    return chunk.candidates?.[0]?.content?.parts || [];
+};
+
 export const processChatMessageStream = async function* (history, user) {
+    if (!Array.isArray(history)) {
+        history = [];
+    }
+
     if (!user) {
         yield "Hệ thống: Vui lòng đăng nhập để sử dụng tính năng này.";
         return;
@@ -80,10 +89,14 @@ Quy tắc:
             // Xử lý luồng stream
             for await (const chunk of result) {
                 if (!chunk) continue;
+                const parts = getChunkParts(chunk);
 
                 // Lấy văn bản
                 try {
-                    const text = typeof chunk.text === 'function' ? chunk.text() : "";
+                    const text = parts
+                        .map(part => (part?.thought ? '' : part?.text))
+                        .filter(textPart => typeof textPart === 'string')
+                        .join('');
                     if (text) {
                         fullTextResponse += text;
                         yield text;
@@ -93,11 +106,11 @@ Quy tắc:
 
                 // Lấy function calls
                 try {
-                    const calls = typeof chunk.functionCalls === 'function' ? chunk.functionCalls() : [];
+                    const calls = parts.filter(part => part?.functionCall);
                     if (calls && calls.length > 0) {
                         isFunctionCall = true;
-                        calls.forEach(call => {
-                            accumulatedModelParts.push({ functionCall: call });
+                        calls.forEach(part => {
+                            accumulatedModelParts.push(part);
                         });
                     }
                 } catch (e) {}
@@ -117,6 +130,7 @@ Quy tắc:
 
                             functionResponses.push({
                                 functionResponse: {
+                                    ...(call.id && { id: call.id }),
                                     name: call.name,
                                     response: { content: toolResult } // Bọc kết quả vào object để tránh lỗi format
                                 }
@@ -125,6 +139,7 @@ Quy tắc:
                             console.error(`[AI] Tool execution error (${call.name}):`, error);
                             functionResponses.push({
                                 functionResponse: {
+                                    ...(call.id && { id: call.id }),
                                     name: call.name,
                                     response: { error: error.message }
                                 }

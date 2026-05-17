@@ -21,6 +21,15 @@ const SocketContext = createContext<SocketContextType>({
 
 export const useSocket = () => useContext(SocketContext);
 
+const resolveSocketUrl = () => {
+    if (process.env.NEXT_PUBLIC_SOCKET_URL) {
+        return process.env.NEXT_PUBLIC_SOCKET_URL;
+    }
+
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
+    return apiUrl.replace(/\/api\/?$/, "");
+};
+
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { user, isAuthenticated } = useAuth();
     const [socket, setSocket] = useState<Socket | null>(null);
@@ -39,10 +48,11 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             return;
         }
 
-        const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:4000";
+        const socketUrl = resolveSocketUrl();
 
         const newSocket = io(socketUrl, {
-            transports: ["websocket", "polling"],
+            transports: ["polling", "websocket"],
+            upgrade: true,
             reconnection: true,
             reconnectionAttempts: 5,
             reconnectionDelay: 1000,
@@ -62,7 +72,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             const shouldReport = !previous || previous.message !== err.message || now - previous.at > 15000;
 
             if (shouldReport) {
-                console.error("[Socket] Connection error:", err.message);
+                console.warn(`[Socket] Connection issue (${socketUrl}): ${err.message}`);
                 lastConnectErrorRef.current = { message: err.message, at: now };
             }
 
@@ -73,6 +83,11 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         newSocket.on("disconnect", (reason) => {
             console.log(`[Socket] Disconnected | Reason: ${reason}`);
+            setIsConnected(false);
+        });
+
+        newSocket.on("auth_error", (error) => {
+            console.warn("[Socket] Auth error:", error?.message || error);
             setIsConnected(false);
         });
 
@@ -137,6 +152,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         return () => {
             newSocket.disconnect();
+            setSocket(null);
+            setIsConnected(false);
         };
     }, [isAuthenticated, user?._id, queryClient, router]);
 

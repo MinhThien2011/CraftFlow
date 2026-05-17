@@ -1,18 +1,64 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { Bot, X, Send, Loader2, GripHorizontal } from "lucide-react"
+import { Bot, X, Send, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 
+type ChatPart = {
+    text?: string
+    functionCall?: unknown
+    functionResponse?: unknown
+}
+
+type ChatMessage = {
+    role: "user" | "model"
+    parts: ChatPart[]
+}
+
+const STREAM_FLUSH_INTERVAL_MS = 40
+
+const createTextMessage = (role: ChatMessage["role"], text: string): ChatMessage => ({
+    role,
+    parts: [{ text }]
+})
+
+const getMessageText = (message: ChatMessage) =>
+    message.parts.map((part) => part.text).filter(Boolean).join(" ")
+
+const isChatMessage = (message: unknown): message is ChatMessage => {
+    if (!message || typeof message !== "object") return false
+    const candidate = message as ChatMessage
+    return (candidate.role === "user" || candidate.role === "model") && Array.isArray(candidate.parts)
+}
+
+const isVisibleMessage = (message: ChatMessage) =>
+    Array.isArray(message.parts) &&
+    !message.parts.some((part) => part.functionCall || part.functionResponse) &&
+    Boolean(getMessageText(message).trim())
+
+const hasLatestAssistantResponse = (messages: unknown): messages is ChatMessage[] => {
+    if (!Array.isArray(messages) || !messages.every(isChatMessage)) return false
+
+    const lastUserIndex = messages.findLastIndex((message) => message.role === "user")
+    if (lastUserIndex < 0) return false
+
+    return messages
+        .slice(lastUserIndex + 1)
+        .some((message) => message.role === "model" && isVisibleMessage(message))
+}
+
 export function ChatWidget() {
     const [isOpen, setIsOpen] = useState(false)
     const [input, setInput] = useState("")
     const [isLoading, setIsLoading] = useState(false)
-    const [history, setHistory] = useState<any[]>([])
+    const [history, setHistory] = useState<ChatMessage[]>([])
     const messagesEndRef = useRef<HTMLDivElement>(null)
+    const streamTextRef = useRef("")
+    const streamMsgIndexRef = useRef<number | null>(null)
+    const streamFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     // Drag & Drop State
     const [position, setPosition] = useState({ x: 0, y: 0 })
@@ -20,12 +66,46 @@ export function ChatWidget() {
     const dragStartOffset = useRef({ x: 0, y: 0 })
     const pointerDownCoords = useRef({ x: 0, y: 0 })
     const isTriggerClick = useRef(false)
+    const activeStreamMessage = streamMsgIndexRef.current === null ? null : history[streamMsgIndexRef.current]
+    const isWaitingForResponse = isLoading && !getMessageText(activeStreamMessage ?? createTextMessage("model", "")).trim()
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
     }
 
     useEffect(() => { scrollToBottom() }, [history])
+
+    const updateMessageAt = (messageIndex: number, message: ChatMessage) => {
+        setHistory(prev => {
+            const next = [...prev]
+            if (next[messageIndex]?.role === message.role) {
+                next[messageIndex] = message
+            } else {
+                next.push(message)
+            }
+            return next
+        })
+    }
+
+    const clearStreamFlushTimer = () => {
+        if (!streamFlushTimerRef.current) return
+        clearTimeout(streamFlushTimerRef.current)
+        streamFlushTimerRef.current = null
+    }
+
+    const flushStreamText = () => {
+        clearStreamFlushTimer()
+        const messageIndex = streamMsgIndexRef.current
+        if (messageIndex === null || !streamTextRef.current) return
+        updateMessageAt(messageIndex, createTextMessage("model", streamTextRef.current))
+    }
+
+    const scheduleStreamFlush = () => {
+        if (streamFlushTimerRef.current) return
+        streamFlushTimerRef.current = setTimeout(flushStreamText, STREAM_FLUSH_INTERVAL_MS)
+    }
+
+    useEffect(() => clearStreamFlushTimer, [])
 
     // Drag handlers
     const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -68,16 +148,17 @@ export function ChatWidget() {
 
     const handleSend = async () => {
         if (!input.trim() || isLoading) return
-        const newMsg = { role: "user", parts: [{ text: input }] }
+        const userInput = input.trim()
+        const newMsg = createTextMessage("user", userInput)
         const newHistory = [...history, newMsg]
+        const streamMsgIndex = newHistory.length
+        streamTextRef.current = ""
+        streamMsgIndexRef.current = streamMsgIndex
+        clearStreamFlushTimer()
 
-        setHistory(newHistory)
+        setHistory([...newHistory, createTextMessage("model", "")])
         setInput("")
         setIsLoading(true)
-
-        const currentHistory = [...newHistory]
-        const streamMsgIndex = currentHistory.length
-        setHistory([...currentHistory, { role: "model", parts: [{ text: "" }] }])
 
         try {
             const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api"
@@ -89,12 +170,18 @@ export function ChatWidget() {
             });
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
-                toast.error(errorData.message || errorData.error || "Lỗi kết nối server.");
+                const message = errorData.message || errorData.error || "Lỗi kết nối server.";
+                toast.error(message);
+                streamMsgIndexRef.current = null;
+                updateMessageAt(streamMsgIndex, createTextMessage("model", message));
                 return;
             }
 
             if (!response.body) {
-                toast.error("Stream not readable");
+                const message = "Stream not readable";
+                toast.error(message);
+                streamMsgIndexRef.current = null;
+                updateMessageAt(streamMsgIndex, createTextMessage("model", message));
                 return;
             }
 
@@ -114,50 +201,42 @@ export function ChatWidget() {
                     const lines = streamBuffer.split('\n\n');
                     streamBuffer = lines.pop() || "";
 
-                    for (const line of lines) {
-                        const trimmedLine = line.trim();
-                        if (!trimmedLine || !trimmedLine.startsWith('data: ')) continue;
+                    for (const event of lines) {
+                        const payload = event
+                            .split('\n')
+                            .map(line => line.trim())
+                            .filter(line => line.startsWith('data:'))
+                            .map(line => line.slice(5).trim())
+                            .join('\n');
+
+                        if (!payload) continue;
 
                         try {
-                            const jsonStr = trimmedLine.slice(6).trim();
-                            const data = JSON.parse(jsonStr);
+                            const data = JSON.parse(payload);
 
                             if (data.error) {
                                 toast.error(data.error);
-                                setIsLoading(false);
+                                clearStreamFlushTimer();
+                                streamMsgIndexRef.current = null;
+                                updateMessageAt(streamMsgIndex, createTextMessage("model", data.error));
                                 return;
                             }
 
                             if (data.text) {
-                                setIsLoading(false);
                                 textBuffer += data.text;
-
-                                setHistory(prev => {
-                                    const next = [...prev];
-                                    const lastIdx = next.length - 1;
-                                    if (lastIdx >= 0 && next[lastIdx].role === "model") {
-                                        next[lastIdx] = {
-                                            role: "model",
-                                            parts: [{ text: textBuffer }]
-                                        };
-                                    } else {
-                                        next.push({
-                                            role: "model",
-                                            parts: [{ text: textBuffer }]
-                                        });
-                                    }
-                                    return next;
-                                });
+                                streamTextRef.current = textBuffer;
+                                scheduleStreamFlush();
                             }
 
                             if (data.done) {
-                                setIsLoading(false);
-                                if (data.history) {
+                                flushStreamText();
+                                if (hasLatestAssistantResponse(data.history)) {
                                     setHistory(data.history);
+                                    streamMsgIndexRef.current = null;
                                 }
                             }
                         } catch (e: any) {
-                            console.error("[Chat] Stream parse error:", e, trimmedLine);
+                            console.error("[Chat] Stream parse error:", e, payload);
                         }
                     }
                 }
@@ -165,12 +244,12 @@ export function ChatWidget() {
         } catch (error: any) {
             console.error('[ChatWidget] Error:', error);
             toast.error(error.message || "Đã xảy ra lỗi kết nối AI.");
-            setHistory(prev => {
-                const next = [...prev];
-                next[streamMsgIndex] = { role: "model", parts: [{ text: error.message || "Đã xảy ra lỗi kết nối AI." }] };
-                return next;
-            });
+            clearStreamFlushTimer();
+            streamMsgIndexRef.current = null;
+            updateMessageAt(streamMsgIndex, createTextMessage("model", error.message || "Đã xảy ra lỗi kết nối AI."));
         } finally {
+            flushStreamText()
+            streamMsgIndexRef.current = null
             setIsLoading(false)
         }
     }
@@ -210,7 +289,7 @@ export function ChatWidget() {
                     <div className="flex-1 p-5 overflow-y-auto flex flex-col gap-4 no-drag cursor-auto scrollbar-thin scrollbar-thumb-primary/20">
                         <div className="text-center text-xs text-muted-foreground/60 my-2">Hôm nay</div>
                         {history
-                            .filter(h => h.parts && Array.isArray(h.parts) && !h.parts.some((p: any) => p.functionCall || p.functionResponse))
+                            .filter(isVisibleMessage)
                             .map((msg, idx) => (
                                 <div key={idx} className={cn(
                                     "max-w-[85%] p-3.5 text-[13px] leading-relaxed shadow-sm", 
@@ -218,10 +297,10 @@ export function ChatWidget() {
                                         ? "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground self-end rounded-2xl rounded-tr-sm" 
                                         : "bg-background/80 border border-border/50 text-foreground self-start rounded-2xl rounded-tl-sm backdrop-blur-md"
                                 )}>
-                                    {msg.parts.map((p: any) => p.text).filter(Boolean).join(' ')}
+                                    {getMessageText(msg)}
                                 </div>
                             ))}
-                        {isLoading && (
+                        {isWaitingForResponse && (
                             <div className="bg-background/80 border border-border/50 text-foreground self-start p-3.5 rounded-2xl rounded-tl-sm backdrop-blur-md flex items-center gap-3 shadow-sm">
                                 <Loader2 className="h-4 w-4 animate-spin text-primary" /> 
                                 <span className="text-[13px] text-muted-foreground">Đang suy nghĩ...</span>

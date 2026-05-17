@@ -70,6 +70,14 @@ const dialogVariants = cva(
   }
 )
 
+function hasDialogDescription(children: React.ReactNode): boolean {
+  return React.Children.toArray(children).some((child) => {
+    if (!React.isValidElement(child)) return false
+    if (child.type === DialogDescription || child.type === DialogPrimitive.Description) return true
+    return hasDialogDescription((child.props as { children?: React.ReactNode }).children)
+  })
+}
+
 function DialogContent({
   className,
   children,
@@ -80,6 +88,9 @@ function DialogContent({
   VariantProps<typeof dialogVariants> & {
     showCloseButton?: boolean
   }) {
+  const needsFallbackDescription =
+    props['aria-describedby'] === undefined && !hasDialogDescription(children)
+
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />
@@ -88,6 +99,11 @@ function DialogContent({
         className={cn(dialogVariants({ size }), 'max-h-[95vh] overflow-y-auto', className)}
         {...props}
       >
+        {needsFallbackDescription && (
+          <DialogPrimitive.Description className="sr-only">
+            Dialog content
+          </DialogPrimitive.Description>
+        )}
         {children}
         {showCloseButton && (
           <DialogPrimitive.Close

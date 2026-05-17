@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="CRAFTFLOW">
+  <rect width="64" height="64" rx="14" fill="#f5efe7"/>
+  <path d="M16 18h32v7H16z" fill="#8b7355"/>
+  <path d="M16 29h20v7H16z" fill="#4a7c23"/>
+  <path d="M16 40h32v7H16z" fill="#8b7355"/>
+  <path d="M40 29h8v7h-8z" fill="#d8a74f"/>
+</svg>
