@@ -30,16 +30,13 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Material } from "@/lib/types"
-import { useCreateMaterial, useUpdateMaterial } from "../hooks/use-materials"
+import { useCreateMaterial } from "../hooks/use-materials"
 import { useShelves } from "../hooks/use-shelves"
 import { Loader2 } from "lucide-react"
-import { useAuth } from "@/features/auth/hooks/use-auth"
 
 const materialSchema = z.object({
     name: z.string().min(2, "Tên phải có ít nhất 2 ký tự"),
     code: z.string().min(2, "Mã phải có ít nhất 2 ký tự").toUpperCase(),
-    barcode: z.string().optional(),
     unit: z.string().min(1, "Đơn vị tính là bắt buộc"),
     color: z.string().min(1, "Màu sắc là bắt buộc"),
     price: z.coerce.number().min(0, "Giá không được âm"),
@@ -59,38 +56,25 @@ const materialSchema = z.object({
 
 type MaterialFormValues = z.infer<typeof materialSchema>
 
-interface MaterialDialogProps {
+interface CreateMaterialDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    material?: Material | null
-    mode: "create" | "edit" | "view"
 }
 
-export function MaterialDialog({
+export function CreateMaterialDialog({
     open,
     onOpenChange,
-    material,
-    mode,
-}: MaterialDialogProps) {
-    const isView = mode === "view"
-    const isEdit = mode === "edit"
-    const isCreate = mode === "create"
-
+}: CreateMaterialDialogProps) {
     const { data: shelvesResponse } = useShelves()
     const shelves = shelvesResponse?.data || []
 
-    const { role } = useAuth()
-    const isProductionManager = role === "production_manager"
-
     const createMutation = useCreateMaterial()
-    const updateMutation = useUpdateMaterial()
 
     const form = useForm<MaterialFormValues>({
         resolver: zodResolver(materialSchema),
         defaultValues: {
             name: "",
             code: "",
-            barcode: "",
             unit: "",
             color: "",
             price: 0,
@@ -110,32 +94,10 @@ export function MaterialDialog({
     })
 
     useEffect(() => {
-        if (material && (isEdit || isView)) {
-            form.reset({
-                name: material.name,
-                code: material.code,
-                // barcode: material.barcode || "",
-                unit: material.unit,
-                color: material.color || "",
-                price: material.price,
-                threshold: material.threshold,
-                shelf: material.shelf?._id || "",
-                locationDetails: material.locationDetails || "",
-                description: material.description || "",
-                supplier: {
-                    name: material.supplier?.name || "",
-                    phone: material.supplier?.phone || "",
-                    email: material.supplier?.email || "",
-                    address: material.supplier?.address || "",
-                    contactPerson: material.supplier?.contactPerson || "",
-                    notes: material.supplier?.notes || "",
-                },
-            })
-        } else if (isCreate) {
+        if (open) {
             form.reset({
                 name: "",
                 code: "",
-                barcode: "",
                 unit: "",
                 color: "",
                 price: 0,
@@ -153,42 +115,25 @@ export function MaterialDialog({
                 },
             })
         }
-    }, [material, mode, open, form, isEdit, isView, isCreate])
+    }, [open, form])
 
     const onSubmit = (values: MaterialFormValues) => {
-        if (isCreate) {
-            createMutation.mutate(values as any, {
-                onSuccess: () => onOpenChange(false),
-            })
-        } else if (isEdit && material) {
-            updateMutation.mutate(
-                { id: material._id, data: values as any },
-                {
-                    onSuccess: () => onOpenChange(false),
-                }
-            )
-        }
+        createMutation.mutate(values as any, {
+            onSuccess: () => onOpenChange(false),
+        })
     }
 
-    const isLoading = createMutation.isPending || updateMutation.isPending
+    const isLoading = createMutation.isPending
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="w-[95vw] sm:max-w-[90vw] lg:max-w-5xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>
-                        {isCreate
-                            ? "Thêm nguyên vật liệu mới"
-                            : isEdit
-                                ? "Chỉnh sửa nguyên vật liệu"
-                                : "Chi tiết nguyên vật liệu"}
+                        Thêm nguyên vật liệu mới
                     </DialogTitle>
                     <DialogDescription>
-                        {isCreate
-                            ? "Nhập thông tin cho nguyên vật liệu mới."
-                            : isEdit
-                                ? "Cập nhật thông tin cho nguyên vật liệu."
-                                : "Thông tin chi tiết của nguyên vật liệu."}
+                        Nhập thông tin cho nguyên vật liệu mới.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -202,7 +147,7 @@ export function MaterialDialog({
                                     <FormItem>
                                         <FormLabel>Tên nguyên vật liệu</FormLabel>
                                         <FormControl>
-                                            <Input {...field} disabled={isView} placeholder="Ví dụ: Len Cotton" />
+                                            <Input {...field} placeholder="Ví dụ: Len Cotton" />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
@@ -215,27 +160,12 @@ export function MaterialDialog({
                                     <FormItem>
                                         <FormLabel>Mã NVL</FormLabel>
                                         <FormControl>
-                                            <Input {...field} disabled={isView || isEdit} placeholder="Ví dụ: MAT-COT-01" />
+                                            <Input {...field} placeholder="Ví dụ: MAT-COT-01" />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
                                 )}
                             />
-                            {!isProductionManager && (
-                                <FormField
-                                    control={form.control}
-                                    name="barcode"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Mã vạch (Barcode)</FormLabel>
-                                            <FormControl>
-                                                <Input {...field} disabled={isView} placeholder="Mã vạch để quét" />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                            )}
                             <FormField
                                 control={form.control}
                                 name="unit"
@@ -243,7 +173,7 @@ export function MaterialDialog({
                                     <FormItem>
                                         <FormLabel>Đơn vị tính</FormLabel>
                                         <FormControl>
-                                            <Input {...field} disabled={isView} placeholder="Ví dụ: cuộn, gram" />
+                                            <Input {...field} placeholder="Ví dụ: cuộn, gram" />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
@@ -256,7 +186,7 @@ export function MaterialDialog({
                                     <FormItem>
                                         <FormLabel>Màu sắc</FormLabel>
                                         <FormControl>
-                                            <Input {...field} disabled={isView} placeholder="Ví dụ: Đỏ, Xanh" />
+                                            <Input {...field} placeholder="Ví dụ: Đỏ, Xanh" />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
@@ -269,7 +199,7 @@ export function MaterialDialog({
                                     <FormItem>
                                         <FormLabel>Đơn giá (VND)</FormLabel>
                                         <FormControl>
-                                            <Input type="number" {...field} disabled={isView} />
+                                            <Input type="number" {...field} />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
@@ -282,7 +212,7 @@ export function MaterialDialog({
                                     <FormItem>
                                         <FormLabel>Ngưỡng cảnh báo tồn kho</FormLabel>
                                         <FormControl>
-                                            <Input type="number" {...field} disabled={isView} />
+                                            <Input type="number" {...field} />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
@@ -295,7 +225,6 @@ export function MaterialDialog({
                                     <FormItem>
                                         <FormLabel>Vị trí kho (Kệ)</FormLabel>
                                         <Select
-                                            disabled={isView}
                                             onValueChange={field.onChange}
                                             defaultValue={field.value}
                                             value={field.value}
@@ -325,7 +254,7 @@ export function MaterialDialog({
                                         <FormItem>
                                             <FormLabel>Chi tiết vị trí (Ô/Ngăn)</FormLabel>
                                             <FormControl>
-                                                <Input {...field} disabled={isView} placeholder="Ví dụ: Tầng 1, Ngăn A" />
+                                                <Input {...field} placeholder="Ví dụ: Tầng 1, Ngăn A" />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -340,7 +269,7 @@ export function MaterialDialog({
                                         <FormItem>
                                             <FormLabel>Mô tả</FormLabel>
                                             <FormControl>
-                                                <Textarea {...field} disabled={isView} placeholder="Thông tin bổ sung..." />
+                                                <Textarea {...field} placeholder="Thông tin bổ sung..." />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -359,7 +288,7 @@ export function MaterialDialog({
                                         <FormItem>
                                             <FormLabel>Tên nhà cung cấp</FormLabel>
                                             <FormControl>
-                                                <Input {...field} disabled={isView} />
+                                                <Input {...field} />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -372,7 +301,7 @@ export function MaterialDialog({
                                         <FormItem>
                                             <FormLabel>Số điện thoại</FormLabel>
                                             <FormControl>
-                                                <Input {...field} disabled={isView} />
+                                                <Input {...field} />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -385,7 +314,7 @@ export function MaterialDialog({
                                         <FormItem>
                                             <FormLabel>Email</FormLabel>
                                             <FormControl>
-                                                <Input {...field} disabled={isView} />
+                                                <Input {...field} />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -398,7 +327,7 @@ export function MaterialDialog({
                                         <FormItem>
                                             <FormLabel>Người liên hệ</FormLabel>
                                             <FormControl>
-                                                <Input {...field} disabled={isView} />
+                                                <Input {...field} />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -412,7 +341,7 @@ export function MaterialDialog({
                                             <FormItem>
                                                 <FormLabel>Địa chỉ</FormLabel>
                                                 <FormControl>
-                                                    <Input {...field} disabled={isView} />
+                                                    <Input {...field} />
                                                 </FormControl>
                                                 <FormMessage />
                                             </FormItem>
@@ -424,14 +353,12 @@ export function MaterialDialog({
 
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                                {isView ? "Đóng" : "Hủy"}
+                                Hủy
                             </Button>
-                            {!isView && (
-                                <Button type="submit" disabled={isLoading}>
-                                    {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                    {isCreate ? "Tạo mới" : "Lưu thay đổi"}
-                                </Button>
-                            )}
+                            <Button type="submit" disabled={isLoading}>
+                                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Tạo mới
+                            </Button>
                         </DialogFooter>
                     </form>
                 </Form>

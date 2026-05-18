@@ -1,7 +1,7 @@
 ﻿'use client'
 
 import Image from 'next/image'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { vi } from 'date-fns/locale'
 import { useEffect, useMemo, useState } from 'react'
@@ -46,6 +46,7 @@ export function ItemDetailDialog({
   const updateMaterialMutation = useUpdateMaterial()
   const { data: shelvesResponse } = useShelves()
   const shelves = useMemo(() => shelvesResponse?.data || [], [shelvesResponse])
+  const queryClient = useQueryClient()
 
   const { data: detailData, isFetching } = useQuery({
     queryKey: ['inventory-item-detail', type, itemId],
@@ -71,7 +72,6 @@ export function ItemDetailDialog({
     setIsEditing(false)
     setDraft({
       name: materialDetail.name || '',
-      barcode: (materialDetail as any).barcode || '',
       unit: materialDetail.unit || '',
       color: materialDetail.color || '',
       price: materialDetail.price || 0,
@@ -113,7 +113,6 @@ export function ItemDetailDialog({
     if (!materialDetail?._id) return
     const payload: any = {
       name: String(draft.name || '').trim(),
-      barcode: String(draft.barcode || '').trim(),
       unit: String(draft.unit || '').trim(),
       color: String(draft.color || '').trim(),
       price: Number(draft.price || 0),
@@ -129,6 +128,8 @@ export function ItemDetailDialog({
       {
         onSuccess: () => {
           setIsEditing(false)
+          // Ép React Query gọi lại API lấy chi tiết mới nhất để UI cập nhật realtime
+          queryClient.invalidateQueries({ queryKey: ['inventory-item-detail', type, materialDetail._id] })
           onMaterialUpdated?.()
         },
       }
@@ -144,7 +145,7 @@ export function ItemDetailDialog({
         <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent -z-10" />
 
         <DialogHeader className="p-6 pb-3">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between pr-8">
             <div className="flex items-start gap-4">
               <div className="size-20 rounded-2xl border bg-card shadow-sm overflow-hidden shrink-0">
                 {isProduct ? (
@@ -176,29 +177,30 @@ export function ItemDetailDialog({
               </div>
             </div>
 
-            <Badge variant="outline" className={`px-3 py-1.5 font-medium ${stock.badgeClass}`}>
-              {stock.label}
-            </Badge>
-          </div>
-
-          {canEdit && (
-            <div className="flex items-center gap-2 pt-2">
-              {!isEditing ? (
-                <Button size="sm" variant="outline" onClick={() => setIsEditing(true)}>
-                  Chỉnh sửa thông tin
-                </Button>
-              ) : (
-                <>
-                  <Button size="sm" variant="outline" onClick={() => setIsEditing(false)}>
-                    Hủy
-                  </Button>
-                  <Button size="sm" onClick={handleSave} disabled={updateMaterialMutation.isPending}>
-                    {updateMaterialMutation.isPending ? 'Đang lưu...' : 'Lưu thay đổi'}
-                  </Button>
-                </>
+            <div className="flex flex-wrap items-center gap-3 shrink-0">
+              {canEdit && (
+                <div className="flex items-center gap-2">
+                  {!isEditing ? (
+                    <Button size="sm" variant="outline" onClick={() => setIsEditing(true)}>
+                      Chỉnh sửa thông tin
+                    </Button>
+                  ) : (
+                    <>
+                      <Button size="sm" variant="outline" onClick={() => setIsEditing(false)}>
+                        Hủy
+                      </Button>
+                      <Button size="sm" onClick={handleSave} disabled={updateMaterialMutation.isPending}>
+                        {updateMaterialMutation.isPending ? 'Đang lưu...' : 'Lưu thay đổi'}
+                      </Button>
+                    </>
+                  )}
+                </div>
               )}
+              <Badge variant="outline" className={`px-3 py-1.5 font-medium ${stock.badgeClass}`}>
+                {stock.label}
+              </Badge>
             </div>
-          )}
+          </div>
         </DialogHeader>
 
         <ScrollArea className="max-h-[68vh] px-6 pb-6">
@@ -278,6 +280,7 @@ export function ItemDetailDialog({
                     <InfoRow label="Tên NCC" value={(detail as Material).supplier?.name || 'N/A'} />
                     <InfoRow label="Liên hệ" value={(detail as Material).supplier?.phone || 'N/A'} />
                     <InfoRow label="Email" value={(detail as Material).supplier?.email || 'N/A'} />
+                    <InfoRow label="Ghi chú NCC" value={(detail as Material).supplier?.notes || 'N/A'} />
                   </>
                 ) : (
                   <InfoRow label="Thông tin" value="Thành phẩm không sử dụng trường nhà cung cấp trực tiếp." />
@@ -301,7 +304,6 @@ export function ItemDetailDialog({
               <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Chỉnh sửa</h3>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <Input value={String(draft.name || '')} onChange={(e) => setDraft((p: any) => ({ ...p, name: e.target.value }))} placeholder="Tên nguyên vật liệu" />
-                <Input value={String(draft.barcode || '')} onChange={(e) => setDraft((p: any) => ({ ...p, barcode: e.target.value }))} placeholder="Barcode" />
                 <Input value={String(draft.unit || '')} onChange={(e) => setDraft((p: any) => ({ ...p, unit: e.target.value }))} placeholder="Đơn vị" />
                 <Input value={String(draft.color || '')} onChange={(e) => setDraft((p: any) => ({ ...p, color: e.target.value }))} placeholder="Màu sắc" />
                 <Input type="number" value={Number(draft.price || 0)} onChange={(e) => setDraft((p: any) => ({ ...p, price: Number(e.target.value) }))} placeholder="Đơn giá" />
@@ -322,7 +324,7 @@ export function ItemDetailDialog({
                 <Input value={String(draft.supplier?.email || '')} onChange={(e) => updateSupplier('email', e.target.value)} placeholder="Email NCC" />
                 <Input value={String(draft.supplier?.address || '')} onChange={(e) => updateSupplier('address', e.target.value)} placeholder="Địa chỉ NCC" />
                 <Input value={String(draft.supplier?.contactPerson || '')} onChange={(e) => updateSupplier('contactPerson', e.target.value)} placeholder="Người liên hệ" />
-                <Input value={String(draft.supplier?.notes || '')} onChange={(e) => updateSupplier('notes', e.target.value)} placeholder="Ghi chú NCC" />
+                <Input value={String(draft.supplier?.notes || '')} onChange={(e) => updateSupplier('notes', e.target.value)} placeholder="Ghi chú nhà cung cấp" />
                 <div className="md:col-span-2">
                   <Textarea value={String(draft.description || '')} onChange={(e) => setDraft((p: any) => ({ ...p, description: e.target.value }))} placeholder="Mô tả" />
                 </div>

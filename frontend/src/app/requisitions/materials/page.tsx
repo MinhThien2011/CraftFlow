@@ -45,9 +45,9 @@ const EXPORT_STATUS_CONFIG: Record<string, { label: string, color: string }> = {
 }
 
 export default function MaterialRequisitionsPage() {
-  console.log("[MaterialRequisitionsPage] Rendering...");
   const queryClient = useQueryClient()
-  const { isKhoManager, loading: authLoading } = useAuth()
+  const { isAdmin, isKhoManager, loading: authLoading } = useAuth()
+  const canOperateWarehouseSlip = isKhoManager
   const [page, setPage] = useState(1)
   const [limit] = useState(10)
   const [searchQuery, setSearchQuery] = useState("")
@@ -69,7 +69,6 @@ export default function MaterialRequisitionsPage() {
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['requisitions', 'materials', page, limit, searchQuery, activeTab],
     queryFn: async () => {
-      console.log("[MaterialRequisitions] QueryFn started", { page, limit, searchQuery, activeTab });
       try {
         const response = await requisitionApi.getRequisitions({
           page,
@@ -78,11 +77,9 @@ export default function MaterialRequisitionsPage() {
           status: activeTab === 'all' ? undefined : activeTab,
           type: 'issue,supplementary'
         });
-        console.log("[MaterialRequisitions] API Response received:", response);
         // Bóc tách dữ liệu từ axios response nếu interceptor chưa làm
         return (response as any).data || response;
       } catch (err) {
-        console.error("[MaterialRequisitions] API Error:", err);
         throw err;
       }
     },
@@ -396,8 +393,9 @@ export default function MaterialRequisitionsPage() {
           slip={currentSlip}
           type="export"
           statusConfig={EXPORT_STATUS_CONFIG}
-          onStatusUpdate={(status, items) => updateSlipStatusMutation.mutate({ id: currentSlip._id, status, items })}
+          onStatusUpdate={canOperateWarehouseSlip ? (status, items) => updateSlipStatusMutation.mutate({ id: currentSlip._id, status, items }) : undefined}
           isUpdating={updateSlipStatusMutation.isPending}
+          readOnly={!canOperateWarehouseSlip}
         />
       )}
     </AppShell>

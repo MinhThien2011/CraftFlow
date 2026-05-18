@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useState, useMemo } from 'react'
 import { AppShell } from '@/components/app-shell'
@@ -25,7 +25,6 @@ import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
-import { defectReports } from '@/lib/warehouse-mock-data'
 import { format } from 'date-fns'
 import { vi } from 'date-fns/locale'
 
@@ -40,10 +39,40 @@ interface Resolution {
   resolvedAt: Date
 }
 
-type Report = typeof defectReports[0] & {
+interface Report {
+  id: string
+  productName: string
+  defectType: string
+  severity: Severity
+  quantity: number
+  reportedBy: string
+  reportedAt: Date
   status: Status
   resolution?: Resolution
 }
+
+const INITIAL_DEFECT_REPORTS: Report[] = [
+  {
+    id: '1',
+    productName: 'Gấu bông Teddy',
+    defectType: 'Đường may bị lỗi',
+    severity: 'light',
+    quantity: 5,
+    reportedBy: 'Nguyễn Văn A',
+    reportedAt: new Date('2024-03-14T14:30:00'),
+    status: 'pending',
+  },
+  {
+    id: '2',
+    productName: 'Thỏ handmade',
+    defectType: 'Vải bị phai màu',
+    severity: 'medium',
+    quantity: 3,
+    reportedBy: 'Trần Thị B',
+    reportedAt: new Date('2024-03-14T10:00:00'),
+    status: 'processing',
+  },
+]
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const SEVERITY_COLORS: Record<Severity, string> = {
@@ -367,7 +396,7 @@ function ReportsTable({ items, onProcess }: {
 export default function InternalDefectsPage() {
   const { toast } = useToast()
   const [reports, setReports] = useState<Report[]>(
-    defectReports.map(r => ({ ...r, status: r.status as Status }))
+    INITIAL_DEFECT_REPORTS
   )
   const [searchTerm, setSearchTerm]         = useState('')
   const [severityFilter, setSeverityFilter] = useState<'all' | Severity>('all')

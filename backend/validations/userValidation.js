@@ -4,20 +4,20 @@ export const passwordComplexity = Joi.string()
   .min(8)
   .pattern(new RegExp("^(?=.*[A-Z])(?=.*\\d)(?=.*[\\W_]).{8,}$"))
   .messages({
-    "string.min": "Password must be at least 8 characters long.",
-    "string.pattern.base": "Password must contain uppercase, lowercase, and special characters.",
-    'string.empty': 'Password is required.',
-    'any.required': 'Password is required.'
+    "string.min": "Mật khẩu phải có ít nhất 8 ký tự.",
+    "string.pattern.base": "Mật khẩu phải chứa ít nhất 1 chữ in hoa, 1 chữ số và 1 ký tự đặc biệt.",
+    'string.empty': 'Mật khẩu là bắt buộc.',
+    'any.required': 'Mật khẩu là bắt buộc.'
   });
 
 const userSchema = Joi.object({
-  username: Joi.string().alphanum().min(3).max(30).required().messages({
+  username: Joi.string().pattern(/^\S+$/).min(3).max(30).required().messages({
+    'string.pattern.base': 'Tên đăng nhập không được chứa khoảng trắng.',
     'string.min': 'Tên đăng nhập phải có ít nhất 3 ký tự.',
+    'string.max': 'Tên đăng nhập tối đa 30 ký tự.',
     'any.required': 'Tên đăng nhập là bắt buộc.'
   }),
-  password: Joi.string().pattern(new RegExp('^[a-zA-Z0-9]{3,30}$')).required().messages({
-    'string.pattern.base': 'Mật khẩu chỉ được chứa chữ cái và số, từ 3-30 ký tự.'
-  }),
+  password: passwordComplexity.required(),
   email: Joi.string().email().required().messages({
     'string.email': 'Email không hợp lệ.',
     'any.required': 'Email là bắt buộc.'

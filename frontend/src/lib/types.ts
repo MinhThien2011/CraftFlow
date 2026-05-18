@@ -351,17 +351,56 @@ export interface DashboardStatsResponse {
 }
 
 
-export interface ProductionOrder {
-  id: string
-  productId: string
-  productName: string
+export interface ProductionOrderProduct {
+  product: string | Product
   quantity: number
-  status: ProductionStatus
-  startDate: string
-  expectedDate: string
-  completedDate?: string
+  productName?: string
+  productCode?: string
+  _id?: string
+}
+
+export interface ProductionOrderMaterial {
+  material: string | Material
+  plannedQuantity: number
+  issuedQuantity: number
+  returnedQuantity: number
+  unit: string
+  _id?: string
+}
+
+export interface ProductionOrderAssignment {
+  _id: string
+  productionOrder: string | ProductionOrder
+  product: string | Product
+  staff: User
+  assignedQuantity: number
   completedQuantity: number
-  note?: string
+  status: string
+  notes?: string
+  startedAt?: string
+  finishedAt?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ProductionOrder {
+  _id: string
+  orderCode: string
+  products: ProductionOrderProduct[]
+  status: string
+  deadline?: string
+  autoDeadline?: boolean
+  estimatedCompletionTime?: number
+  priority: string
+  materials?: ProductionOrderMaterial[]
+  totalPlannedCost?: number
+  actualCost?: number
+  createdBy: User | string
+  completedAt?: string
+  holdReason?: string
+  assignments?: ProductionOrderAssignment[]
+  createdAt: string
+  updatedAt: string
 }
 
 export interface StockAlert {

@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { AppShell } from "@/components/app-shell"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
@@ -26,8 +27,21 @@ const EXPORT_STATUS_CONFIG: Record<string, { label: string, color: string }> = {
     cancelled: { label: "Đã hủy", color: "bg-red-100 text-red-700 hover:bg-red-200" },
 }
 
+function EvidenceStatusBadge({ status }: { status: Slip["status"] }) {
+    if (status !== "completed") return null
+
+    return (
+        <Badge className="w-fit border-0 bg-amber-100 text-amber-700 hover:bg-amber-200">
+            Chưa cập nhật chứng từ
+        </Badge>
+    )
+}
+
 export default function ProductIssuingPage() {
     const queryClient = useQueryClient()
+    const router = useRouter()
+    const searchParams = useSearchParams()
+    const focusedSlipId = searchParams.get("slipId")
     const [page, setPage] = useState(1)
     const [limit] = useState(10)
     const [searchQuery, setSearchQuery] = useState("")
@@ -51,10 +65,13 @@ export default function ProductIssuingPage() {
     const updateStatusMutation = useMutation({
         mutationFn: ({ id, status, items }: { id: string, status: string, items: any[] }) =>
             slipApi.updateSlipStatus(id, { status, items }),
-        onSuccess: () => {
+        onSuccess: (_res, variables) => {
             queryClient.invalidateQueries({ queryKey: ['slips'] })
             toast.success("Cập nhật trạng thái thành công")
             setIsDialogOpen(false)
+            if (variables.status === 'received') {
+                router.push(`/issuing/pick-list?slipId=${variables.id}`)
+            }
         },
         onError: (error: any) => {
             toast.error(error?.response?.data?.message || "Lỗi khi cập nhật trạng thái")
@@ -78,6 +95,14 @@ export default function ProductIssuingPage() {
     const slips: Slip[] = responseData?.slips || [];
     const pagination = responseData?.pagination || {};
     const totalPages = pagination?.totalPages || pagination?.pages || 1;
+
+    useEffect(() => {
+        if (!focusedSlipId || slips.length === 0) return
+        const focusedSlip = slips.find((slip) => slip._id === focusedSlipId)
+        if (!focusedSlip) return
+        setSelectedSlip(focusedSlip)
+        setIsDialogOpen(true)
+    }, [focusedSlipId, slips])
 
     return (
         <AppShell title="Xuất kho thành phẩm" subtitle="Quản lý phiếu xuất thành phẩm cho khách hàng/đại lý">
@@ -169,9 +194,12 @@ export default function ProductIssuingPage() {
                                                 <CurrencyDisplay value={slip.totalAmount || 0} />
                                             </TableCell>
                                             <TableCell>
-                                                <Badge className={`${EXPORT_STATUS_CONFIG[slip.status]?.color} border-0`}>
-                                                    {EXPORT_STATUS_CONFIG[slip.status]?.label}
-                                                </Badge>
+                                                <div className="flex flex-col gap-1">
+                                                    <Badge className={`${EXPORT_STATUS_CONFIG[slip.status]?.color} w-fit border-0`}>
+                                                        {EXPORT_STATUS_CONFIG[slip.status]?.label}
+                                                    </Badge>
+                                                    <EvidenceStatusBadge status={slip.status} />
+                                                </div>
                                             </TableCell>
                                             <TableCell className="text-right pr-6">
                                                 <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedSlip(slip); setIsDialogOpen(true); }}>

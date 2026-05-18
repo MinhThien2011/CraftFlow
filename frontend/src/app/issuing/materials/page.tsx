@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { AppShell } from "@/components/app-shell"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
@@ -27,8 +28,21 @@ const EXPORT_STATUS_CONFIG: Record<string, { label: string, color: string }> = {
   cancelled: { label: "Đã hủy", color: "bg-red-100 text-red-700 hover:bg-red-200" },
 }
 
+function EvidenceStatusBadge({ status }: { status: Slip["status"] }) {
+  if (status !== "completed") return null
+
+  return (
+    <Badge className="w-fit border-0 bg-amber-100 text-amber-700 hover:bg-amber-200">
+      Chưa cập nhật chứng từ
+    </Badge>
+  )
+}
+
 export default function MaterialIssuingPage() {
   const queryClient = useQueryClient()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const focusedSlipId = searchParams.get("slipId")
   const { loading: authLoading } = useAuth()
   const [page, setPage] = useState(1)
   const [limit] = useState(10)
@@ -41,9 +55,6 @@ export default function MaterialIssuingPage() {
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['slips', 'export-materials', { page, limit, search: searchQuery, status: activeTab }],
     queryFn: async () => {
-      console.log("[MaterialIssuing] Calling API with params:", {
-        type: 'export', category: 'material', page, limit, search: searchQuery, status: activeTab
-      });
       try {
         const response = await slipApi.getSlips({
           type: 'export',
@@ -53,10 +64,8 @@ export default function MaterialIssuingPage() {
           search: searchQuery,
           status: activeTab === 'all' ? undefined : activeTab
         });
-        console.log("[MaterialIssuing] API Response:", response);
         return response;
       } catch (err) {
-        console.error("[MaterialIssuing] API Error:", err);
         throw err;
       }
     },
@@ -68,10 +77,13 @@ export default function MaterialIssuingPage() {
   const updateStatusMutation = useMutation({
     mutationFn: ({ id, status, items }: { id: string, status: string, items: any[] }) =>
       slipApi.updateSlipStatus(id, { status, items }),
-    onSuccess: () => {
+    onSuccess: (_res, variables) => {
       queryClient.invalidateQueries({ queryKey: ['slips'] })
       toast.success("Cập nhật trạng thái thành công")
       setIsDialogOpen(false)
+      if (variables.status === 'received') {
+        router.push(`/issuing/pick-list?slipId=${variables.id}`)
+      }
     },
     onError: (error: any) => {
       toast.error(error?.response?.data?.message || "Lỗi khi cập nhật trạng thái")
@@ -95,6 +107,14 @@ export default function MaterialIssuingPage() {
   const slips: Slip[] = responseData?.slips || [];
   const pagination = responseData?.pagination || {};
   const totalPages = pagination?.totalPages || pagination?.pages || 1;
+
+  useEffect(() => {
+    if (!focusedSlipId || slips.length === 0) return
+    const focusedSlip = slips.find((slip) => slip._id === focusedSlipId)
+    if (!focusedSlip) return
+    setSelectedSlip(focusedSlip)
+    setIsDialogOpen(true)
+  }, [focusedSlipId, slips])
 
   return (
     <AppShell title="Xuất kho vật liệu" subtitle="Quản lý phiếu xuất vật tư cho sản xuất">
@@ -195,9 +215,12 @@ export default function MaterialIssuingPage() {
                         {slip.date ? format(new Date(slip.date), 'dd/MM/yyyy HH:mm', { locale: vi }) : 'N/A'}
                       </TableCell>
                       <TableCell>
-                        <Badge className={`${EXPORT_STATUS_CONFIG[slip.status]?.color} border-0`}>
-                          {EXPORT_STATUS_CONFIG[slip.status]?.label}
-                        </Badge>
+                        <div className="flex flex-col gap-1">
+                          <Badge className={`${EXPORT_STATUS_CONFIG[slip.status]?.color} w-fit border-0`}>
+                            {EXPORT_STATUS_CONFIG[slip.status]?.label}
+                          </Badge>
+                          <EvidenceStatusBadge status={slip.status} />
+                        </div>
                       </TableCell>
                       <TableCell className="text-right pr-6">
                         <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedSlip(slip); setIsDialogOpen(true); }}>

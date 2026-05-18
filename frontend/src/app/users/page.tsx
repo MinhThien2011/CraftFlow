@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useCallback, useMemo, Fragment } from "react"
-import { Plus, Search, MoreVertical, Shield, Warehouse, User as UserIcon, Upload, ChevronLeft, ChevronRight, Factory, Mail, Lock, Phone, MapPin, Calendar, Settings, Briefcase, Info } from "lucide-react"
+import { Plus, Search, MoreVertical, Shield, Warehouse, User as UserIcon, Upload, ChevronLeft, ChevronRight, Factory, Mail, Lock, Phone, MapPin, Calendar, Settings, Briefcase, Info, Eye, EyeOff } from "lucide-react"
 import { AppShell } from "@/components/app-shell"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -127,6 +127,7 @@ function UsersPage() {
   const [userToDelete, setUserToDelete] = useState<User | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [avatarPreview, setAvatarPreview] = useState<string>("")
+  const [showPassword, setShowPassword] = useState(false)
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [newUser, setNewUser] = useState({
     name: "",
@@ -177,6 +178,23 @@ function UsersPage() {
   const handleAddUser = async () => {
     if (!newUser.name || !newUser.email || !newUser.username || !newUser.password || !newUser.role) {
       toast.error("Vui lòng điền đầy đủ các trường bắt buộc")
+      return
+    }
+
+    if (newUser.username.length < 3) {
+      toast.error("Tên đăng nhập phải có ít nhất 3 ký tự")
+      return
+    }
+
+    if (/\s/.test(newUser.username)) {
+      toast.error("Tên đăng nhập không được chứa khoảng trắng")
+      return
+    }
+
+    // Password complexity: >= 8 characters, at least 1 uppercase, 1 digit, 1 special char
+    const passwordRegex = /^(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
+    if (!passwordRegex.test(newUser.password)) {
+      toast.error("Mật khẩu phải có ít nhất 8 ký tự, bao gồm ít nhất 1 chữ in hoa, 1 chữ số và 1 ký tự đặc biệt")
       return
     }
 
@@ -241,6 +259,7 @@ function UsersPage() {
     })
     setAvatarPreview("")
     setAvatarFile(null)
+    setShowPassword(false)
     setIsAddDialogOpen(false)
   }
 
@@ -455,17 +474,32 @@ function UsersPage() {
                                 className="h-10 rounded-lg border-gray-200 focus:ring-purple-100"
                                 value={newUser.username}
                                 onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
+                                autoComplete="off"
                               />
                             </div>
                             <div className="space-y-2">
                               <Label className="text-[11px] font-bold text-gray-500 uppercase">Mật khẩu *</Label>
-                              <Input
-                                type="password"
-                                placeholder="••••••••"
-                                className="h-10 rounded-lg border-gray-200 focus:ring-purple-100"
-                                value={newUser.password}
-                                onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                              />
+                              <div className="relative">
+                                <Input
+                                  type={showPassword ? "text" : "password"}
+                                  placeholder="••••••••"
+                                  className="h-10 pr-10 rounded-lg border-gray-200 focus:ring-purple-100"
+                                  value={newUser.password}
+                                  onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                                  autoComplete="new-password"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setShowPassword(!showPassword)}
+                                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none transition-colors"
+                                >
+                                  {showPassword ? (
+                                    <EyeOff className="h-4 w-4" />
+                                  ) : (
+                                    <Eye className="h-4 w-4" />
+                                  )}
+                                </button>
+                              </div>
                             </div>
                             <div className="space-y-2">
                               <Label className="text-[11px] font-bold text-gray-500 uppercase">Vai trò *</Label>

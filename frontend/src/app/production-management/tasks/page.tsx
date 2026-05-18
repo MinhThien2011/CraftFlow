@@ -1,414 +1,482 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useMemo, useState } from "react"
+import { format, isToday, isPast } from "date-fns"
+import {
+  Search, ChevronDown, CheckCircle, Package, AlertTriangle,
+  Loader2, Users, ClipboardList, Activity, RefreshCw,
+  ExternalLink, CalendarCheck, History, TrendingUp,
+} from "lucide-react"
+import Link from "next/link"
+import Image from "next/image"
+
 import { DashboardLayout } from "@/features/production/components/dashboard-layout"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Card } from "@/components/ui/card"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+import { cn } from "@/lib/utils"
 import {
-  Search,
-  Clock,
-  CheckCircle,
-  Package,
-  AlertTriangle,
-  Bell,
-  ChevronLeft,
-  ChevronRight,
-  Loader2
-} from "lucide-react"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import Link from "next/link"
-import { toast } from "sonner"
-import { productionApi } from "@/api/production.api"
+  getProductionOrderStatusConfig,
+  getAssignmentStatusConfig,
+  getPriorityConfig,
+  PRODUCTION_STATUS_FILTERS,
+} from "@/features/production/utils/production-status"
+import { useProductionOrders } from "@/features/production/hooks/use-production"
 
-const CustomPagination = ({ page, total, pageSize, onChange }: { page: number; total: number; pageSize: number; onChange: (p: number) => void }) => {
-  const totalPages = Math.ceil(total / pageSize)
-  if (totalPages <= 1) return null
+
+
+function pctColor(p: number) {
+  if (p >= 100) return "bg-emerald-500"
+  if (p >= 75)  return "bg-blue-500"
+  if (p >= 40)  return "bg-amber-500"
+  return "bg-red-400"
+}
+
+function calcPct(completed: number, assigned: number) {
+  return assigned > 0 ? Math.min(100, Math.round((completed / assigned) * 100)) : 0
+}
+
+// ─── Staff Avatar ────────────────────────────────────────────────────────────
+
+function StaffAvatar({ name, avatarUrl, size = 8 }: { name: string; avatarUrl?: string; size?: number }) {
+  const initials = name.split(" ").slice(-2).map(w => w[0]?.toUpperCase() ?? "").join("") || "NV"
+  const dim = `h-${size} w-${size}`
+  if (avatarUrl) {
+    return (
+      <div className={cn(dim, "shrink-0 rounded-full overflow-hidden ring-2 ring-primary/20")}>
+        <Image src={avatarUrl} alt={name} width={40} height={40} className="object-cover w-full h-full" />
+      </div>
+    )
+  }
   return (
-    <div className="flex items-center justify-between border-t p-4 bg-background">
-      <p className="text-sm text-muted-foreground">
-        Hiển thị {Math.min((page - 1) * pageSize + 1, total)}–{Math.min(page * pageSize, total)} / {total}
-      </p>
-      <div className="flex items-center gap-1">
-        <Button variant="outline" size="icon" className="h-8 w-8" disabled={page === 1} onClick={() => onChange(page - 1)}>
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-          <Button key={p} variant={p === page ? 'default' : 'outline'} size="icon" className="h-8 w-8" onClick={() => onChange(p)}>{p}</Button>
-        ))}
-        <Button variant="outline" size="icon" className="h-8 w-8" disabled={page === totalPages} onClick={() => onChange(page + 1)}>
-          <ChevronRight className="h-4 w-4" />
-        </Button>
+    <div className={cn(dim, "shrink-0 flex items-center justify-center rounded-full bg-gradient-to-br from-primary/25 to-primary/10 text-xs font-bold text-primary ring-2 ring-primary/20")}>
+      {initials}
+    </div>
+  )
+}
+
+// ─── Animated Collapse (CSS grid trick — handles nested panels correctly) ───
+// grid-template-rows: 0fr → 1fr is animatable in Chrome 107+, FF 109+, Safari 16.4+
+// The outer grid has no overflow constraint, so nested collapsibles expand freely.
+function AnimatedCollapse({ open, children }: { open: boolean; children: React.ReactNode }) {
+  return (
+    <div
+      className="grid transition-all"
+      style={{
+        gridTemplateRows: open ? "1fr" : "0fr",
+        opacity: open ? 1 : 0,
+        transitionDuration: "280ms",
+        transitionTimingFunction: "cubic-bezier(0.4,0,0.2,1)",
+      }}
+    >
+      {/* min-h-0 is required for 0fr to collapse correctly */}
+      <div className="min-h-0 overflow-hidden">
+        {children}
       </div>
     </div>
   )
 }
 
-const filters = [
-  { id: "all", label: "Tất cả" },
-  { id: "pending", label: "Chờ thực hiện" },
-  { id: "in_production", label: "Đang thực hiện" },
-  { id: "completed", label: "Hoàn thành" },
-  { id: "overdue", label: "Chậm tiến độ / Quá hạn" },
-]
 
-const statusConfig = {
-  pending: { label: "Chờ thực hiện", color: "bg-[#F4C542] text-[#2C2C2C]" },
-  in_production: { label: "Đang thực hiện", color: "bg-[#2B8BE8] text-white" },
-  completed: { label: "Hoàn thành", color: "bg-[#4A9C6B] text-white" },
-  overdue: { label: "Chậm tiến độ", color: "bg-[#E04E4E] text-white" },
+// ─── Report History ──────────────────────────────────────────────────────────
+// Backend stores milestones (50/75/100) + lastReportedAt + completedQuantity.
+// We render the milestone timeline + final report info as "history" entries.
+
+function ReportHistory({ assignment }: { assignment: any }) {
+  const milestones: number[] = assignment.reportedMilestones ?? []
+  const unit = assignment.product?.unit ?? ""
+
+  if (milestones.length === 0 && !assignment.lastReportedAt) {
+    return (
+      <p className="py-3 text-center text-xs text-muted-foreground italic">
+        Chưa có báo cáo tiến độ nào.
+      </p>
+    )
+  }
+
+  const entries = milestones.map((m, i) => ({
+    key: `m-${i}`,
+    icon: <TrendingUp className="w-3.5 h-3.5" />,
+    label: `Đạt mốc ${m}%`,
+    detail: `${Math.round((m / 100) * assignment.assignedQuantity)} / ${assignment.assignedQuantity} ${unit}`,
+    isLast: false,
+  }))
+
+  if (assignment.lastReportedAt) {
+    entries.push({
+      key: "last",
+      icon: <CalendarCheck className="w-3.5 h-3.5" />,
+      label: `Báo cáo cuối: ${format(new Date(assignment.lastReportedAt), "dd/MM/yyyy HH:mm")}${isToday(new Date(assignment.lastReportedAt)) ? " (Hôm nay)" : ""}`,
+      detail: `Hoàn thành: ${assignment.completedQuantity ?? 0} / ${assignment.assignedQuantity} ${unit}`,
+      isLast: true,
+    })
+  }
+
+  return (
+    <div className="pt-2 pb-1 pl-2 space-y-2">
+      {entries.map((e, i) => (
+        <div key={e.key} className="flex items-start gap-2.5">
+          <div className={cn("mt-0.5 p-1 rounded-full shrink-0", e.isLast ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground")}>
+            {e.icon}
+          </div>
+          <div>
+            <p className="text-xs font-semibold">{e.label}</p>
+            <p className="text-[11px] text-muted-foreground">{e.detail}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
 }
 
+// ─── Assignment Row ──────────────────────────────────────────────────────────
+
+function AssignmentRow({ assignment }: { assignment: any }) {
+  const [historyOpen, setHistoryOpen] = useState(false)
+
+  const statusCfg = getAssignmentStatusConfig(assignment.status)
+  const pct = calcPct(assignment.completedQuantity || 0, assignment.assignedQuantity)
+  const staffName = assignment.staff?.fullName || assignment.staff?.username || "Chưa phân công"
+  const avatarUrl = assignment.staff?.avatar || undefined
+  const productName = assignment.product?.name || "—"
+  const unit = assignment.product?.unit ?? ""
+  const reportedToday = assignment.lastReportedAt ? isToday(new Date(assignment.lastReportedAt)) : false
+  const hasMilestones = (assignment.reportedMilestones?.length ?? 0) > 0 || !!assignment.lastReportedAt
+
+  return (
+    <div className="rounded-xl border border-border/40 bg-background/60 overflow-hidden">
+      {/* Main info row */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-3.5">
+        {/* Staff */}
+        <div className="flex items-center gap-2.5 sm:w-52 shrink-0 min-w-0">
+          <StaffAvatar name={staffName} avatarUrl={avatarUrl} size={9} />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold truncate">{staffName}</p>
+            <p className="text-xs text-muted-foreground truncate">{productName}</p>
+          </div>
+        </div>
+
+        {/* Progress */}
+        <div className="flex-1 space-y-1 min-w-0">
+          <div className="flex justify-between text-xs">
+            <span className="text-muted-foreground">Tiến độ cá nhân</span>
+            <span className="font-bold">{pct}%</span>
+          </div>
+          <div className="h-1.5 w-full rounded-full bg-black/5 dark:bg-white/10 overflow-hidden">
+            <div className={cn("h-full rounded-full transition-all duration-500", pctColor(pct))} style={{ width: `${pct}%` }} />
+          </div>
+          <p className="text-[11px] text-muted-foreground">{assignment.completedQuantity ?? 0} / {assignment.assignedQuantity} {unit}</p>
+        </div>
+
+        {/* Status */}
+        <Badge variant="outline" className={cn("shrink-0 text-xs font-medium", statusCfg.color)}>
+          {statusCfg.label}
+        </Badge>
+
+        {/* Last report */}
+        <div className="shrink-0 text-right min-w-[140px]">
+          {assignment.lastReportedAt ? (
+            <>
+              <p className="text-xs font-medium flex items-center justify-end gap-1">
+                <CalendarCheck className="w-3 h-3 text-primary shrink-0" />
+                {format(new Date(assignment.lastReportedAt), "dd/MM HH:mm")}
+              </p>
+              <p className={cn("text-[10px]", reportedToday ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>
+                {reportedToday ? "✅ Đã báo cáo hôm nay" : "Báo cáo cuối cùng"}
+              </p>
+            </>
+          ) : (
+            <p className="text-xs text-muted-foreground italic">Chưa báo cáo</p>
+          )}
+        </div>
+
+        {/* History toggle */}
+        <button
+          onClick={() => setHistoryOpen(v => !v)}
+          disabled={!hasMilestones}
+          className={cn(
+            "shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium transition-colors border",
+            historyOpen
+              ? "bg-primary/10 border-primary/30 text-primary"
+              : "bg-muted/50 border-transparent text-muted-foreground hover:bg-muted hover:text-foreground",
+            !hasMilestones && "opacity-40 cursor-not-allowed"
+          )}
+          title="Lịch sử báo cáo"
+        >
+          <History className="w-3 h-3" />
+          Lịch sử
+          <ChevronDown className={cn("w-3 h-3 transition-transform duration-200", historyOpen && "rotate-180")} />
+        </button>
+      </div>
+
+      {/* Animated history panel */}
+      <AnimatedCollapse open={historyOpen}>
+        <div className="border-t border-border/30 mx-3.5 pb-3">
+          <ReportHistory assignment={assignment} />
+        </div>
+      </AnimatedCollapse>
+    </div>
+  )
+}
+
+// ─── Order Row ───────────────────────────────────────────────────────────────
+
+function OrderRow({ order }: { order: any }) {
+  const [expanded, setExpanded] = useState(false)
+
+  const orderStatusCfg = getProductionOrderStatusConfig(order.status)
+  const priorityCfg = getPriorityConfig(order.priority)
+  const assignments: any[] = order.assignments || []
+  const products: any[] = order.products || []
+
+  const totalAssigned  = assignments.reduce((s, a) => s + (a.assignedQuantity  || 0), 0)
+  const totalCompleted = assignments.reduce((s, a) => s + (a.completedQuantity || 0), 0)
+  const orderPct = calcPct(totalCompleted, totalAssigned)
+
+  const mainProductName = products[0]?.product?.name || products[0]?.productName || "—"
+  const extraProducts   = products.length - 1
+  const isDeadlinePast  = order.deadline ? isPast(new Date(order.deadline)) : false
+
+  return (
+    <div className={cn(
+      "rounded-2xl border overflow-hidden transition-all duration-200",
+      expanded ? "border-primary/40 shadow-lg shadow-primary/5" : "border-border/50 hover:border-border"
+    )}>
+      {/* ── Header ── */}
+      <button className="w-full text-left" onClick={() => setExpanded(v => !v)}>
+        <div className="flex flex-col md:flex-row md:items-center gap-3 p-4 bg-card hover:bg-accent/5 transition-colors">
+
+          {/* Chevron + Order code */}
+          <div className="flex items-center gap-3 shrink-0">
+            <div className={cn(
+              "flex h-7 w-7 items-center justify-center rounded-lg border transition-all duration-200",
+              expanded ? "bg-primary text-primary-foreground border-primary rotate-0" : "bg-muted/50 border-border/50 text-muted-foreground"
+            )}>
+              <ChevronDown className={cn("w-4 h-4 transition-transform duration-300", !expanded && "-rotate-90")} />
+            </div>
+            <div>
+              <Link
+                href={`/production-management/orders/${order._id}?from=tasks`}
+                className="font-mono text-sm font-bold text-primary hover:underline flex items-center gap-1 group"
+                onClick={e => e.stopPropagation()}
+              >
+                {order.orderCode}
+                <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </Link>
+              <p className="text-xs text-muted-foreground line-clamp-1">
+                {mainProductName}{extraProducts > 0 ? ` +${extraProducts} SP khác` : ""}
+              </p>
+            </div>
+          </div>
+
+          {/* Labeled badge groups — clearly separate order status from priority */}
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70 leading-none">
+                Trạng thái
+              </span>
+              <Badge variant="outline" className={cn("w-fit text-xs font-medium", orderStatusCfg.color)}>
+                {orderStatusCfg.label}
+              </Badge>
+            </div>
+
+            {priorityCfg && (
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70 leading-none">
+                  Ưu tiên
+                </span>
+                <Badge variant="outline" className={cn("w-fit text-xs font-medium", priorityCfg.color)}>
+                  {priorityCfg.label}
+                </Badge>
+              </div>
+            )}
+          </div>
+
+          {/* Staff count */}
+          <div className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
+            <Users className="w-3.5 h-3.5" />
+            {assignments.length} nhân viên
+          </div>
+
+          {/* Progress + deadline pushed right */}
+          <div className="md:ml-auto flex items-center gap-5">
+            <div className="min-w-[120px] space-y-1">
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground">Tổng tiến độ</span>
+                <span className="font-bold">{orderPct}%</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-black/5 dark:bg-white/10 overflow-hidden">
+                <div className={cn("h-full rounded-full transition-all duration-500", pctColor(orderPct))} style={{ width: `${orderPct}%` }} />
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <p className={cn("text-xs font-semibold", isDeadlinePast ? "text-red-600 dark:text-red-400" : "text-foreground")}>
+                {order.deadline ? format(new Date(order.deadline), "dd/MM/yyyy") : "—"}
+              </p>
+              <p className="text-[10px] text-muted-foreground">Hạn hoàn thành</p>
+            </div>
+          </div>
+        </div>
+      </button>
+
+      {/* ── Expandable assignments ── */}
+      <AnimatedCollapse open={expanded}>
+        <div className="border-t border-border/40 bg-muted/20 p-4 space-y-2.5">
+          {assignments.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
+              <Users className="w-4 h-4" /> Chưa có nhân viên nào được phân công.
+            </p>
+          ) : (
+            assignments.map(a => <AssignmentRow key={a._id} assignment={a} />)
+          )}
+        </div>
+      </AnimatedCollapse>
+    </div>
+  )
+}
+
+// ─── Stat Card ───────────────────────────────────────────────────────────────
+
+interface StatCardProps {
+  label: string
+  value: number
+  icon: React.ElementType
+  gradient: string
+  glow: string
+  loading?: boolean
+}
+
+function StatCard({ label, value, icon: Icon, gradient, glow, loading }: StatCardProps) {
+  return (
+    <div className={cn(
+      "relative overflow-hidden rounded-2xl p-5 text-white shadow-lg transition-transform duration-300 hover:-translate-y-1",
+      gradient
+    )}>
+      {/* Glow blob */}
+      <div className={cn("absolute -right-4 -top-4 h-24 w-24 rounded-full opacity-30 blur-2xl", glow)} />
+      {/* Icon watermark */}
+      <Icon className="absolute right-4 bottom-3 w-16 h-16 opacity-10" />
+
+      <div className="relative z-10">
+        <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
+          <Icon className="w-5 h-5" />
+        </div>
+        <p className="text-3xl font-black tabular-nums tracking-tight">
+          {loading ? <span className="inline-block w-8 h-7 bg-white/20 rounded animate-pulse" /> : value}
+        </p>
+        <p className="mt-1 text-sm font-medium text-white/80">{label}</p>
+      </div>
+    </div>
+  )
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default function TasksPage() {
-  const [tasks, setTasks] = useState<any[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [activeFilter, setActiveFilter] = useState("all")
   const [searchQuery, setSearchQuery] = useState("")
-  const [isReminderOpen, setIsReminderOpen] = useState(false)
-  const [selectedTask, setSelectedTask] = useState<any | null>(null)
-  const [reminderMessage, setReminderMessage] = useState("")
-  const [page, setPage] = useState(1)
-  const ITEMS_PER_PAGE = 10
+  const [statusFilter, setStatusFilter] = useState("all")
 
-  // ─── Lấy dữ liệu (Thực tế từ API BE) ───
-  const fetchTasks = useCallback(async () => {
-    setIsLoading(true)
-    try {
-      // Gọi API lấy danh sách Đơn sản xuất (orders)
-      const res: any = await productionApi.getOrders({ limit: 1000 })
+  const { data: response, isLoading, refetch, isFetching } = useProductionOrders({ limit: 200 })
 
-      if (res && (res.success || res.status === 'success')) {
-        const rawData = res.data?.orders || res.data?.items || res.data
-        const data = Array.isArray(rawData) ? rawData : []
-        let parsedTasks: any[] = []
+  const orders: any[] = useMemo(() => {
+    const raw = response?.data?.orders || []
+    return Array.isArray(raw) ? raw : []
+  }, [response])
 
-        data.forEach((order: any) => {
-          if (order.assignments && Array.isArray(order.assignments)) {
-            order.assignments.forEach((task: any) => {
-              parsedTasks.push({
-                id: task._id || task.id,
-                orderId: order.orderCode || order._id,
-                product: task.product?.name || order.products?.[0]?.productName || (order.products?.[0]?.product as any)?.name || "Sản phẩm không xác định",
-                staffId: task.staff?._id || task.assignee?._id || task.assignedTo?._id,
-                staffName: task.staff?.fullName || task.staff?.username || task.assignee?.fullName || task.assignee?.username || "Chưa phân công",
-                status: task.status || "pending",
-                progress: task.assignedQuantity > 0 ? Math.round(((task.completedQuantity || 0) / task.assignedQuantity) * 100) : 0,
-                startDate: task.startDate || order.startDate,
-                endDate: task.endDate || order.deadline || order.expectedEndDate,
-              })
-            })
-          }
-        })
-
-        setTasks(parsedTasks)
-      } else {
-        setTasks([])
-      }
-    } catch (error) {
-      console.error("Fetch tasks error:", error)
-      toast.error("Không thể tải danh sách công việc")
-      setTasks([])
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchTasks()
-  }, [fetchTasks])
-
-  // Đặt lại trang khi đổi filter
-  useEffect(() => { setPage(1) }, [activeFilter, searchQuery])
-
-  // ─── Tính toán Filters bằng Memoization ───
-  const filterCounts = useMemo(() => {
-    return {
-      all: tasks.length,
-      pending: tasks.filter(t => t.status === "pending").length,
-      in_production: tasks.filter(t => t.status === "in_production").length,
-      completed: tasks.filter(t => t.status === "completed").length,
-      overdue: tasks.filter(t => t.status === "overdue").length,
-    }
-  }, [tasks])
-
-  const filteredTasks = useMemo(() => {
-    return tasks.filter((task) => {
-      const matchesFilter = activeFilter === "all" || task.status === activeFilter
-      const matchesSearch =
-        task.staffName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        task.orderId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        task.product?.toLowerCase().includes(searchQuery.toLowerCase())
-      return matchesFilter && matchesSearch
+  const filteredOrders = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim()
+    return orders.filter(order => {
+      const matchStatus = statusFilter === "all" || order.status === statusFilter
+      if (!q) return matchStatus
+      const matchSearch =
+        order.orderCode?.toLowerCase().includes(q) ||
+        order.products?.some((p: any) => p.product?.name?.toLowerCase().includes(q) || p.productName?.toLowerCase().includes(q)) ||
+        order.assignments?.some((a: any) => a.staff?.fullName?.toLowerCase().includes(q) || a.staff?.username?.toLowerCase().includes(q))
+      return matchStatus && matchSearch
     })
-  }, [tasks, activeFilter, searchQuery])
+  }, [orders, searchQuery, statusFilter])
 
-  const paginatedTasks = useMemo(() => {
-    return filteredTasks.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE)
-  }, [filteredTasks, page])
-
-  const handleSendReminder = useCallback(() => {
-    if (selectedTask && reminderMessage) {
-      alert(`Đã gửi nhắc nhở đến ${selectedTask.staffName}:\n${reminderMessage}`)
-      setIsReminderOpen(false)
-      setReminderMessage("")
-      setSelectedTask(null)
+  const stats = useMemo(() => {
+    const allAssignments = orders.flatMap(o => o.assignments || [])
+    return {
+      orders: orders.length,
+      active: allAssignments.filter(a => ["in_production", "partially_complete"].includes(a.status)).length,
+      completed: allAssignments.filter(a => a.status === "completed").length,
+      overdue: orders.filter(o => o.deadline && isPast(new Date(o.deadline)) && !["completed","cancelled"].includes(o.status)).length,
     }
-  }, [selectedTask, reminderMessage])
+  }, [orders])
 
-  const openReminderDialog = useCallback((task: any) => {
-    setSelectedTask(task)
-    setReminderMessage(`Nhắc nhở về công việc đơn hàng (${task.orderId}):\nTiến độ hiện tại: ${task.progress || 0}%\nVui lòng cập nhật tiến độ công việc.`)
-    setIsReminderOpen(true)
-  }, [])
+  const STAT_CARDS: StatCardProps[] = [
+    { label: "Đơn sản xuất",          value: stats.orders,    icon: ClipboardList, gradient: "bg-gradient-to-br from-violet-600 to-indigo-600", glow: "bg-violet-400",  loading: isLoading },
+    { label: "Công việc đang thực hiện", value: stats.active,  icon: Activity,      gradient: "bg-gradient-to-br from-amber-500 to-orange-500",  glow: "bg-amber-300",  loading: isLoading },
+    { label: "Công việc hoàn thành",   value: stats.completed, icon: CheckCircle,   gradient: "bg-gradient-to-br from-emerald-500 to-teal-600",   glow: "bg-emerald-300",loading: isLoading },
+    { label: "Đơn quá hạn",           value: stats.overdue,   icon: AlertTriangle,  gradient: "bg-gradient-to-br from-rose-500 to-pink-600",      glow: "bg-rose-300",   loading: isLoading },
+  ]
 
   return (
     <DashboardLayout title="Quản lý công việc">
       <div className="space-y-6">
-        {/* Stats */}
-        <div className="grid gap-4 sm:grid-cols-4">
-          <Card className="p-4 bg-card border-border">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#EBE3D9]">
-                <Clock className="h-5 w-5 text-[#7A5C43]" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-card-foreground">{filterCounts.pending}</p>
-                <p className="text-sm text-muted-foreground">Chờ thực hiện</p>
-              </div>
-            </div>
-          </Card>
-          <Card className="p-4 bg-card border-border">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#EBE3D9]">
-                <Package className="h-5 w-5 text-[#7A5C43]" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-card-foreground">{filterCounts.in_production}</p>
-                <p className="text-sm text-muted-foreground">Đang thực hiện</p>
-              </div>
-            </div>
-          </Card>
-          <Card className="p-4 bg-card border-border">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#EBE3D9]">
-                <CheckCircle className="h-5 w-5 text-[#7A5C43]" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-card-foreground">{filterCounts.completed}</p>
-                <p className="text-sm text-muted-foreground">Hoàn thành</p>
-              </div>
-            </div>
-          </Card>
-          <Card className="p-4 bg-card border-border">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#EBE3D9]">
-                <AlertTriangle className="h-5 w-5 text-[#7A5C43]" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-card-foreground">{filterCounts.overdue}</p>
-                <p className="text-sm text-muted-foreground">Chậm tiến độ</p>
-              </div>
-            </div>
-          </Card>
+
+        {/* Stat Cards */}
+        <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+          {STAT_CARDS.map((s, i) => <StatCard key={i} {...s} />)}
         </div>
 
-        {/* Search & Filters */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        {/* Search + Refresh */}
+        <div className="flex gap-3">
           <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              placeholder="Tìm kiếm task..."
+              placeholder="Tìm mã đơn, sản phẩm hoặc tên nhân viên..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 bg-card"
+              onChange={e => setSearchQuery(e.target.value)}
+              className="pl-9 h-10 bg-card border-border/50"
             />
           </div>
+          <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" onClick={() => refetch()} disabled={isFetching}>
+            <RefreshCw className={cn("w-4 h-4", isFetching && "animate-spin")} />
+          </Button>
         </div>
 
-        {/* Filter Tabs */}
+        {/* Status Filters */}
         <div className="flex flex-wrap gap-2">
-          {filters.map((filter) => (
+          {PRODUCTION_STATUS_FILTERS.map(f => (
             <button
-              key={filter.id}
-              onClick={() => setActiveFilter(filter.id)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeFilter === filter.id
-                ? "bg-primary text-primary-foreground"
-                : "bg-card text-muted-foreground hover:bg-muted"
-                }`}
+              key={f.value}
+              onClick={() => setStatusFilter(f.value)}
+              className={cn(
+                "px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150",
+                statusFilter === f.value
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "bg-card text-muted-foreground border border-border/50 hover:bg-muted"
+              )}
             >
-              {filter.label}
-              <span className="ml-2 opacity-70">({filterCounts[filter.id as keyof typeof filterCounts]})</span>
+              {f.label}
             </button>
           ))}
         </div>
 
-        {/* Tasks Table */}
-        <Card className="bg-card border-border overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border bg-muted/50">
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase text-muted-foreground">
-                    Đơn sản xuất / Sản phẩm
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase text-muted-foreground">
-                    Nhân viên
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase text-muted-foreground">
-                    Tiến độ
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase text-muted-foreground">
-                    Trạng thái
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase text-muted-foreground">
-                    Thời hạn
-                  </th>
-                  <th className="px-6 py-4 text-right text-xs font-medium uppercase text-muted-foreground">
-                    Thao tác
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {isLoading ? (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground">
-                      <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-primary" />
-                      Đang tải dữ liệu...
-                    </td>
-                  </tr>
-                ) : paginatedTasks.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground">
-                      Không tìm thấy công việc nào.
-                    </td>
-                  </tr>
-                ) : paginatedTasks.map((task) => (
-                  <tr
-                    key={task.id}
-                    className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
-                  >
-                    <td className="px-6 py-4">
-                      <div>
-                        <Link href={`/production-management/orders/${task.orderId}`} className="font-medium text-primary hover:underline">
-                          {task.orderId}
-                        </Link>
-                        <p className="text-sm text-muted-foreground">{task.product || "Sản phẩm không xác định"}</p>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-                          {task.staffName && task.staffName !== "Chưa phân công"
-                            ? task.staffName.substring(0, 2).toUpperCase()
-                            : "NV"}
-                        </div>
-                        <span className="text-card-foreground">{task.staffName}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden max-w-[100px]">
-                          <div
-                            className={`h-full rounded-full transition-all ${task.status === "overdue" ? "bg-[#E04E4E]" : "bg-[#4A9C6B]"
-                              }`}
-                            style={{ width: `${task.progress || 0}%` }}
-                          />
-                        </div>
-                        <span className="text-sm text-muted-foreground w-10">
-                          {task.progress || 0}%
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <Badge
-                        className={`${statusConfig[task.status as keyof typeof statusConfig]?.color || "bg-muted text-muted-foreground"} border-0`}
-                      >
-                        {statusConfig[task.status as keyof typeof statusConfig]?.label || task.status}
-                      </Badge>
-                    </td>
-                    <td className="px-6 py-4 text-card-foreground">
-                      {task.endDate
-                        ? new Date(task.endDate).toLocaleDateString("vi-VN")
-                        : "Chưa xác định"}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      {(task.status === "overdue") && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="border-secondary text-secondary hover:bg-secondary/10"
-                          onClick={() => openReminderDialog(task)}
-                        >
-                          <Bell className="h-4 w-4 mr-1" />
-                          Nhắc nhở
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {/* Order List */}
+        {isLoading ? (
+          <div className="flex items-center justify-center py-20 gap-3 text-muted-foreground">
+            <Loader2 className="w-5 h-5 animate-spin text-primary" />
+            <span>Đang tải dữ liệu công việc...</span>
           </div>
-          <CustomPagination page={page} total={filteredTasks.length} pageSize={ITEMS_PER_PAGE} onChange={setPage} />
-        </Card>
+        ) : filteredOrders.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 rounded-2xl border-2 border-dashed text-center">
+            <Package className="w-10 h-10 text-muted-foreground/40 mb-3" />
+            <h3 className="text-base font-semibold mb-1">Không có đơn sản xuất nào</h3>
+            <p className="text-sm text-muted-foreground">Thay đổi bộ lọc hoặc từ khóa tìm kiếm.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground pl-1">
+              <strong>{filteredOrders.length}</strong> đơn — click vào để xem nhân viên &amp; tiến độ
+            </p>
+            {filteredOrders.map(order => <OrderRow key={order._id} order={order} />)}
+          </div>
+        )}
 
-        {/* Reminder Dialog */}
-        <Dialog open={isReminderOpen} onOpenChange={setIsReminderOpen}>
-          <DialogContent className="sm:max-w-md w-[95vw] max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="text-xl font-bold text-primary">
-                Nhắc nhở nhân viên
-              </DialogTitle>
-            </DialogHeader>
-            {selectedTask && (
-              <div className="space-y-4 py-4">
-                <div className="p-4 bg-muted/50 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-                      {selectedTask.staffName && selectedTask.staffName !== "Chưa phân công"
-                        ? selectedTask.staffName.substring(0, 2).toUpperCase()
-                        : "NV"}
-                    </div>
-                    <div>
-                      <p className="font-medium text-card-foreground">{selectedTask.staffName}</p>
-                      <p className="text-sm text-muted-foreground">{selectedTask.product}</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="reminder-message">Nội dung nhắc nhở</Label>
-                  <Textarea
-                    id="reminder-message"
-                    value={reminderMessage}
-                    onChange={(e) => setReminderMessage(e.target.value)}
-                    rows={4}
-                  />
-                </div>
-                <div className="flex justify-end gap-3 pt-4">
-                  <Button variant="outline" onClick={() => setIsReminderOpen(false)}>
-                    Hủy
-                  </Button>
-                  <Button
-                    onClick={handleSendReminder}
-                    className="bg-secondary hover:bg-secondary/90 text-white"
-                    disabled={!reminderMessage}
-                  >
-                    <Bell className="mr-2 h-4 w-4" />
-                    Gửi nhắc nhở
-                  </Button>
-                </div>
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
       </div>
     </DashboardLayout>
   )

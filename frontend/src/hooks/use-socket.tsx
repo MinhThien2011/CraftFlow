@@ -136,16 +136,23 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         newSocket.on("notification", (notification: Notification) => {
             console.log("[Socket] New notification received:", notification);
+            // Invalidate the notification list so the bell badge updates immediately
             queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
 
+            // Show a toast with role-aware action
+            const isTaskNotif = notification.type === "TASK"
             toast.info(notification.title, {
                 description: notification.message,
-                duration: 6000,
+                duration: 7000,
+                action: isTaskNotif
+                    ? { label: "Xem ngay", onClick: () => router.push("/staff/tasks") }
+                    : undefined,
             });
         });
 
         newSocket.on("data_changed", (event: any) => {
             console.log("[Socket] Data changed:", event);
+            // Only invalidate domains that are relevant — avoid thrashing unrelated caches
             invalidateRealtimeDomains(event?.domains || []);
         });
 

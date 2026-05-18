@@ -91,8 +91,11 @@ export const slipApi = {
     },
 
     // Lấy danh sách slip (có hỗ trợ filter type: 'import' | 'export')
-    getSlips: async (params?: { type?: string; category?: string; page?: number; limit?: number; search?: string; status?: string }): Promise<any> => {
-        return axiosInstance.get("/slips", { params });
+    getSlips: async (params?: { type?: string; category?: string; page?: number; limit?: number; search?: string; status?: string; withTotal?: boolean }): Promise<any> => {
+        const requestParams = params?.search
+            ? { ...params, slipNumber: params.search, search: undefined }
+            : params;
+        return axiosInstance.get("/slips", { params: requestParams });
     },
 
     // Cập nhật thông tin chi tiết slip (Production Manager / Admin)

@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
@@ -35,6 +35,8 @@ import { materialCategories, productCategories } from '@/lib/mock-data'
 import { useAuth } from '@/features/auth/hooks/use-auth'
 import { QRScanner } from '@/features/receiving/components/qr-scanner'
 import { ItemDetailDialog } from './item-detail-dialog'
+import { CreateMaterialDialog } from './create-material-dialog'
+import { ConfirmDeleteDialog } from '@/components/shared/confirm-delete-dialog'
 import { TransactionHistoryDialog } from '@/components/shared/transaction-history-dialog'
 import {
   DropdownMenu,
@@ -42,6 +44,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
 import { useDeleteMaterial } from '@/features/inventory/hooks/use-materials'
 import { getItemStockLevelMeta } from '../utils/stock-level'
 
@@ -110,6 +120,8 @@ export function WarehouseInventoryPage({ mode, title, subtitle, enableMaterialMa
   const [isScannerOpen, setIsScannerOpen] = useState(false)
   const [detailItem, setDetailItem] = useState<Material | Product | null>(null)
   const [historyItem, setHistoryItem] = useState<Material | Product | null>(null)
+  const [isCreateMaterialOpen, setIsCreateMaterialOpen] = useState(false)
+  const [itemToDelete, setItemToDelete] = useState<Material | null>(null)
 
 
   const deleteMaterialMutation = useDeleteMaterial()
@@ -233,10 +245,13 @@ export function WarehouseInventoryPage({ mode, title, subtitle, enableMaterialMa
   const canOpenDialogs = canShowFilters
   const canManageMaterial = enableMaterialManagement && isProductionManager && activeTab === 'materials'
 
-  const handleDeleteMaterial = (material: Material) => {
-    if (!confirm(`Bạn có chắc chắn muốn xóa nguyên vật liệu "${material.name}" không?`)) return
-    deleteMaterialMutation.mutate(material._id, {
-      onSuccess: () => fetchMaterials(),
+  const confirmDeleteMaterial = () => {
+    if (!itemToDelete) return
+    deleteMaterialMutation.mutate(itemToDelete._id, {
+      onSuccess: () => {
+        setItemToDelete(null)
+        fetchMaterials()
+      },
     })
   }
 
@@ -264,7 +279,7 @@ export function WarehouseInventoryPage({ mode, title, subtitle, enableMaterialMa
               </Button>
             )}
             {canManageMaterial && (
-              <Button onClick={() => toast.info('Tạo mới nguyên vật liệu đang dùng quy trình riêng.')}>
+              <Button onClick={() => setIsCreateMaterialOpen(true)}>
                 <Plus className="mr-2 h-4 w-4" /> Thêm nguyên liệu
               </Button>
             )}
@@ -373,7 +388,7 @@ export function WarehouseInventoryPage({ mode, title, subtitle, enableMaterialMa
                                     <Edit className="h-4 w-4 text-amber-600" /> Chỉnh sửa
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
-                                    onClick={() => handleDeleteMaterial(m)}
+                                    onClick={() => setItemToDelete(m)}
                                     className="gap-2 text-destructive focus:text-destructive"
                                   >
                                     <Trash2 className="h-4 w-4" /> Xóa
@@ -474,6 +489,29 @@ export function WarehouseInventoryPage({ mode, title, subtitle, enableMaterialMa
           fetchMaterials()
           fetchOverview()
         }}
+      />
+
+      <CreateMaterialDialog
+        open={isCreateMaterialOpen}
+        onOpenChange={(open) => {
+          setIsCreateMaterialOpen(open)
+          if (!open) {
+            fetchMaterials()
+            fetchOverview()
+          }
+        }}
+      />
+
+      {/* Modal Xác nhận Xóa Nguyên vật liệu */}
+      <ConfirmDeleteDialog
+        open={!!itemToDelete}
+        onOpenChange={(open) => !open && setItemToDelete(null)}
+        onConfirm={confirmDeleteMaterial}
+        title="Xác nhận xóa nguyên vật liệu"
+        description="Bạn có chắc chắn muốn xóa nguyên vật liệu này không? Hành động này sẽ loại bỏ hoàn toàn dữ liệu nguyên vật liệu khỏi hệ thống và không thể hoàn tác."
+        itemName={itemToDelete?.name}
+        itemCode={itemToDelete?.code}
+        isLoading={deleteMaterialMutation.isPending}
       />
     </AppShell>
   )

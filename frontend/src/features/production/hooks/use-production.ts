@@ -57,6 +57,22 @@ export function useUpdateOrderStatus() {
     });
 }
 
+export function useUpdateAssignmentStatus() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ id, data }: { id: string; data: { status: string; completedQuantity: number } }) =>
+            productionApi.updateAssignmentStatus(id, data),
+        onSuccess: (response, variables) => {
+            queryClient.invalidateQueries({ queryKey: productionKeys.all });
+            toast.success("Báo cáo tiến độ thành công");
+        },
+        onError: (error: any) => {
+            toast.error(error.response?.data?.message || error.message || "Báo cáo thất bại");
+        }
+    });
+}
+
 export function useAssignOrder() {
     const queryClient = useQueryClient();
 

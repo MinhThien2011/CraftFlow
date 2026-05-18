@@ -96,7 +96,7 @@ function DialogContent({
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
-        className={cn(dialogVariants({ size }), 'max-h-[95vh] overflow-y-auto', className)}
+        className={cn(dialogVariants({ size }), 'max-h-[95vh] overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]', className)}
         {...props}
       >
         {needsFallbackDescription && (

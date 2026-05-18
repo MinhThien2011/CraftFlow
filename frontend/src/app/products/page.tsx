@@ -23,13 +23,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { productCategories } from "@/lib/mock-data"
+const DEFAULT_CATEGORIES = [
+  "Thú nhồi bông",
+  "Túi xách",
+  "Phụ kiện thời trang",
+  "Móc khóa",
+  "Quần áo",
+  "Đồ trang trí",
+]
 import { cn } from "@/lib/utils"
 import { productApi } from "@/api/product.api"
 import type { Product, PaginationData } from "@/lib/types"
 import { toast } from "sonner"
 import { useAuth } from "@/features/auth/hooks/use-auth"
 import { TransactionHistoryDialog } from "@/components/shared/transaction-history-dialog"
+import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog"
 
 type TabType = "products" | "bom"
 
@@ -53,6 +61,8 @@ export default function ProductsPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>("All")
   const [currentPage, setCurrentPage] = useState(1)
   const [historyItem, setHistoryItem] = useState<Product | null>(null)
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   // API States
   const [products, setProducts] = useState<Product[]>([])
@@ -123,17 +133,27 @@ export default function ProductsPage() {
     setCurrentPage(1)
   }
 
-  const handleDeleteProduct = async (id: string) => {
-    if (!confirm("Bạn có chắc chắn muốn xóa sản phẩm này?")) return
+  const handleDeleteProduct = (id: string) => {
+    const prod = products.find((p) => p._id === id)
+    if (prod) {
+      setProductToDelete(prod)
+    }
+  }
 
+  const confirmDeleteProduct = async () => {
+    if (!productToDelete) return
+    setIsDeleting(true)
     try {
-      const response = await productApi.deleteProduct(id)
+      const response = await productApi.deleteProduct(productToDelete._id)
       if (response.success) {
         toast.success("Đã xóa sản phẩm thành công")
+        setProductToDelete(null)
         handleRefresh()
       }
     } catch (error: any) {
       toast.error(error.message || "Lỗi khi xóa sản phẩm")
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -142,13 +162,13 @@ export default function ProductsPage() {
     return {
       total: pagination?.total || 0,
       withBOM: products.filter(p => p.estimateMaterialCost && p.estimateMaterialCost.length > 0).length,
-      categories: categories.length || productCategories.length
+      categories: categories.length || DEFAULT_CATEGORIES.length
     }
   }, [pagination, products])
 
   const categories = useMemo(() => {
     const apiCategories = Array.from(new Set(products.map(p => p.category))).filter(Boolean)
-    const allCategories = Array.from(new Set([...productCategories, ...apiCategories]))
+    const allCategories = Array.from(new Set([...DEFAULT_CATEGORIES, ...apiCategories]))
     return allCategories.sort()
   }, [products])
 
@@ -298,6 +318,17 @@ export default function ProductsPage() {
             itemType="product"
           />
         )}
+
+        <ConfirmDeleteDialog
+          open={!!productToDelete}
+          onOpenChange={(open) => !open && setProductToDelete(null)}
+          onConfirm={confirmDeleteProduct}
+          title="Xác nhận xóa sản phẩm"
+          description="Bạn có chắc chắn muốn xóa sản phẩm này không? Hành động này sẽ loại bỏ hoàn toàn sản phẩm và các thông tin BOM liên quan khỏi hệ thống và không thể hoàn tác."
+          itemName={productToDelete?.name}
+          itemCode={productToDelete?.code}
+          isLoading={isDeleting}
+        />
       </div>
     </AppShell>
   )

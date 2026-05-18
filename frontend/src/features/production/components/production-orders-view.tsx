@@ -23,38 +23,6 @@ const CreateOrderModal = dynamic(
   { ssr: false },
 )
 
-const statusFilters = [
-  { value: "all", label: "Tất cả" },
-  { value: "pending", label: "Chờ xử lý" },
-  { value: "in_production", label: "Đang sản xuất" },
-  { value: "completed", label: "Hoàn thành" },
-  { value: "cancelled", label: "Đã hủy" },
-]
-
-const getStatusConfig = (status: string) => {
-  switch (status?.toLowerCase()) {
-    case "pending":
-      return { label: "Chờ xử lý", color: "text-gray-700 border-gray-300 bg-gray-100/50", bgClass: "bg-gray-50 dark:bg-gray-800/40 border-gray-200 dark:border-gray-800" }
-    case "in_production":
-    case "in_progress":
-      return { label: "Đang sản xuất", color: "text-blue-700 border-blue-300 bg-blue-100/50", bgClass: "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-900/50" }
-    case "ready_to_assign":
-      return { label: "Sẵn sàng phân công", color: "text-green-700 border-green-300 bg-green-100/50", bgClass: "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-900/50" }
-      case "completed":
-      return { label: "Hoàn thành", color: "text-emerald-700 border-emerald-300 bg-emerald-100/50", bgClass: "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-900/50" }
-    case "paused":
-    case "on_hold":
-      return { label: "Tạm dừng", color: "text-amber-700 border-amber-300 bg-amber-100/50", bgClass: "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-900/50" }
-    case "waiting_material":
-        return { label: "Chờ nguyên liệu", color: "text-orange-700 border-orange-300 bg-orange-100/50", bgClass: "bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-900/50" } 
-    case "insufficient_materials":
-      return { label: "Thiếu nguyên liệu", color: "text-orange-700 border-orange-300 bg-orange-100/50", bgClass: "bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-900/50" }
-    case "cancelled":
-      return { label: "Đã hủy", color: "text-red-700 border-red-300 bg-red-100/50", bgClass: "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-900/50" }
-    default:
-      return { label: status || "Chưa xác định", color: "text-gray-700 border-gray-300 bg-gray-100/50", bgClass: "bg-gray-50 dark:bg-gray-800/40 border-gray-200 dark:border-gray-800" }
-  }
-}
 
 interface ProductionOrdersViewProps {
   detailBasePath: string
@@ -175,44 +143,63 @@ export function ProductionOrdersView({ detailBasePath, canCreate = false }: Prod
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end gap-2 mb-2">
-        {canCreate && (
-          <Button onClick={() => setIsCreateOpen(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-            <Plus className="mr-2 h-4 w-4" />
-            Tạo đơn mới
-          </Button>
-        )}
-        <Button variant="outline" size="icon" onClick={() => fetchOrders()} disabled={isRefreshing || isLoading}>
-          <RefreshCw className={cn("h-4 w-4", (isRefreshing || isLoading) && "animate-spin")} />
-        </Button>
-      </div>
+      <div className="flex items-center justify-between w-full bg-card p-3 rounded-2xl border shadow-sm min-h-[72px] gap-3">
+        {/* Left: Search Bar */}
+        <div className="relative shrink-0 w-[220px]">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Tìm mã đơn, tên sản phẩm..."
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            className="pl-9 bg-muted/40 border-transparent hover:bg-muted/60 focus-visible:bg-background focus-visible:ring-primary/20 h-11 rounded-xl transition-colors text-sm"
+          />
+        </div>
 
-      <Card className="border-none bg-card shadow-sm">
-        <CardContent className="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between">
-          <div className="relative flex-1 md:max-w-md">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Tìm kiếm mã đơn hoặc tên sản phẩm..."
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              className="pl-9 bg-background"
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
+        {/* Middle: Scrollable Status Filters */}
+        <div className="flex-1 min-w-0 overflow-x-auto px-3 pb-1 md:pb-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] max-w-full sm:max-w-[340px] md:max-w-[480px] lg:max-w-[620px] xl:max-w-[780px]">
+          <div className="flex items-center gap-1.5 w-max">
             {PRODUCTION_STATUS_FILTERS.map((filter) => (
               <Button
                 key={filter.value}
-                variant={statusFilter === filter.value ? "default" : "outline"}
+                variant="ghost"
                 size="sm"
                 onClick={() => setStatusFilter(filter.value)}
-                className={cn("transition-all duration-200", statusFilter === filter.value ? "shadow-md" : "hover:bg-muted")}
+                className={cn(
+                  "h-10 px-4 text-sm font-semibold rounded-xl transition-all duration-200 shrink-0",
+                  statusFilter === filter.value
+                    ? "bg-muted text-foreground shadow-sm font-bold"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                )}
               >
                 {filter.label}
               </Button>
             ))}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+
+        {/* Right: Actions */}
+        <div className="flex items-center gap-2.5 shrink-0 pl-4 border-l border-border pr-1">
+          {canCreate && (
+            <Button
+              onClick={() => setIsCreateOpen(true)}
+              className="bg-primary hover:bg-primary/95 text-primary-foreground shadow-sm h-10 px-4 rounded-xl text-sm font-semibold shrink-0"
+            >
+              <Plus className="mr-1.5 h-4 w-4" />
+              Tạo đơn mới
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => fetchOrders()}
+            disabled={isRefreshing || isLoading}
+            className="h-10 w-10 rounded-xl border-gray-200 hover:bg-muted shrink-0"
+            title="Làm mới"
+          >
+            <RefreshCw className={cn("h-4 w-4", (isRefreshing || isLoading) && "animate-spin")} />
+          </Button>
+        </div>
+      </div>
 
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {isLoading ? (

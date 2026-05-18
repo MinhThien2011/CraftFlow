@@ -75,9 +75,13 @@ export function AppHeader({ title, subtitle }: AppHeaderProps) {
       markReadMutation.mutate(n._id)
     }
 
-    // Điều hướng dựa trên metaData nếu có
+    // Route based on role and metaData — staff must not access production-management paths
     if (n.metaData?.orderId) {
-      router.push(`/production-management/orders/${n.metaData.orderId}`)
+      if (role === "staff") {
+        router.push(`/staff/tasks`)
+      } else {
+        router.push(`/production-management/orders/${n.metaData.orderId}`)
+      }
     } else if (n.metaData?.purchaseOrderId) {
       router.push('/production-management/purchase-orders')
     } else if (n.metaData?.slipId || n.metaData?.slipNumber) {
@@ -96,7 +100,7 @@ export function AppHeader({ title, subtitle }: AppHeaderProps) {
   }
 
   return (
-    <header className="flex h-[72px] items-center justify-between rounded-[1.5rem] border border-border/40 bg-gradient-to-r from-pink-50/90 to-purple-50/90 dark:from-pink-950/50 dark:to-purple-950/50 px-6 backdrop-blur-xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.2)] transition-all duration-300 relative z-30">
+    <header className="flex h-[80px] items-center justify-between rounded-[1.5rem] border border-border/40 bg-gradient-to-r from-pink-50/90 to-purple-50/90 dark:from-pink-950/50 dark:to-purple-950/50 px-6 backdrop-blur-xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.2)] transition-all duration-300 relative z-30">
       <div className="flex items-center gap-5">
         <Button variant="ghost" size="icon" onClick={toggleSidebar} className="lg:hidden rounded-xl bg-primary/5 hover:bg-primary/10 text-primary transition-colors">
           <Menu className="h-5 w-5" />
@@ -195,7 +199,9 @@ export function AppHeader({ title, subtitle }: AppHeaderProps) {
             <Button variant="ghost" size="sm" className="group gap-3 px-2 py-1.5 h-auto hover:bg-primary/5 rounded-full border border-transparent hover:border-primary/20 transition-all outline-none focus-visible:ring-2 focus-visible:ring-primary/50">
               <div className="hidden md:flex flex-col items-end text-right leading-tight">
                 <span className="text-sm font-bold text-foreground group-hover:text-primary transition-colors">{user?.fullName || user?.username || "Người dùng"}</span>
-                <span className="text-[10px] font-bold text-primary/80 uppercase tracking-wider">{role.replace("_", " ")}</span>
+              <span className="text-[10px] font-bold text-primary/80 uppercase tracking-wider">
+                {role === "kho_manager" ? "Quản lý kho" : role === "production_manager" ? "Quản lý SẢN XUẤT" : role === "staff" ? "Nhân viên" : role?.replace("_", " ")}
+              </span>
               </div>
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 to-primary/5 ring-2 ring-primary/20 overflow-hidden relative shadow-sm transition-transform duration-300 group-hover:scale-105 group-hover:shadow-[0_0_15px_rgba(219,39,119,0.3)]">
                 {getAvatarUrl(user?.avatar) ? (

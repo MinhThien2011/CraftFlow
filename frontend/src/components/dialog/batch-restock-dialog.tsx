@@ -118,9 +118,18 @@ export function BatchRestockDialog({ open, onOpenChange, selectedMaterials, onSu
         .filter((item) => item.material.alertType === "order_requirement")
         .map((item) => item.material.alertId)
         .filter(Boolean)
+      const sourceProductionOrderIds = Array.from(new Set(
+        validItems
+          .filter((item) => item.material.alertType === "order_requirement")
+          .map((item) => getProductionOrderId(item.material.productionOrder))
+          .filter(Boolean)
+      ))
       if (alertIds.length > 0) {
         payload.materialAlert = alertIds[0]
-        if (alertIds.length > 1) payload.materialAlerts = alertIds
+        payload.materialAlerts = alertIds
+      }
+      if (sourceProductionOrderIds.length > 0) {
+        payload.sourceProductionOrders = sourceProductionOrderIds
       }
 
       const res: any = await purchaseOrderApi.create(payload)

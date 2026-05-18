@@ -17,6 +17,16 @@ export const PRODUCTION_ORDER_STATUS = {
 export type ProductionOrderStatus =
   (typeof PRODUCTION_ORDER_STATUS)[keyof typeof PRODUCTION_ORDER_STATUS]
 
+// ─── Assignment statuses (staff-level) ─────────────────────────────────────
+export const ASSIGNMENT_STATUS = {
+  ASSIGNED: "assigned",
+  IN_PRODUCTION: "in_production",
+  PARTIALLY_COMPLETE: "partially_complete",
+  COMPLETED: "completed",
+} as const
+
+export type AssignmentStatus = (typeof ASSIGNMENT_STATUS)[keyof typeof ASSIGNMENT_STATUS]
+
 type StatusConfig = {
   label: string
   color: string
@@ -105,6 +115,26 @@ export const PRODUCTION_ORDER_STATUS_CONFIG: Record<ProductionOrderStatus, Statu
   },
 }
 
+/** Assignment-level status config (staff task tracking) */
+export const ASSIGNMENT_STATUS_CONFIG: Record<AssignmentStatus, Pick<StatusConfig, "label" | "color">> = {
+  assigned: {
+    label: "Mới giao",
+    color: "text-blue-700 border-blue-200 bg-blue-100/60 dark:bg-blue-900/30 dark:text-blue-400",
+  },
+  in_production: {
+    label: "Đang thực hiện",
+    color: "text-amber-700 border-amber-200 bg-amber-100/60 dark:bg-amber-900/30 dark:text-amber-400",
+  },
+  partially_complete: {
+    label: "Hoàn thành một phần",
+    color: "text-purple-700 border-purple-200 bg-purple-100/60 dark:bg-purple-900/30 dark:text-purple-400",
+  },
+  completed: {
+    label: "Đã hoàn thành",
+    color: "text-emerald-700 border-emerald-200 bg-emerald-100/60 dark:bg-emerald-900/30 dark:text-emerald-400",
+  },
+}
+
 const FALLBACK_STATUS_CONFIG: StatusConfig = {
   label: "Chưa xác định",
   color: "text-gray-700 border-gray-300 bg-gray-100/50",
@@ -126,13 +156,45 @@ export const PRODUCTION_STATUS_FILTERS = [
 
 export function getProductionOrderStatusConfig(status?: string): StatusConfig {
   const normalized = status?.toLowerCase() as ProductionOrderStatus | undefined
-
   if (normalized && normalized in PRODUCTION_ORDER_STATUS_CONFIG) {
     return PRODUCTION_ORDER_STATUS_CONFIG[normalized]
   }
+  return { ...FALLBACK_STATUS_CONFIG, label: status || FALLBACK_STATUS_CONFIG.label }
+}
 
-  return {
-    ...FALLBACK_STATUS_CONFIG,
-    label: status || FALLBACK_STATUS_CONFIG.label,
+export function getAssignmentStatusConfig(status?: string): Pick<StatusConfig, "label" | "color"> {
+  const normalized = status?.toLowerCase() as AssignmentStatus | undefined
+  if (normalized && normalized in ASSIGNMENT_STATUS_CONFIG) {
+    return ASSIGNMENT_STATUS_CONFIG[normalized]
   }
+  return {
+    label: status || "Chưa xác định",
+    color: "text-gray-700 border-gray-300 bg-gray-100/50",
+  }
+}
+
+// ─── Priority config ────────────────────────────────────────────────────────
+
+export type Priority = "urgent" | "high" | "medium" | "normal" | "low"
+
+type PriorityConfig = { label: string; color: string }
+
+export const PRIORITY_CONFIG: Record<Priority, PriorityConfig> = {
+  urgent: { label: "Khẩn cấp",    color: "text-red-700 bg-red-50 border-red-200 dark:bg-red-950/30 dark:text-red-400" },
+  high:   { label: "Cao",         color: "text-orange-700 bg-orange-50 border-orange-200 dark:bg-orange-950/30 dark:text-orange-400" },
+  medium: { label: "Trung bình",  color: "text-blue-700 bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400" },
+  normal: { label: "Bình thường", color: "text-blue-700 bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400" },
+  low:    { label: "Thấp",        color: "text-slate-600 bg-slate-50 border-slate-200 dark:bg-slate-800/40 dark:text-slate-400" },
+}
+
+const FALLBACK_PRIORITY: PriorityConfig = {
+  label: "Bình thường",
+  color: "text-slate-600 bg-slate-50 border-slate-200 dark:bg-slate-800/40 dark:text-slate-400",
+}
+
+/** Returns Vietnamese label + Tailwind color classes for a production order priority. */
+export function getPriorityConfig(priority?: string): PriorityConfig {
+  if (!priority) return FALLBACK_PRIORITY
+  const normalized = priority.toLowerCase() as Priority
+  return PRIORITY_CONFIG[normalized] ?? { ...FALLBACK_PRIORITY, label: priority }
 }

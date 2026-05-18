@@ -6,6 +6,7 @@ const purchaseOrderSchema = joi.object({
     priority: joi.string().valid('low', 'medium', 'high', 'urgent').default('medium'),
     productionOrder: joi.string().allow('', null),
     materialAlert: joi.string().allow('', null),
+    materialAlerts: joi.array().items(joi.string()).optional().default([]),
     purchaseOrderItems: joi.array().items(joi.object({
         material: joi.string().required(),
         quantity: joi.number().min(0.001).required(),

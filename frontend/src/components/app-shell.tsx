@@ -50,7 +50,7 @@ function AppShellSkeleton() {
       <div className="flex min-w-0 flex-1 flex-col z-10">
         {/* Floating Header Skeleton */}
         <div className="pt-4 px-4 shrink-0">
-          <header className="flex h-[72px] items-center justify-between rounded-2xl border border-border/40 bg-card/60 px-6 backdrop-blur-xl shadow-lg">
+          <header className="flex h-[80px] items-center justify-between rounded-2xl border border-border/40 bg-card/60 px-6 backdrop-blur-xl shadow-lg">
             <div className="space-y-2">
               <Skeleton className="h-6 w-48 bg-muted" />
               <Skeleton className="h-3 w-64 bg-muted/50" />
@@ -92,6 +92,7 @@ export function AppShell({ children, title, subtitle }: AppShellProps) {
     const isAdminReportsPath = pathname.startsWith("/reports") && !isReportsInventoryPath
     const isInventoryRootPath = pathname === "/inventory" || pathname === "/inventory/"
     const isKhoInventoryAllowedPath = isInventoryRootPath || pathname.startsWith("/inventory/stocktake")
+    const isStaffPath = pathname.startsWith("/staff")
 
     return {
       isWarehouseFeaturePath: warehouseFeaturePrefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`)),
@@ -101,6 +102,7 @@ export function AppShell({ children, title, subtitle }: AppShellProps) {
       isAdminReportsPath,
       isInventoryRootPath,
       isKhoInventoryAllowedPath,
+      isStaffPath,
     }
   }, [pathname])
 
@@ -117,6 +119,7 @@ export function AppShell({ children, title, subtitle }: AppShellProps) {
       isInventoryRootPath,
       isKhoInventoryAllowedPath,
       isWarehouseFeaturePath,
+      isStaffPath,
     } = pathConfig
 
     if (role === "admin") {
@@ -143,6 +146,13 @@ export function AppShell({ children, title, subtitle }: AppShellProps) {
       return isAllowedPMPath ? null : "/production-management/dashboard"
     }
 
+    // Staff role: only allowed on /staff/* and /settings
+    if (role === "staff") {
+      const isAllowedStaffPath = isStaffPath || pathname === "/settings"
+      return isAllowedStaffPath ? null : "/staff/tasks"
+    }
+
+    // Fallback: any other role that lands on restricted paths
     if (isProductionManagerPath || isAdminPath || isWarehouseFeaturePath) {
       return "/dashboard"
     }

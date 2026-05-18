@@ -16,7 +16,9 @@ export interface PurchaseOrder {
     status: 'pending' | 'accepted' | 'rejected' | 'completed';
     priority: 'low' | 'medium' | 'high';
     productionOrder?: string | any;
+    sourceProductionOrders?: Array<string | any>;
     materialAlert?: string | any;
+    materialAlerts?: Array<string | any>;
     orderReason: string;
     adminNotes: string;
     purchaseOrderItems: PurchaseOrderItem[];

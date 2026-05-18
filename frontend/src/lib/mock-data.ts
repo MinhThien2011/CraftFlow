@@ -240,7 +240,7 @@ export const boms: BOM[] = [
 ]
 
 // Production orders
-export const productionOrders: ProductionOrder[] = [
+export const productionOrders: any[] = [
   {
     id: "1",
     productId: "1",

@@ -6,6 +6,7 @@ import {
   getMaterialById,
   createMaterial,
   updateMaterial,
+  deleteMaterial,
   adjustStock,
   adjustStockByCode,
   getMaterialHistory
@@ -29,6 +30,7 @@ materialRouter.get('/:id/history', getMaterialHistory);
 // --- Admin & Warehouse Manager: Management ---
 materialRouter.post('/', rolePermission([ROLES.PRODUCTION_MANAGER]), createMaterial);
 materialRouter.patch('/:id', rolePermission([ROLES.PRODUCTION_MANAGER]), updateMaterial);
+materialRouter.delete('/:id', rolePermission([ROLES.PRODUCTION_MANAGER]), deleteMaterial);
 
 // --- Admin: Inventory Adjustments ---
 materialRouter.post('/adjust-by-code', rolePermission([ROLES.ADMIN]), adjustStockByCode);

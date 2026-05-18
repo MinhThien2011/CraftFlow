@@ -34,6 +34,7 @@ import { useAuth } from "@/features/auth/hooks/use-auth"
 import { productApi } from "@/api/product.api"
 import { shelfApi, type Shelf } from "@/api/shelf.api"
 import { toast } from "sonner"
+import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog"
 
 const categories = [
   "Amigurumi",
@@ -64,6 +65,7 @@ export default function ProductDetailPage() {
 
   const [isEditing, setIsEditing] = useState(isNew)
   const [isCreating, setIsCreating] = useState(false)
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false)
   const [formData, setFormData] = useState({
     name: "",
     code: "",
@@ -217,13 +219,16 @@ export default function ProductDetailPage() {
   }
 
   const handleDelete = () => {
-    if (confirm("Bạn có chắc chắn muốn xóa sản phẩm này?")) {
-      deleteProductMutation.mutate(id, {
-        onSuccess: () => {
+    setIsDeleteOpen(true)
+  }
+  const confirmDelete = () => {
+    deleteProductMutation.mutate(id, {
+      onSuccess: () => {
+        setIsDeleteOpen(false)
           router.push("/products")
         }
       })
-    }
+      // end of confirmDelete
   }
 
   const addBomItem = () => {
@@ -622,6 +627,16 @@ export default function ProductDetailPage() {
           </Card>
         </div>
       </form>
+      <ConfirmDeleteDialog
+        open={isDeleteOpen}
+        onOpenChange={setIsDeleteOpen}
+        onConfirm={confirmDelete}
+        title="Xác nhận xóa sản phẩm"
+        description="Bạn có chắc chắn muốn xóa sản phẩm này không? Hành động này sẽ loại bỏ hoàn toàn sản phẩm và định mức BOM liên quan khỏi hệ thống và không thể hoàn tác."
+        itemName={formData.name}
+        itemCode={formData.code}
+        isLoading={deleteProductMutation.isPending}
+      />
     </DashboardLayout>
   )
 }

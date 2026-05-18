@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useMemo, useRef } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -14,13 +15,6 @@ import { QRCodeSVG } from 'qrcode.react'
 import Barcode from 'react-barcode'
 import { QRScanner } from "@/features/receiving/components/qr-scanner"
 import { useShelves } from "@/features/inventory/hooks/use-shelves"
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
 
 /**
  * Chuyển đổi số thành chữ tiếng Việt
@@ -86,6 +80,7 @@ export interface SlipDetailDialogProps {
     onStatusUpdate?: (status: string, items: any[]) => void
     onStockingAssignment?: (slip: Slip, items: SlipItem[]) => void
     isUpdating?: boolean
+    readOnly?: boolean
 }
 
 export function SlipDetailDialog({
@@ -97,8 +92,10 @@ export function SlipDetailDialog({
     onSave,
     onStatusUpdate,
     onStockingAssignment,
-    isUpdating = false
+    isUpdating = false,
+    readOnly = false
 }: SlipDetailDialogProps) {
+    const queryClient = useQueryClient()
     const [editableItems, setEditableItems] = useState<SlipItem[]>([])
     const [editableSlipInfo, setEditableSlipInfo] = useState({
         personName: '',
@@ -124,12 +121,16 @@ export function SlipDetailDialog({
     const currentStatus = slip?.status || 'pending'
 
 
-    // Xác định các quyền chỉnh sửa dựa trên trạng thái
-    const canEditProvisional = isImport && currentStatus === 'pending'
-    const canEditActual = (isImport && currentStatus === 'received') || (!isImport && currentStatus === 'received')
-    const canEditInfo = isImport
+    const canManageWorkflow = !readOnly && !!onStatusUpdate
+    const canSaveDetails = !readOnly && !!onSave
+    const canUploadEvidence = !readOnly
+
+    // Xác định các quyền chỉnh sửa dựa trên trạng thái và ngữ cảnh mở phiếu
+    const canEditProvisional = canManageWorkflow && isImport && currentStatus === 'pending'
+    const canEditActual = canManageWorkflow && ((isImport && currentStatus === 'received') || (!isImport && currentStatus === 'inspecting'))
+    const canEditInfo = canSaveDetails && (isImport
         ? ['pending', 'received', 'inspected'].includes(currentStatus)
-        : ['pending', 'received', 'inspecting'].includes(currentStatus)
+        : ['pending', 'received', 'inspecting'].includes(currentStatus))
 
     useEffect(() => {
         if (slip) {
@@ -148,14 +149,6 @@ export function SlipDetailDialog({
                 items.forEach((item: any) => {
                     if (!item.quantity.actual || item.quantity.actual === 0) {
                         item.quantity.actual = item.quantity.provisional || item.quantity.requested || 0
-                    }
-                })
-            }
-            // Tự động điền số lượng thực xuất = yêu cầu nếu đang ở bước received
-            else if (!isImport && currentStatus === 'received') {
-                items.forEach((item: any) => {
-                    if (!item.quantity.actual || item.quantity.actual === 0) {
-                        item.quantity.actual = item.quantity.requested || 0
                     }
                 })
             }
@@ -256,6 +249,19 @@ export function SlipDetailDialog({
             newItems[idx].amount = val * (newItems[idx].unitPrice || 0)
             setEditableItems(newItems)
         }
+    }
+
+    const buildStatusItems = (nextStatus: string) => {
+        return editableItems.map(item => {
+            return {
+                itemCode: item.itemCode,
+                material: item.material,
+                product: item.product,
+                actualQuantity: item.quantity.actual || 0,
+                ...(isImport ? { provisionalQuantity: item.quantity.provisional } : {}),
+                itemNote: item.itemNote || ""
+            }
+        })
     }
 
     // Hàm phát âm thanh khi quét QR
@@ -363,7 +369,7 @@ export function SlipDetailDialog({
                 case 'pending':
                     return { label: 'Bắt đầu soạn hàng', nextStatus: 'received', color: 'bg-blue-600' }
                 case 'received':
-                    return { label: 'Bắt đầu kiểm kê', nextStatus: 'inspecting', color: 'bg-indigo-600' }
+                    return null
                 case 'inspecting':
                     return { label: 'Hoàn tất xuất kho', nextStatus: 'completed', color: 'bg-emerald-600' }
                 default:
@@ -385,6 +391,9 @@ export function SlipDetailDialog({
         setUploading(true)
         try {
             await slipApi.uploadSlipImages(slip._id, selectedFiles)
+            queryClient.invalidateQueries({ queryKey: ['slips'] })
+            queryClient.invalidateQueries({ queryKey: ['product-export-requests'] })
+            queryClient.invalidateQueries({ queryKey: ['requisitions'] })
             toast.success("Tải lên ảnh chứng từ thành công")
             setSelectedFiles([])
             // Có thể cần refresh lại dữ liệu slip ở đây hoặc báo cho component cha
@@ -505,6 +514,7 @@ export function SlipDetailDialog({
                                     <input
                                         className="border-b border-dotted border-black px-1 min-w-[150px] bg-transparent outline-none focus:bg-emerald-50/30 transition-colors"
                                         value={editableSlipInfo.unit}
+                                        readOnly={!canEditInfo}
                                         onChange={(e) => setEditableSlipInfo({ ...editableSlipInfo, unit: e.target.value })}
                                         placeholder="CRAFTFLOW"
                                     />
@@ -514,6 +524,7 @@ export function SlipDetailDialog({
                                     <input
                                         className="border-b border-dotted border-black px-1 min-w-[150px] bg-transparent outline-none focus:bg-emerald-50/30 transition-colors"
                                         value={editableSlipInfo.department}
+                                        readOnly={!canEditInfo}
                                         onChange={(e) => setEditableSlipInfo({ ...editableSlipInfo, department: e.target.value })}
                                         placeholder="Kho vật tư"
                                     />
@@ -565,6 +576,7 @@ export function SlipDetailDialog({
                                         <input
                                             className="border-b border-dotted border-black px-2 w-[80px] bg-transparent outline-none focus:bg-emerald-50/30 transition-colors ml-1"
                                             value={editableSlipInfo.accounting.debit}
+                                            readOnly={!canEditInfo}
                                             onChange={(e) => setEditableSlipInfo({
                                                 ...editableSlipInfo,
                                                 accounting: { ...editableSlipInfo.accounting, debit: e.target.value }
@@ -575,6 +587,7 @@ export function SlipDetailDialog({
                                         <input
                                             className="border-b border-dotted border-black px-2 w-[80px] bg-transparent outline-none focus:bg-emerald-50/30 transition-colors ml-1"
                                             value={editableSlipInfo.accounting.credit}
+                                            readOnly={!canEditInfo}
                                             onChange={(e) => setEditableSlipInfo({
                                                 ...editableSlipInfo,
                                                 accounting: { ...editableSlipInfo.accounting, credit: e.target.value }
@@ -592,6 +605,7 @@ export function SlipDetailDialog({
                                 <input
                                     className="flex-1 border-b border-dotted border-black min-h-[1.2rem] px-2 font-medium bg-transparent outline-none focus:bg-emerald-50/30 transition-colors"
                                     value={editableSlipInfo.personName}
+                                    readOnly={!canEditInfo}
                                     onChange={(e) => setEditableSlipInfo({ ...editableSlipInfo, personName: e.target.value })}
                                 />
                             </div>
@@ -600,6 +614,7 @@ export function SlipDetailDialog({
                                 <input
                                     className="border-b border-dotted border-black min-w-[120px] max-w-[150px] text-center px-1 bg-transparent outline-none focus:bg-emerald-50/30 transition-colors font-medium"
                                     value={editableSlipInfo.referenceDoc.description}
+                                    readOnly={!canEditInfo}
                                     onChange={(e) => setEditableSlipInfo({
                                         ...editableSlipInfo,
                                         referenceDoc: { ...editableSlipInfo.referenceDoc, description: e.target.value }
@@ -609,6 +624,7 @@ export function SlipDetailDialog({
                                 <input
                                     className="border-b border-dotted border-black min-w-[80px] max-w-[120px] text-center px-1 bg-transparent outline-none focus:bg-emerald-50/30 transition-colors font-medium"
                                     value={editableSlipInfo.referenceDoc.number}
+                                    readOnly={!canEditInfo}
                                     onChange={(e) => setEditableSlipInfo({
                                         ...editableSlipInfo,
                                         referenceDoc: { ...editableSlipInfo.referenceDoc, number: e.target.value }
@@ -619,6 +635,7 @@ export function SlipDetailDialog({
                                     type="date"
                                     className="border-b border-dotted border-black min-w-[130px] text-center px-1 bg-transparent outline-none focus:bg-emerald-50/30 transition-colors font-medium cursor-pointer"
                                     value={editableSlipInfo.referenceDoc.date}
+                                    readOnly={!canEditInfo}
                                     onChange={(e) => setEditableSlipInfo({
                                         ...editableSlipInfo,
                                         referenceDoc: { ...editableSlipInfo.referenceDoc, date: e.target.value }
@@ -628,6 +645,7 @@ export function SlipDetailDialog({
                                 <input
                                     className="flex-1 border-b border-dotted border-black min-w-[200px] px-2 bg-transparent outline-none focus:bg-emerald-50/30 transition-colors font-medium"
                                     value={editableSlipInfo.referenceDoc.issuer}
+                                    readOnly={!canEditInfo}
                                     onChange={(e) => setEditableSlipInfo({
                                         ...editableSlipInfo,
                                         referenceDoc: { ...editableSlipInfo.referenceDoc, issuer: e.target.value }
@@ -639,6 +657,7 @@ export function SlipDetailDialog({
                                 <input
                                     className="border-b border-dotted border-black min-w-[180px] px-2 font-medium bg-transparent outline-none focus:bg-emerald-50/30 transition-colors"
                                     value={editableSlipInfo.warehouse.name}
+                                    readOnly={!canEditInfo}
                                     onChange={(e) => setEditableSlipInfo({
                                         ...editableSlipInfo,
                                         warehouse: { ...editableSlipInfo.warehouse, name: e.target.value }
@@ -648,6 +667,7 @@ export function SlipDetailDialog({
                                 <input
                                     className="flex-1 border-b border-dotted border-black px-2 font-medium bg-transparent outline-none focus:bg-emerald-50/30 transition-colors"
                                     value={editableSlipInfo.warehouse.location}
+                                    readOnly={!canEditInfo}
                                     onChange={(e) => setEditableSlipInfo({
                                         ...editableSlipInfo,
                                         warehouse: { ...editableSlipInfo.warehouse, location: e.target.value }
@@ -774,6 +794,7 @@ export function SlipDetailDialog({
                                 <input
                                     className="flex-1 border-b border-dotted border-black px-2 font-medium bg-transparent outline-none focus:bg-emerald-50/30 transition-colors"
                                     value={editableSlipInfo.originalDocsCount}
+                                    readOnly={!canEditInfo}
                                     onChange={(e) => setEditableSlipInfo({ ...editableSlipInfo, originalDocsCount: e.target.value })}
                                 />
                             </div>
@@ -826,7 +847,7 @@ export function SlipDetailDialog({
                         )}
 
                         {/* Upload Evidence Section (Warehouse Only) */}
-                        {((isImport && currentStatus === 'in_stock') || (!isImport && currentStatus === 'completed')) && (
+                        {canUploadEvidence && ((isImport && currentStatus === 'in_stock') || (!isImport && currentStatus === 'completed')) && (
                             <div className="mb-10 p-4 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50 print:hidden">
                                 <h3 className="text-sm font-bold mb-3 flex items-center gap-2">
                                     <Upload className="size-4 text-blue-600" />
@@ -930,7 +951,7 @@ export function SlipDetailDialog({
                                     In phiếu
                                 </Button>
 
-                                {nextStep && (
+                                {canManageWorkflow && nextStep && (
                                     <Button
                                         size="sm"
                                         className={cn("gap-2 text-white shadow-sm transition-all hover:scale-105 active:scale-95", nextStep.color)}
@@ -938,15 +959,7 @@ export function SlipDetailDialog({
                                             if (nextStep.nextStatus === 'in_stock' && onStockingAssignment && slip) {
                                                 onStockingAssignment(slip, editableItems)
                                             } else if (onStatusUpdate) {
-                                                const itemsToUpdate = editableItems.map(item => ({
-                                                    itemCode: item.itemCode,
-                                                    material: item.material,
-                                                    product: item.product,
-                                                    actualQuantity: item.quantity.actual,
-                                                    ...(isImport ? { provisionalQuantity: item.quantity.provisional } : {}),
-                                                    itemNote: ""
-                                                }))
-                                                onStatusUpdate(nextStep.nextStatus, itemsToUpdate)
+                                                onStatusUpdate(nextStep.nextStatus, buildStatusItems(nextStep.nextStatus))
                                             }
                                         }}
                                         disabled={isUpdating}

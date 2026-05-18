@@ -16,50 +16,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { ProductionOrderAssignmentDialog } from "@/features/production/components/production-order-assignment-dialog"
 import { useCancelProductionOrder, useProductionOrder, useUpdateOrderStatus, useUpdateProductionOrder, useOrderBom } from "@/features/production/hooks/use-production"
-import { PRODUCTION_ORDER_STATUS, getProductionOrderStatusConfig } from "@/features/production/utils/production-status"
+import { PRODUCTION_ORDER_STATUS, getProductionOrderStatusConfig, getAssignmentStatusConfig, getPriorityConfig } from "@/features/production/utils/production-status"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-
-const getStatusConfig = (status: string) => {
-  switch (status?.toLowerCase()) {
-    case "pending":
-      return { label: "Chờ xử lý", color: "bg-gray-100 text-gray-700 border-gray-200" }
-    case "ready_to_assign":
-      return { label: "Sẵn sàng phân công", color: "text-green-700 border-green-300 bg-green-100/50", bgClass: "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-900/50" }
-    case "in_production":
-    case "in_progress":
-      return { label: "Đang sản xuất", color: "bg-blue-100 text-blue-700 border-blue-200" }
-    case "completed":
-      return { label: "Hoàn thành", color: "bg-emerald-100 text-emerald-700 border-emerald-200" }
-    case "paused":
-    case "on_hold":
-      return { label: "Tạm dừng", color: "bg-amber-100 text-amber-700 border-amber-200" }
-    case "waiting_material":
-      return { label: "Chờ nguyên liệu", color: "bg-orange-100 text-orange-700 border-orange-200" }
-    case "insufficient_materials":
-      return { label: "Thiếu nguyên liệu", color: "bg-orange-100 text-orange-700 border-orange-200" }
-    case "cancelled":
-      return { label: "Đã hủy", color: "bg-red-100 text-red-700 border-red-200" }
-    default:
-      return { label: status || "Chưa xác định", color: "bg-gray-100 text-gray-700 border-gray-200" }
-  }
-}
-
-const getPriorityConfig = (priority: string) => {
-  switch (priority?.toLowerCase()) {
-    case "urgent":
-      return { label: "Khẩn cấp", color: "text-red-700 bg-red-50 border-red-200" }
-    case "high":
-      return { label: "Cao", color: "text-orange-700 bg-orange-50 border-orange-200" }
-    case "normal":
-    case "medium":
-      return { label: "Bình thường", color: "text-blue-700 bg-blue-50 border-blue-200" }
-    case "low":
-      return { label: "Thấp", color: "text-gray-700 bg-gray-50 border-gray-200" }
-    default:
-      return { label: priority || "Bình thường", color: "text-gray-700 bg-gray-50 border-gray-200" }
-  }
-}
 
 const formatDate = (dateString?: string) => {
   if (!dateString) return "---"
@@ -69,10 +28,11 @@ const formatDate = (dateString?: string) => {
 interface ProductionOrderReadonlyDetailViewProps {
   id: string
   backHref: string
+  backLabel?: string
   canManage?: boolean
 }
 
-export function ProductionOrderReadonlyDetailView({ id, backHref, canManage = false }: ProductionOrderReadonlyDetailViewProps) {
+export function ProductionOrderReadonlyDetailView({ id, backHref, backLabel = "Quay lại danh sách", canManage = false }: ProductionOrderReadonlyDetailViewProps) {
   const router = useRouter()
   const { data: orderResponse, isLoading } = useProductionOrder(id)
   const { data: bomResponse, isLoading: isBomLoading } = useOrderBom(id)
@@ -116,7 +76,7 @@ export function ProductionOrderReadonlyDetailView({ id, backHref, canManage = fa
         </div>
         <Button variant="outline" onClick={() => router.push(backHref)}>
           <ChevronLeft className="mr-2 h-4 w-4" />
-          Quay lại danh sách
+          {backLabel}
         </Button>
       </div>
     )
@@ -124,6 +84,7 @@ export function ProductionOrderReadonlyDetailView({ id, backHref, canManage = fa
 
   const isCompletedOrder = order.status === PRODUCTION_ORDER_STATUS.COMPLETED
   const canAssignOrder = canManage && [PRODUCTION_ORDER_STATUS.READY_TO_ASSIGN, PRODUCTION_ORDER_STATUS.ASSIGNED].includes(order.status)
+  // Use shared utility — removes the need for local getStatusConfig
   const statusConfig = getProductionOrderStatusConfig(order.status)
   const priorityConfig = getPriorityConfig(order.priority)
   const creatorName = order.createdBy?.fullName || order.createdBy?.username || "Hệ thống"
@@ -217,7 +178,7 @@ export function ProductionOrderReadonlyDetailView({ id, backHref, canManage = fa
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <Button variant="ghost" onClick={() => router.push(backHref)} className="w-fit pl-0 hover:bg-transparent hover:text-primary">
           <ChevronLeft className="mr-2 h-4 w-4" />
-          Quay lại danh sách
+          {backLabel}
         </Button>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -380,7 +341,9 @@ export function ProductionOrderReadonlyDetailView({ id, backHref, canManage = fa
                                 <p className="text-xs text-muted-foreground">Sản phẩm: {assign.product?.name || order.products?.find((p: any) => (p.product?._id || p.product) === (assign.product?._id || assign.product))?.productName || "Sản phẩm"}</p>
                               </div>
                             </div>
-                            <Badge variant="outline" className="capitalize bg-card">{assign.status?.replace("_", " ") || "pending"}</Badge>
+                            <Badge variant="outline" className={cn("capitalize bg-card", getAssignmentStatusConfig(assign.status).color)}>
+                              {getAssignmentStatusConfig(assign.status).label}
+                            </Badge>
                           </div>
                           <div className="space-y-2">
                             <div className="flex justify-between text-xs">

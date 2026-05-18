@@ -57,6 +57,7 @@ const navigation = [
   { name: "Sản xuất", href: "/production", icon: Factory, roles: ["admin"] },
   { name: "Đơn sản xuất", href: "/production-management/orders", icon: ClipboardList, roles: ["production_manager"] },
   { name: "Công việc", href: "/production-management/tasks", icon: ListTodo, roles: ["production_manager"] },
+  { name: "Công việc của tôi", href: "/staff/tasks", icon: ListTodo, roles: ["staff"] },
 
   // --- Inventory & Warehouse ---
   { name: "Kho hàng", href: "/inventory", icon: Package, roles: ["admin", "kho_manager"] },

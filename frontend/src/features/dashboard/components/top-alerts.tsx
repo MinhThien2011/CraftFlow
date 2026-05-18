@@ -63,7 +63,7 @@ export function TopAlerts() {
           )}
         </div>
       </CardHeader>
-      
+
       <CardContent className="flex-1 p-5 overflow-y-auto scrollbar-thin scrollbar-thumb-muted">
         <div className="space-y-5">
           {alerts.length === 0 ? (
@@ -77,7 +77,7 @@ export function TopAlerts() {
             alerts.map((item) => {
               const isCritical = item.currentStock === 0
               const percentage = item.minStock > 0 ? (item.currentStock / item.minStock) * 100 : 0
-              
+
               return (
                 <div key={item.id} className="group p-3 -mx-3 rounded-xl transition-colors hover:bg-muted/40">
                   <div className="flex items-center justify-between mb-2">
@@ -85,26 +85,26 @@ export function TopAlerts() {
                       <span className="text-sm font-semibold text-foreground">{item.name}</span>
                       <span className="text-[11px] text-muted-foreground uppercase tracking-wider">{item.type}</span>
                     </div>
-                    <Badge 
-                      variant={isCritical ? 'destructive' : 'outline'} 
+                    <Badge
+                      variant={isCritical ? 'destructive' : 'outline'}
                       className={isCritical ? 'bg-red-500 text-white shadow-sm' : 'border-orange-500/50 text-orange-600 bg-orange-500/10'}
                     >
                       {item.status}
                     </Badge>
                   </div>
-                  
+
                   <div className="space-y-1.5">
                     <div className="flex justify-between text-xs font-medium">
                       <span className={isCritical ? 'text-red-500 font-bold' : 'text-foreground'}>
-                        Tồn: {item.currentStock} {item.unit}
+                        Tồn kho: {item.currentStock} {item.unit}
                       </span>
                       <span className="text-muted-foreground">
                         Tối thiểu: {item.minStock} {item.unit}
                       </span>
                     </div>
-                    <Progress 
-                      value={percentage} 
-                      className="h-2 bg-muted overflow-hidden" 
+                    <Progress
+                      value={percentage}
+                      className="h-2 bg-muted overflow-hidden"
                       indicatorClassName={isCritical ? 'bg-red-500' : 'bg-orange-500'}
                     />
                   </div>
@@ -113,11 +113,11 @@ export function TopAlerts() {
             })
           )}
         </div>
-        
+
         {alerts.length > 0 && (
           <div className="mt-6 pt-4 border-t border-border/50 text-center">
-            <Link 
-              href="/inventory" 
+            <Link
+              href="/inventory"
               className="inline-flex items-center text-sm font-medium text-primary hover:text-primary/80 transition-colors"
             >
               Xem tất cả kho <MoveRight className="ml-1 size-4" />

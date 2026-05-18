@@ -49,7 +49,7 @@ export default function AssignBatchLocationPage() {
   const [batches, setBatches] = useState<Batch[]>([])
   const [loading, setLoading] = useState(false)
   const [isScannerOpen, setIsScannerOpen] = useState(false)
-  
+
   // Assignment State
   const [selectedBatch, setSelectedBatch] = useState<Batch | null>(null)
   const [selectedShelf, setSelectedShelf] = useState<string>('')
@@ -105,7 +105,7 @@ export default function AssignBatchLocationPage() {
 
   const handleAssignLocation = async () => {
     if (!selectedBatch || !selectedShelf) return
-    
+
     setIsSubmitting(true)
     try {
       const res = await batchApi.assignLocation(selectedBatch._id, selectedShelf)
@@ -133,8 +133,8 @@ export default function AssignBatchLocationPage() {
               <form onSubmit={handleSearch} className="flex flex-1 gap-2">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                  <Input 
-                    placeholder="Tìm mã lô, mã vật tư..." 
+                  <Input
+                    placeholder="Tìm mã lô, mã vật tư..."
                     className="pl-10 h-10"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -147,16 +147,16 @@ export default function AssignBatchLocationPage() {
                 <Button type="submit">Tìm kiếm</Button>
               </form>
               <div className="flex items-center gap-2 border-l pl-4">
-                <Button 
-                  variant={unassignedOnly ? "default" : "outline"} 
+                <Button
+                  variant={unassignedOnly ? "default" : "outline"}
                   size="sm"
                   onClick={() => setUnassignedOnly(true)}
                   className="rounded-full"
                 >
                   Chưa gán vị trí
                 </Button>
-                <Button 
-                  variant={!unassignedOnly ? "default" : "outline"} 
+                <Button
+                  variant={!unassignedOnly ? "default" : "outline"}
                   size="sm"
                   onClick={() => setUnassignedOnly(false)}
                   className="rounded-full"
@@ -196,7 +196,7 @@ export default function AssignBatchLocationPage() {
                           </Badge>
                         </div>
                         <p className="text-sm font-medium">
-                          {batch.material?.name || batch.product?.name} 
+                          {batch.material?.name || batch.product?.name}
                           <span className="text-muted-foreground font-mono ml-2">({batch.material?.code || batch.product?.code})</span>
                         </p>
                         <div className="flex items-center gap-4 text-xs text-muted-foreground">
@@ -206,7 +206,7 @@ export default function AssignBatchLocationPage() {
                           </span>
                           <span className="flex items-center gap-1">
                             <Package className="size-3" />
-                            Tồn: <b>{batch.quantityRemaining.toLocaleString()}</b> {batch.unit}
+                            Tồn kho: <b>{batch.quantityRemaining.toLocaleString()}</b> {batch.unit}
                           </span>
                         </div>
                       </div>
@@ -233,7 +233,7 @@ export default function AssignBatchLocationPage() {
                       </div>
                       <div className="flex flex-col items-center gap-1">
                         <p className="text-[10px] uppercase text-muted-foreground font-semibold">Thao tác</p>
-                        <Button 
+                        <Button
                           onClick={() => openAssignDialog(batch)}
                           className={cn(
                             "gap-2",
@@ -300,7 +300,7 @@ export default function AssignBatchLocationPage() {
                           {s.bin && <span>Ô: {s.bin}</span>}
                         </div>
                         <span className="text-[10px] text-muted-foreground mt-0.5">
-                          {s.category === 'Material' ? 'Kho Nguyên liệu' : 'Kho Thành phẩm'} 
+                          {s.category === 'Material' ? 'Kho Nguyên liệu' : 'Kho Thành phẩm'}
                           - Trống: {(s.maxCapacity - s.currentLoad).toLocaleString()}
                         </span>
                       </div>
@@ -322,8 +322,8 @@ export default function AssignBatchLocationPage() {
             <Button variant="outline" onClick={() => setIsAssignDialogOpen(false)} disabled={isSubmitting}>
               Hủy
             </Button>
-            <Button 
-              onClick={handleAssignLocation} 
+            <Button
+              onClick={handleAssignLocation}
               disabled={isSubmitting || !selectedShelf || selectedShelf === selectedBatch?.shelf?._id}
               className="px-8"
             >
@@ -334,10 +334,10 @@ export default function AssignBatchLocationPage() {
         </DialogContent>
       </Dialog>
 
-      <QRScanner 
-        open={isScannerOpen} 
-        onOpenChange={setIsScannerOpen} 
-        onScanSuccess={handleScanSuccess} 
+      <QRScanner
+        open={isScannerOpen}
+        onOpenChange={setIsScannerOpen}
+        onScanSuccess={handleScanSuccess}
       />
     </AppShell>
   )

@@ -217,7 +217,8 @@ function PurchaseOrdersContent() {
         isManual: false,
         material: a.material,
         quantity: String(a.shortageQuantity || a.neededQuantity || 1),
-        alertId: a._id
+        alertId: a._id,
+        productionOrder: a.productionOrder
       }));
 
       setCreateItems(prev => [
@@ -273,9 +274,17 @@ function PurchaseOrdersContent() {
       }
 
       const alertIds = validItems.map(i => i.alertId).filter(Boolean)
+      const sourceProductionOrderIds = Array.from(new Set(
+        validItems
+          .map((item) => item.productionOrder?._id || item.productionOrder)
+          .filter(Boolean)
+      ))
       if (alertIds.length > 0) {
         payload.materialAlert = alertIds[0]
-        if (alertIds.length > 1) payload.materialAlerts = alertIds
+        payload.materialAlerts = alertIds
+      }
+      if (sourceProductionOrderIds.length > 0) {
+        payload.sourceProductionOrders = sourceProductionOrderIds
       }
 
       const response = await purchaseOrderApi.create(payload)

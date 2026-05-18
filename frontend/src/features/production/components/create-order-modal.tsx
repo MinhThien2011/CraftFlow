@@ -49,103 +49,110 @@ export function CreateOrderModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent size="full" className="max-h-[90vh] overflow-y-auto p-8 sm:p-12 rounded-[2rem] shadow-2xl border-muted/20">
-        <DialogHeader className="mb-8">
-          <DialogTitle className="text-3xl font-extrabold tracking-tight text-primary">Tạo đơn sản xuất mới</DialogTitle>
-          <DialogDescription className="text-lg text-muted-foreground mt-2">
-            Điền thông tin chi tiết các sản phẩm cần sản xuất và thời hạn hoàn thành.
+      <DialogContent size="3xl" className="max-h-[88vh] p-0">
+        <DialogHeader className="border-b px-6 py-5">
+          <DialogTitle className="text-2xl font-bold tracking-tight text-primary">Tạo đơn sản xuất mới</DialogTitle>
+          <DialogDescription className="text-sm">
+            Chọn sản phẩm, số lượng cần sản xuất và hạn hoàn thành.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-10 py-4">
-          <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-              <Label className="text-xl font-bold text-foreground/90">Danh sách sản phẩm</Label>
-              <Button type="button" variant="outline" size="default" onClick={onAddItem} className="w-full sm:w-auto h-12 px-8 rounded-xl border-2 hover:bg-primary hover:text-primary-foreground transition-all duration-300">
-                <Plus className="mr-2 h-5 w-5" />
+
+        <div className="space-y-5 px-6 py-5">
+          <section className="space-y-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <Label className="text-base font-semibold">Danh sách sản phẩm</Label>
+              <Button type="button" variant="outline" size="sm" onClick={onAddItem} className="h-9 gap-2">
+                <Plus className="h-4 w-4" />
                 Thêm sản phẩm
               </Button>
             </div>
 
-            <div className="grid grid-cols-1 gap-6">
+            <div className="space-y-3">
               {selectedItems.map((item, index) => (
-                <div key={index} className="flex flex-col lg:flex-row gap-6 items-start lg:items-end bg-card hover:bg-accent/5 transition-colors p-6 rounded-[1.5rem] border border-border shadow-sm relative group">
-                  <div className="w-full lg:flex-1 space-y-3">
-                    <Label className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Sản phẩm</Label>
+                <div key={index} className="grid gap-3 rounded-lg border bg-card p-4 shadow-sm md:grid-cols-[minmax(0,1fr)_150px_auto] md:items-end">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold uppercase text-muted-foreground">Sản phẩm</Label>
                     <Select
                       value={item.productId}
                       onValueChange={(val) => onUpdateItem(index, 'productId', val)}
                     >
-                      <SelectTrigger className="h-12 text-base rounded-xl border-2">
+                      <SelectTrigger className="h-10">
                         <SelectValue placeholder="Chọn sản phẩm..." />
                       </SelectTrigger>
-                      <SelectContent className="rounded-xl">
+                      <SelectContent>
                         {products.map(p => (
-                          <SelectItem key={p._id} value={p._id} className="rounded-lg">{p.name} ({p.code})</SelectItem>
+                          <SelectItem key={p._id} value={p._id}>
+                            {p.name} ({p.code}) - Tồn kho: {p.currentStock ?? 0}{p.unit ? ` ${p.unit}` : ''}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="w-full lg:w-48 space-y-3">
-                    <Label className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Số lượng</Label>
+
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold uppercase text-muted-foreground">Số lượng</Label>
                     <Input
                       type="number"
-                      className="h-12 text-xl font-bold rounded-xl border-2"
+                      min="1"
+                      className="h-10 font-semibold"
                       value={item.quantity}
                       onChange={(e) => onUpdateItem(index, 'quantity', e.target.value)}
                       placeholder="0"
                     />
                   </div>
+
                   {selectedItems.length > 1 && (
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="absolute top-4 right-4 lg:static text-destructive hover:text-destructive hover:bg-destructive/10 h-12 w-12 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                      className="h-10 w-10 text-destructive hover:bg-destructive/10 hover:text-destructive"
                       onClick={() => onRemoveItem(index)}
+                      aria-label="Xóa sản phẩm"
                     >
-                      <Trash2 className="h-6 w-6" />
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   )}
                 </div>
               ))}
             </div>
-          </div>
+          </section>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="space-y-3">
-              <Label htmlFor="deadline" className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Hạn hoàn thành</Label>
+          <div className="grid gap-5 md:grid-cols-[260px_minmax(0,1fr)]">
+            <div className="space-y-2">
+              <Label htmlFor="deadline" className="text-xs font-semibold uppercase text-muted-foreground">Hạn hoàn thành</Label>
               <Input
                 id="deadline"
                 type="date"
-                className="h-12 text-lg rounded-xl border-2"
+                className="h-10"
                 value={deadline}
                 onChange={(e) => onDeadlineChange(e.target.value)}
               />
             </div>
-          </div>
 
-          <div className="space-y-3">
-            <Label htmlFor="note" className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Ghi chú</Label>
-            <Textarea
-              id="note"
-              className="text-lg min-h-[150px] rounded-2xl border-2 p-4"
-              value={note}
-              onChange={(e) => onNoteChange(e.target.value)}
-              placeholder="Thêm ghi chú chi tiết cho đơn sản xuất này..."
-            />
+            <div className="space-y-2">
+              <Label htmlFor="note" className="text-xs font-semibold uppercase text-muted-foreground">Ghi chú</Label>
+              <Textarea
+                id="note"
+                className="min-h-[88px] resize-none"
+                value={note}
+                onChange={(e) => onNoteChange(e.target.value)}
+                placeholder="Thêm ghi chú chi tiết cho đơn sản xuất này..."
+              />
+            </div>
           </div>
         </div>
-        <DialogFooter className="gap-4 mt-8">
-          <Button variant="outline" size="lg" onClick={() => onOpenChange(false)} className="h-14 px-10 rounded-2xl text-lg font-semibold border-2">
+
+        <DialogFooter className="border-t px-6 py-4">
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="min-w-[96px]">
             Hủy bỏ
           </Button>
           <Button
-            size="lg"
             onClick={onSubmit}
             disabled={isSubmitting || !isValid}
-            className="h-14 px-12 rounded-2xl text-lg font-bold shadow-lg shadow-primary/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
+            className="min-w-[150px] font-semibold"
           >
-            {isSubmitting && <Loader2 className="mr-2 h-6 w-6 animate-spin" />}
+            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Xác nhận tạo đơn
           </Button>
         </DialogFooter>

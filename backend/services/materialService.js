@@ -317,3 +317,22 @@ export const getLowStockMaterialsService = async ({ page = 1, limit = 10 }) => {
     return ServiceResponse(false, error.message);
   }
 };
+
+/**
+ * Service to delete (deactivate) a material.
+ */
+export const deleteMaterialService = async (id) => {
+  try {
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return ServiceResponse(false, 'Invalid Material ID.', null, 400);
+    }
+    const material = await Material.findByIdAndUpdate(id, { isActive: false }, { returnDocument: 'after' }).lean();
+    if (!material) {
+      return ServiceResponse(false, 'Material not found.', null, 404);
+    }
+    return ServiceResponse(true, 'Material deactivated successfully.', material);
+  } catch (error) {
+    console.log('[materialService] deleteMaterialService error:', error);
+    return ServiceResponse(false, 'Failed to deactivate material: ' + error.message, null, 500);
+  }
+};

@@ -390,3 +390,37 @@ export const getMaterialHistory = async (req, res) => {
     });
   }
 };
+
+/**
+ * Delete (deactivate) a material.
+ */
+export const deleteMaterial = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await materialService.deleteMaterialService(id);
+
+    if (result.success) {
+      // Invalidate caches
+      await clearCacheByPattern('material:list:*');
+      await clearCacheByPattern(`material:detail:${id}`);
+      await clearCacheByPattern('product:list:*');
+
+      await logActivity({
+        author: req.userId,
+        action: 'DELETE_MATERIAL',
+        module: 'MATERIAL',
+        details: `Deactivated material: ${result.data.name} (${result.data.code})`,
+        targetId: id
+      }, req);
+    }
+
+    return res.status(result.statusCode || StatusCodes.OK).json(result);
+  } catch (error) {
+    console.log('[MaterialController] deleteMaterial error:', error);
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: 'Failed to delete material: ' + error.message,
+      data: null
+    });
+  }
+};

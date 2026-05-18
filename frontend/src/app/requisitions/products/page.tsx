@@ -47,6 +47,7 @@ const EXPORT_SLIP_STATUS_CONFIG: Record<string, { label: string, color: string }
 export default function ProductExportRequestsPage() {
   const queryClient = useQueryClient()
   const { isAdmin, isProductionManager, isKhoManager, loading: authLoading } = useAuth()
+  const canOperateWarehouseSlip = isKhoManager
   const [page, setPage] = useState(1)
   const [limit] = useState(10)
   const [searchQuery, setSearchQuery] = useState("")
@@ -404,7 +405,7 @@ export default function ProductExportRequestsPage() {
                       <SelectContent>
                         {products.map((p: any) => (
                           <SelectItem key={p._id} value={p._id}>
-                            {p.name} ({p.code}) - Tồn: {p.currentStock}
+                            {p.name} ({p.code}) - Tồn kho: {p.currentStock}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -412,11 +413,17 @@ export default function ProductExportRequestsPage() {
                   </div>
                   <div className="w-24">
                     <Label className="text-xs">Số lượng</Label>
-                    <Input type="number" min="1" value={item.quantity} onChange={(e) => {
-                      const updated = [...newRequestItems];
-                      updated[idx].quantity = parseInt(e.target.value);
-                      setNewRequestItems(updated);
-                    }} />
+                    <Input
+                      type="number"
+                      min="1"
+                      value={isNaN(item.quantity) || item.quantity === 0 ? "" : item.quantity}
+                      onChange={(e) => {
+                        const updated = [...newRequestItems];
+                        const val = parseInt(e.target.value);
+                        updated[idx].quantity = isNaN(val) ? 0 : val;
+                        setNewRequestItems(updated);
+                      }}
+                    />
                   </div>
                   <Button variant="ghost" size="icon" onClick={() => {
                     if (newRequestItems.length > 1) {
@@ -458,8 +465,9 @@ export default function ProductExportRequestsPage() {
           slip={currentSlip}
           type="export"
           statusConfig={EXPORT_SLIP_STATUS_CONFIG}
-          onStatusUpdate={(status, items) => updateSlipStatusMutation.mutate({ id: currentSlip._id, status, items })}
+          onStatusUpdate={canOperateWarehouseSlip ? (status, items) => updateSlipStatusMutation.mutate({ id: currentSlip._id, status, items }) : undefined}
           isUpdating={updateSlipStatusMutation.isPending}
+          readOnly={!canOperateWarehouseSlip}
         />
       )}
     </AppShell>
