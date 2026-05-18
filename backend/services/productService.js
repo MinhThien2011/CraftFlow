@@ -4,6 +4,7 @@ import mongoose from 'mongoose';
 import { transformProduct, transformProducts } from '../utils/productTransformer.js';
 import { processMaterialCosts } from '../utils/productHelpers.js';
 import { standardlizeResponseDataHelper } from '../utils/standardlizeResponseData.js';
+import { applyCreatedAtCursor, buildListPagination, normalizePagination } from '../utils/pagination.js';
 
 const MAX_LIMIT = 100;
 
@@ -19,7 +20,9 @@ export const getProductsByQuery = async (query) => {
       category = '',
       isActive = true,
       sortBy = 'createdAt',
-      sortOrder = 'desc'
+      sortOrder = 'desc',
+      cursor,
+      withTotal = true
     } = query;
 
     const normalizedSortBy = (sortBy && typeof sortBy === 'string' && sortBy.trim() !== '') ? sortBy : 'createdAt';
@@ -32,23 +35,18 @@ export const getProductsByQuery = async (query) => {
       normalizedIsActive = 'true';
     }
 
-    const pageNum = Math.max(1, parseInt(page, 10) || 1);
-    const limitNum = Math.min(MAX_LIMIT, Math.max(1, parseInt(limit, 10) || 10));
-    const skip = (pageNum - 1) * limitNum;
+    const pagination = normalizePagination({ page, limit, cursor, withTotal });
+    const { pageNum, limitNum, skip } = pagination;
 
     // --- Build Query Conditions ---
-    const conditions = {
+    let conditions = {
       isActive: normalizedIsActive === 'all'
         ? { $in: [true, false] }
         : (normalizedIsActive === 'true' || normalizedIsActive === true)
     };
 
     if (normalizedSearch) {
-      const searchRegex = { $regex: normalizedSearch, $options: 'i' };
-      conditions.$or = [
-        { name: searchRegex },
-        { code: searchRegex }
-      ];
+      conditions.$text = { $search: normalizedSearch };
     }
 
     if (normalizedCategory) {
@@ -56,9 +54,13 @@ export const getProductsByQuery = async (query) => {
     }
 
     // --- Sorting --- 
-    const sortOptions = { [normalizedSortBy]: normalizedSortOrder === 'asc' ? 1 : -1 };
+    const sortOptions = { [normalizedSortBy]: normalizedSortOrder === 'asc' ? 1 : -1, _id: normalizedSortOrder === 'asc' ? 1 : -1 };
+    if (normalizedSortBy === 'createdAt' && normalizedSortOrder === 'desc') {
+      conditions = applyCreatedAtCursor(conditions, pagination.cursor);
+    }
 
     // --- Execute Query ---
+    const totalPromise = pagination.withTotal ? Product.countDocuments(conditions) : Promise.resolve(undefined);
     const [products, total] = await Promise.all([
       Product.find(conditions)
         .select('name code description category unit baseCost estimateMaterialCost productImage currentStock threshold shelf isActive createdAt totalProduced') // Added projection
@@ -68,7 +70,7 @@ export const getProductsByQuery = async (query) => {
         .populate('estimateMaterialCost.material', 'name code unit currency')
         .populate('shelf', 'shelfCode warehouseSection')
         .lean(),
-      Product.countDocuments(conditions)
+      totalPromise
     ]);
 
     return {
@@ -77,10 +79,9 @@ export const getProductsByQuery = async (query) => {
       data: {
         products: transformProducts(products),
         pagination: {
-          total,
-          totalPages: Math.ceil(total / limitNum),
+          ...buildListPagination({ items: products, total, pageNum, limitNum, cursor: pagination.cursor, withTotal: pagination.withTotal }),
+          totalPages: total !== undefined ? Math.ceil(total / limitNum) : undefined,
           currentPage: pageNum,
-          limit: limitNum
         }
       }
     };

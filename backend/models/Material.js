@@ -47,5 +47,8 @@ materialSchema.index({ shelf: 1 });
 materialSchema.index({ isActive: 1 });
 materialSchema.index({ currentStock: 1 });
 materialSchema.index({ createdAt: -1 });
+materialSchema.index({ isActive: 1, createdAt: -1, _id: -1 });
+materialSchema.index({ isActive: 1, currentStock: 1, _id: 1 });
+materialSchema.index({ code: 1, createdAt: -1 });
 
 export default mongoose.model('Material', materialSchema);

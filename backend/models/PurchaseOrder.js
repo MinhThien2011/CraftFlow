@@ -82,4 +82,10 @@ const PurchaseOrderSchema = new mongoose.Schema({
     },
 }, { timestamps: true })
 
+PurchaseOrderSchema.index({ status: 1, createdAt: -1, _id: -1 });
+PurchaseOrderSchema.index({ creator: 1, createdAt: -1, _id: -1 });
+PurchaseOrderSchema.index({ productionOrder: 1, createdAt: -1 });
+PurchaseOrderSchema.index({ materialAlert: 1 });
+PurchaseOrderSchema.index({ 'purchaseOrderItems.material': 1 });
+
 export default mongoose.model('PurchaseOrder', PurchaseOrderSchema);

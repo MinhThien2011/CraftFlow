@@ -19,7 +19,7 @@ import { generateNormalizedCacheKey } from '../utils/serviceHelper.js';
  */
 export const getAllMaterials = async (req, res) => {
   try {
-    const allowedParams = ['search', 'page', 'limit', 'stockGt', 'stockLt', 'priceGt', 'priceLt', 'color', 'unit'];
+    const allowedParams = ['search', 'page', 'limit', 'cursor', 'withTotal', 'stockGt', 'stockLt', 'priceGt', 'priceLt', 'color', 'unit'];
     const cacheKey = generateNormalizedCacheKey('material:list', req.query, allowedParams);;
 
     // 1. Try Redis cache
@@ -36,6 +36,8 @@ export const getAllMaterials = async (req, res) => {
       search = '',
       page = 1,
       limit = 10,
+      cursor,
+      withTotal,
       stockGt, stockLt,
       priceGt, priceLt,
       color, unit
@@ -48,6 +50,8 @@ export const getAllMaterials = async (req, res) => {
       stockLt: stockLt !== undefined ? parseFloat(stockLt) : undefined,
       priceGt: priceGt !== undefined ? parseFloat(priceGt) : undefined,
       priceLt: priceLt !== undefined ? parseFloat(priceLt) : undefined,
+      cursor,
+      withTotal,
     };
 
     const result = await materialService.getMaterials({
@@ -62,7 +66,7 @@ export const getAllMaterials = async (req, res) => {
     }
 
     // 2. Cache successful result
-    await setCachedData(cacheKey, result.data);
+    setCachedData(cacheKey, result.data).catch(() => {});
 
     return res.status(StatusCodes.OK).json(result);
   } catch (error) {

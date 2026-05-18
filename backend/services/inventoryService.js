@@ -1,8 +1,11 @@
 import Material from '../models/Material.js';
 import Product from '../models/Product.js';
+import mongoose from 'mongoose';
 import { standardlizeResponseDataHelper } from '../utils/standardlizeResponseData.js';
 import { determineStockLevel } from '../utils/inventoryHelpers.js';
 import { STOCK_LEVEL_METADATA } from '../utils/constants.js';
+import { buildListPagination, normalizePagination } from '../utils/pagination.js';
+import { applyAggregateGuards } from '../utils/queryPerformance.js';
 
 const MAX_LIMIT = 100;
 
@@ -63,27 +66,45 @@ export const getInventoryOverview = async () => {
 /**
  * Get detailed material inventory with search and pagination.
  */
-export const getMaterialInventory = async ({ search = '', page = 1, limit = 10 }) => {
-  const pageNum = Math.max(1, parseInt(page));
-  const limitNum = Math.min(MAX_LIMIT, Math.max(1, parseInt(limit)));
-  const skip = (pageNum - 1) * limitNum;
+export const getMaterialInventory = async ({ search = '', page = 1, limit = 10, cursorStock, cursorId, withTotal = true }) => {
+  const { pageNum, limitNum, skip, withTotal: shouldCount } = normalizePagination({ page, limit, withTotal });
 
   const query = { isActive: true };
   if (search) {
-    const searchRegex = { $regex: search, $options: 'i' };
-    query.$or = [{ name: searchRegex }, { code: searchRegex }];
+    query.$text = { $search: String(search).trim() };
+  }
+  if (cursorStock !== undefined && cursorId && mongoose.Types.ObjectId.isValid(cursorId)) {
+    const cursorObjectId = new mongoose.Types.ObjectId(cursorId);
+    query.$or = [
+      { currentStock: { $gt: Number(cursorStock) } },
+      { currentStock: Number(cursorStock), _id: { $gt: cursorObjectId } }
+    ];
   }
 
-  const [materials, total] = await Promise.all([
-    Material.find(query)
-      .select('name code unit currentStock threshold price color shelf locationDetails supplier updatedAt')
-      .populate('shelf', 'shelfCode warehouseSection')
-      .sort({ currentStock: 1 }) // Most critical first
-      .skip(skip)
-      .limit(limitNum)
-      .lean(),
-    Material.countDocuments(query)
-  ]);
+  const dataPipeline = [
+    { $sort: { currentStock: 1, _id: 1 } },
+    { $skip: skip },
+    { $limit: limitNum },
+    {
+      $lookup: {
+        from: 'shelves',
+        localField: 'shelf',
+        foreignField: '_id',
+        pipeline: [{ $project: { shelfCode: 1, warehouseSection: 1 } }],
+        as: 'shelf'
+      }
+    },
+    { $unwind: { path: '$shelf', preserveNullAndEmptyArrays: true } },
+    { $project: { name: 1, code: 1, unit: 1, currentStock: 1, threshold: 1, price: 1, color: 1, shelf: 1, locationDetails: 1, supplier: 1, updatedAt: 1 } }
+  ];
+
+  const pipeline = shouldCount
+    ? [{ $match: query }, { $facet: { data: dataPipeline, metadata: [{ $count: 'total' }] } }]
+    : [{ $match: query }, ...dataPipeline];
+
+  const aggregateResult = await applyAggregateGuards(Material.aggregate(pipeline));
+  const materials = shouldCount ? (aggregateResult[0]?.data || []) : aggregateResult;
+  const total = shouldCount ? (aggregateResult[0]?.metadata?.[0]?.total || 0) : undefined;
 
   // Enrich with detailed stock level information
   const enrichedMaterials = materials.map(m => {
@@ -102,10 +123,9 @@ export const getMaterialInventory = async ({ search = '', page = 1, limit = 10 }
     data: {
       items: standardlizeResponseDataHelper(enrichedMaterials),
       pagination: {
-        total,
-        page: pageNum,
-        limit: limitNum,
-        pages: Math.ceil(total / limitNum)
+        ...buildListPagination({ items: materials, total, pageNum, limitNum, cursor: null, withTotal: shouldCount }),
+        nextStockCursor: materials.length === limitNum ? materials[materials.length - 1]?.currentStock : null,
+        nextIdCursor: materials.length === limitNum ? materials[materials.length - 1]?._id?.toString() : null,
       }
     }
   };
@@ -114,27 +134,45 @@ export const getMaterialInventory = async ({ search = '', page = 1, limit = 10 }
 /**
  * Get detailed product inventory with search and pagination.
  */
-export const getProductInventory = async ({ search = '', page = 1, limit = 10 }) => {
-  const pageNum = Math.max(1, parseInt(page));
-  const limitNum = Math.min(MAX_LIMIT, Math.max(1, parseInt(limit)));
-  const skip = (pageNum - 1) * limitNum;
+export const getProductInventory = async ({ search = '', page = 1, limit = 10, cursorStock, cursorId, withTotal = true }) => {
+  const { pageNum, limitNum, skip, withTotal: shouldCount } = normalizePagination({ page, limit, withTotal });
 
   const query = { isActive: true };
   if (search) {
-    const searchRegex = { $regex: search, $options: 'i' };
-    query.$or = [{ name: searchRegex }, { code: searchRegex }];
+    query.$text = { $search: String(search).trim() };
+  }
+  if (cursorStock !== undefined && cursorId && mongoose.Types.ObjectId.isValid(cursorId)) {
+    const cursorObjectId = new mongoose.Types.ObjectId(cursorId);
+    query.$or = [
+      { currentStock: { $gt: Number(cursorStock) } },
+      { currentStock: Number(cursorStock), _id: { $gt: cursorObjectId } }
+    ];
   }
 
-  const [products, total] = await Promise.all([
-    Product.find(query)
-      .select('name code unit category currentStock threshold shelf locationDetails updatedAt')
-      .populate('shelf', 'shelfCode warehouseSection')
-      .sort({ currentStock: 1 })
-      .skip(skip)
-      .limit(limitNum)
-      .lean(),
-    Product.countDocuments(query)
-  ]);
+  const dataPipeline = [
+    { $sort: { currentStock: 1, _id: 1 } },
+    { $skip: skip },
+    { $limit: limitNum },
+    {
+      $lookup: {
+        from: 'shelves',
+        localField: 'shelf',
+        foreignField: '_id',
+        pipeline: [{ $project: { shelfCode: 1, warehouseSection: 1 } }],
+        as: 'shelf'
+      }
+    },
+    { $unwind: { path: '$shelf', preserveNullAndEmptyArrays: true } },
+    { $project: { name: 1, code: 1, unit: 1, category: 1, currentStock: 1, threshold: 1, shelf: 1, locationDetails: 1, updatedAt: 1 } }
+  ];
+
+  const pipeline = shouldCount
+    ? [{ $match: query }, { $facet: { data: dataPipeline, metadata: [{ $count: 'total' }] } }]
+    : [{ $match: query }, ...dataPipeline];
+
+  const aggregateResult = await applyAggregateGuards(Product.aggregate(pipeline));
+  const products = shouldCount ? (aggregateResult[0]?.data || []) : aggregateResult;
+  const total = shouldCount ? (aggregateResult[0]?.metadata?.[0]?.total || 0) : undefined;
 
   // Enrich with detailed stock level information
   const enrichedProducts = products.map(p => {
@@ -153,14 +191,13 @@ export const getProductInventory = async ({ search = '', page = 1, limit = 10 })
       data: {
         items: standardlizeResponseDataHelper(enrichedProducts),
         pagination: {
-          total,
-          page: pageNum,
-          limit: limitNum,
-          pages: Math.ceil(total / limitNum)
+          ...buildListPagination({ items: products, total, pageNum, limitNum, cursor: null, withTotal: shouldCount }),
+          nextStockCursor: products.length === limitNum ? products[products.length - 1]?.currentStock : null,
+          nextIdCursor: products.length === limitNum ? products[products.length - 1]?._id?.toString() : null,
         }
       }
     };
-  };
+};
 
 /**};
 

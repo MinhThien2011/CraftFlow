@@ -1,7 +1,7 @@
 import rateLimit, { ipKeyGenerator, MemoryStore } from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
 import jwt from 'jsonwebtoken';
-import { client, getRedisHealth } from '../config/redisClient.js';
+import { client, getRedisHealth, getLastLatency } from '../config/redisClient.js';
 
 const parseRateLimitConfig = () => {
     if (!process.env.RATE_LIMIT_CONFIG) return {};
@@ -30,6 +30,7 @@ const CONFIG = {
     },
     ...parseRateLimitConfig(),
 };
+const MAX_REDIS_LATENCY_MS = Number(process.env.RATE_LIMIT_REDIS_MAX_LATENCY_MS || 250);
 
 const VALID_USER_ID_RE = /^[a-f0-9]{24}$/i;
 const MAX_TOKEN_LENGTH = 2048;
@@ -93,7 +94,7 @@ class HybridRateLimitStore {
     }
 
     async getActiveStore() {
-        if (!client.isOpen || !getRedisHealth()) {
+        if (!client.isOpen || !getRedisHealth() || getLastLatency() > MAX_REDIS_LATENCY_MS) {
             this.redisReady = false;
             return this.memoryStore;
         }

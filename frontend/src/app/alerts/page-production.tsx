@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { AlertTriangle, Bell, Package, Search, Download, ChevronLeft, ChevronRight, QrCode, Boxes } from "lucide-react"
 import { AppShell } from "@/components/app-shell"
 import { Card, CardContent } from "@/components/ui/card"
@@ -29,6 +29,7 @@ import { ThresholdDialog } from "@/components/dialog/threshold-dialog"
 import { BatchRestockDialog } from "@/components/dialog/batch-restock-dialog"
 import { toast } from "sonner"
 import { QRScanner } from "@/features/receiving/components/qr-scanner"
+import { useRouter, useSearchParams } from "next/navigation"
 
 const exportAlertsCSV = (data: AlertItem[]) => {
   const headers = "Tên,Mã,Loại,Tồn kho,Đơn vị\n"
@@ -64,6 +65,9 @@ const CustomPagination = ({ page, total, pageSize, onChange }: { page: number; t
 }
 
 function ProductionAlertsPage() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const autoOpenKeyRef = useRef<string | null>(null)
   const [activeTab, setActiveTab] = useState("materials")
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<"All" | "Critical" | "Low Stock">("All")
@@ -181,6 +185,16 @@ function ProductionAlertsPage() {
     return currentDisplayItems.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE)
   }, [currentDisplayItems, page])
 
+  const selectableItems = useMemo(() => {
+    if (activeTab === 'products') return []
+    return currentDisplayItems.filter(item => !!item.alertId)
+  }, [activeTab, currentDisplayItems])
+
+  const isAllSelected = useMemo(() => {
+    if (selectableItems.length === 0) return false
+    return selectableItems.every(item => selectedAlertIds.has(item.alertId!))
+  }, [selectableItems, selectedAlertIds])
+
   const getStatusBadge = (item: AlertItem) => {
     if (item.currentStock === 0) return <Badge className="bg-[#DC3545] text-white">Nguy cấp</Badge>
     return <Badge className="bg-[#FFA500] text-white">Sắp hết</Badge>
@@ -193,6 +207,43 @@ function ProductionAlertsPage() {
       toast.success(`Đã quét mã: ${code}`)
     }
   }
+
+  useEffect(() => {
+    const tab = searchParams.get("tab")
+    if (tab === "materials" || tab === "products" || tab === "orders") {
+      setActiveTab(tab)
+    }
+  }, [searchParams])
+
+  useEffect(() => {
+    const shouldCreatePO = searchParams.get("createPO") === "true"
+    const orderId = searchParams.get("orderId")
+    if (!shouldCreatePO || !orderId) {
+      autoOpenKeyRef.current = null
+      return
+    }
+
+    const matchedAlerts = allAlerts.filter((item) => {
+      if (item.alertType !== "order_requirement" || !item.alertId) return false
+      const po: any = item.productionOrder
+      const poId = typeof po === "string" ? po : po?._id
+      return poId === orderId
+    })
+    if (matchedAlerts.length === 0) return
+
+    const key = `${orderId}:${matchedAlerts.length}`
+    if (autoOpenKeyRef.current === key) return
+    autoOpenKeyRef.current = key
+
+    setActiveTab("orders")
+    setSelectedAlertIds(new Set(matchedAlerts.map((item) => item.alertId!)))
+    setIsBatchOpen(true)
+
+    const next = new URLSearchParams(searchParams.toString())
+    next.delete("createPO")
+    next.delete("orderId")
+    router.replace(next.toString() ? `/alerts?${next.toString()}` : "/alerts")
+  }, [allAlerts, router, searchParams])
 
   return (
     <AppShell title="Cảnh báo tồn kho" subtitle="Theo dõi nguyên liệu và thành phẩm cần bổ sung">
@@ -237,7 +288,22 @@ function ProductionAlertsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      {activeTab !== 'products' && <TableHead className="w-12"><Checkbox /></TableHead>}
+                      {activeTab !== 'products' && (
+                        <TableHead className="w-12">
+                          <Checkbox
+                            checked={isAllSelected}
+                            onCheckedChange={(checked) => {
+                              const next = new Set(selectedAlertIds)
+                              if (checked) {
+                                selectableItems.forEach(item => next.add(item.alertId!))
+                              } else {
+                                selectableItems.forEach(item => next.delete(item.alertId!))
+                              }
+                              setSelectedAlertIds(next)
+                            }}
+                          />
+                        </TableHead>
+                      )}
                       <TableHead>Mặt hàng</TableHead>
                       {activeTab === 'orders' && <TableHead>Đơn sản xuất</TableHead>}
                       <TableHead>Trạng thái</TableHead>

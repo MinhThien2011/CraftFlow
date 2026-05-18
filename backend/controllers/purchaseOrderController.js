@@ -176,8 +176,8 @@ export const getPurchaseOrderById = async (req, res) => {
 
 export const getAllPurchaseOrders = async (req, res) => {
     try {
-        const { creator, status, page = 1, limit = 10 } = req.query;
-        const cacheKey = `purchaseOrder:list:${JSON.stringify({ creator, status, page, limit })}`;
+        const { creator, status, page = 1, limit = 10, cursor, withTotal } = req.query;
+        const cacheKey = `purchaseOrder:list:${JSON.stringify({ creator, status, page, limit, cursor, withTotal })}`;
 
         // 1. Try to get from Redis
         const cachedResult = await getCachedData(cacheKey);
@@ -194,7 +194,7 @@ export const getAllPurchaseOrders = async (req, res) => {
 
         // 3. Cache the result if successful
         if (result.success) {
-            await setCachedData(cacheKey, result.data);
+            setCachedData(cacheKey, result.data).catch(() => {});
         }
 
         return handleServiceResponse(res, result);

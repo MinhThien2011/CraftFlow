@@ -353,7 +353,7 @@ export default function MaterialRequisitionsPage() {
                   {!rejectMode ? (
                     <div className="flex items-center gap-2 p-3 rounded-lg border border-primary/20 bg-primary/5">
                       <Checkbox id="confirm" checked={signatureConfirmed} onCheckedChange={(c) => setSignatureConfirmed(!!c)} />
-                      <Label htmlFor="confirm" className="text-sm cursor-pointer">Ký xác nhận tiếp nhận yêu cầu và tạo phiếu xuất kho</Label>
+                      <Label htmlFor="confirm" className="text-sm cursor-pointer">Đồng ý tiếp nhận yêu cầu và tạo phiếu xuất kho</Label>
                     </div>
                   ) : (
                     <div className="space-y-2">

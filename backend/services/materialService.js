@@ -2,10 +2,12 @@ import Material from '../models/Material.js';
 import InventoryTransaction from '../models/InventoryTransaction.js';
 import MaterialRequisition from '../models/MaterialRequisition.js';
 import Product from '../models/Product.js';
-import { REQUISITION_STATUS } from '../utils/constants.js';
+import { REQUISITION_STATUS, ROLES } from '../utils/constants.js';
 import mongoose from 'mongoose';
 import { standardlizeResponseDataHelper } from '../utils/standardlizeResponseData.js';
 import { ServiceResponse } from '../utils/serviceHelper.js';
+import { emitDataChanged } from './realtimeService.js';
+import { applyCreatedAtCursor, buildListPagination, normalizePagination } from '../utils/pagination.js';
 
 const MAX_LIMIT = 100;
 
@@ -13,15 +15,12 @@ const MAX_LIMIT = 100;
  * Get all materials with filtering, searching and pagination.
  */
 export const getMaterials = async ({ search = '', page = 1, limit = 10, filters = {} }) => {
-  const pageNum = Math.max(1, parseInt(page));
-  const limitNum = Math.min(MAX_LIMIT, Math.max(1, parseInt(limit)));
-  const skip = (pageNum - 1) * limitNum;
+  const { pageNum, limitNum, skip, cursor, withTotal } = normalizePagination({ page, limit, cursor: filters.cursor, withTotal: filters.withTotal });
 
-  const query = {};
+  let query = {};
 
   if (search) {
-    const searchRegex = { $regex: search, $options: 'i' };
-    query.$or = [{ name: searchRegex }, { code: searchRegex }];
+    query.$text = { $search: String(search).trim() };
   }
 
   if (filters.color) query.color = { $regex: filters.color, $options: 'i' };
@@ -38,7 +37,9 @@ export const getMaterials = async ({ search = '', page = 1, limit = 10, filters 
     if (filters.priceGt !== undefined) query.price.$gt = parseFloat(filters.priceGt);
     if (filters.priceLt !== undefined) query.price.$lt = parseFloat(filters.priceLt);
   }
+  query = applyCreatedAtCursor(query, cursor);
 
+  const totalPromise = withTotal ? Material.countDocuments(query) : Promise.resolve(undefined);
   const [materials, total] = await Promise.all([
     Material.find(query)
       .select('name code unit color price currentStock threshold shelf locationDetails supplier isActive createdAt updatedAt')
@@ -47,17 +48,12 @@ export const getMaterials = async ({ search = '', page = 1, limit = 10, filters 
       .skip(skip)
       .limit(limitNum)
       .lean(),
-    Material.countDocuments(query)
+    totalPromise
   ]);
 
   return ServiceResponse(true, 'Materials retrieved successfully.', {
     materials: standardlizeResponseDataHelper(materials),
-    pagination: {
-      total,
-      page: pageNum,
-      limit: limitNum,
-      pages: Math.ceil(total / limitNum)
-    }
+    pagination: buildListPagination({ items: materials, total, pageNum, limitNum, cursor, withTotal })
   });
 };
 
@@ -107,6 +103,14 @@ export const createMaterialService = async (materialData) => {
     });
 
     await session.commitTransaction();
+    await emitDataChanged([ROLES.ADMIN, ROLES.KHO_MANAGER, ROLES.PRODUCTION_MANAGER], {
+      domains: ["materials", "inventory", "products", "alerts"],
+      action: "created",
+      entity: "material",
+      id: newMaterial._id,
+      message: `Material ${newMaterial.code} was created.`,
+      metaData: { materialId: newMaterial._id, code: newMaterial.code }
+    });
     return ServiceResponse(true, 'Material created successfully.', newMaterial, 201);
   } catch (error) {
     await session.abortTransaction();
@@ -144,6 +148,14 @@ export const updateMaterialService = async (id, updateData) => {
     });
 
     await session.commitTransaction();
+    await emitDataChanged([ROLES.ADMIN, ROLES.KHO_MANAGER, ROLES.PRODUCTION_MANAGER], {
+      domains: ["materials", "inventory", "products", "alerts"],
+      action: "updated",
+      entity: "material",
+      id: material._id,
+      message: `Material ${material.code} was updated.`,
+      metaData: { materialId: material._id, code: material.code }
+    });
     return ServiceResponse(true, 'Material updated successfully.', material);
   } catch (error) {
     await session.abortTransaction();
@@ -191,6 +203,15 @@ export const adjustMaterialStock = async (materialId, { type, quantity, note, se
 
     await transaction.save({ session });
     await session.commitTransaction();
+
+    await emitDataChanged([ROLES.ADMIN, ROLES.KHO_MANAGER, ROLES.PRODUCTION_MANAGER], {
+      domains: ["materials", "inventory", "alerts", "production"],
+      action: "stock_adjusted",
+      entity: "material",
+      id: material._id,
+      message: `Stock for material ${material.code} changed from ${beforeStock} to ${material.currentStock}.`,
+      metaData: { materialId: material._id, code: material.code, beforeStock, afterStock: material.currentStock }
+    });
 
     return ServiceResponse(true, 'Stock adjusted successfully.', material);
   } catch (error) {

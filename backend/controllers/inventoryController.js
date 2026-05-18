@@ -47,8 +47,8 @@ export const getLowStockAlerts = async (req, res) => {
  * Controller to get material inventory list with search and pagination.
  */
 export const getMaterialsStock = async (req, res) => {
-  const { search = '', page = 1, limit = 10 } = req.query;
-  const result = await inventoryService.getMaterialInventory({ search, page, limit });
+  const { search = '', page = 1, limit = 10, cursorStock, cursorId, withTotal } = req.query;
+  const result = await inventoryService.getMaterialInventory({ search, page, limit, cursorStock, cursorId, withTotal });
 
   if (!result.success) {
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
@@ -69,8 +69,8 @@ export const getMaterialsStock = async (req, res) => {
  * Controller to get product inventory list with search and pagination.
  */
 export const getProductsStock = async (req, res) => {
-  const { search = '', page = 1, limit = 10 } = req.query;
-  const result = await inventoryService.getProductInventory({ search, page, limit });
+  const { search = '', page = 1, limit = 10, cursorStock, cursorId, withTotal } = req.query;
+  const result = await inventoryService.getProductInventory({ search, page, limit, cursorStock, cursorId, withTotal });
 
   if (!result.success) {
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({

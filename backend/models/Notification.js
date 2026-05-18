@@ -45,5 +45,7 @@ const notificationSchema = new mongoose.Schema({
 
 // TTL Index: Tự động xóa thông báo sau 30 ngày để tối ưu dung lượng DB
 notificationSchema.index({ createdAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
+notificationSchema.index({ recipient: 1, createdAt: -1, _id: -1 });
+notificationSchema.index({ recipient: 1, isRead: 1, createdAt: -1 });
 
 export default mongoose.model('Notification', notificationSchema);

@@ -1,5 +1,6 @@
 import Notification from '../models/Notification.js';
 import { emitNotification } from '../config/socket.js';
+import { applyCreatedAtCursor, buildListPagination, normalizePagination } from '../utils/pagination.js';
 
 /**
  * Tạo và gửi thông báo tới User
@@ -29,25 +30,23 @@ export const createNotification = async ({ recipient, title, message, type = 'SY
 /**
  * Lấy danh sách thông báo của User (Phân trang)
  */
-export const getUserNotifications = async (userId, { page = 1, limit = 20 } = {}) => {
+export const getUserNotifications = async (userId, { page = 1, limit = 20, cursor, withTotal = true } = {}) => {
     try {
-        const skip = (page - 1) * limit;
-        const notifications = await Notification.find({ recipient: userId })
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(limit)
-            .lean();
+        const { pageNum, limitNum, skip, cursor: cursorId, withTotal: shouldCount } = normalizePagination({ page, limit, cursor, withTotal });
+        const filter = applyCreatedAtCursor({ recipient: userId }, cursorId);
 
-        const total = await Notification.countDocuments({ recipient: userId });
+        const [notifications, total] = await Promise.all([
+            Notification.find(filter)
+                .sort({ createdAt: -1, _id: -1 })
+                .skip(skip)
+                .limit(limitNum)
+                .lean(),
+            shouldCount ? Notification.countDocuments(filter) : Promise.resolve(undefined)
+        ]);
 
         return {
             notifications,
-            pagination: {
-                total,
-                page: Number(page),
-                limit: Number(limit),
-                pages: Math.ceil(total / limit)
-            }
+            pagination: buildListPagination({ items: notifications, total, pageNum, limitNum, cursor: cursorId, withTotal: shouldCount })
         };
     } catch (error) {
         console.error('[NotificationService] Error getting notifications:', error);

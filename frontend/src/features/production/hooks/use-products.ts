@@ -11,10 +11,11 @@ export const productKeys = {
     detail: (id: string) => [...productKeys.details(), id] as const,
 };
 
-export function useProducts(params: any = {}) {
+export function useProducts(params: any = {}, options: { enabled?: boolean } = {}) {
     return useQuery({
         queryKey: productKeys.list(params),
         queryFn: () => productApi.getProducts(params),
+        enabled: options.enabled ?? true,
         staleTime: 1000 * 60 * 5, // 5 minutes
     });
 }

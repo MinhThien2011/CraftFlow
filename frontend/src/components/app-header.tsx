@@ -78,6 +78,10 @@ export function AppHeader({ title, subtitle }: AppHeaderProps) {
     // Điều hướng dựa trên metaData nếu có
     if (n.metaData?.orderId) {
       router.push(`/production-management/orders/${n.metaData.orderId}`)
+    } else if (n.metaData?.purchaseOrderId) {
+      router.push('/production-management/purchase-orders')
+    } else if (n.metaData?.slipId || n.metaData?.slipNumber) {
+      router.push('/receiving')
     } else if (n.type === 'ALERT') {
       router.push('/alerts')
     }
@@ -92,7 +96,7 @@ export function AppHeader({ title, subtitle }: AppHeaderProps) {
   }
 
   return (
-    <header className="flex h-[72px] items-center justify-between rounded-[1.5rem] border border-border/40 bg-card/80 px-6 backdrop-blur-xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.2)] transition-all duration-300 relative z-30">
+    <header className="flex h-[72px] items-center justify-between rounded-[1.5rem] border border-border/40 bg-gradient-to-r from-pink-50/90 to-purple-50/90 dark:from-pink-950/50 dark:to-purple-950/50 px-6 backdrop-blur-xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.2)] transition-all duration-300 relative z-30">
       <div className="flex items-center gap-5">
         <Button variant="ghost" size="icon" onClick={toggleSidebar} className="lg:hidden rounded-xl bg-primary/5 hover:bg-primary/10 text-primary transition-colors">
           <Menu className="h-5 w-5" />
@@ -212,14 +216,9 @@ export function AppHeader({ title, subtitle }: AppHeaderProps) {
                <span className="text-sm font-bold text-foreground">{user?.fullName || user?.username || "Người dùng"}</span>
                <span className="text-[10px] font-bold text-primary/80 uppercase tracking-wider">{role.replace("_", " ")}</span>
             </div>
-            <DropdownMenuItem className="rounded-xl cursor-pointer py-2.5">
+            <DropdownMenuItem onClick={() => router.push('/settings')} className="rounded-xl cursor-pointer py-2.5 hover:bg-primary/10">
               <User className="mr-2 h-4 w-4 text-muted-foreground" />
               <span className="font-medium">Hồ sơ cá nhân</span>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator className="bg-border/50" />
-            <DropdownMenuItem onClick={handleLogout} className="rounded-xl cursor-pointer text-destructive focus:bg-destructive/10 focus:text-destructive py-2.5">
-              <LogOut className="mr-2 h-4 w-4" />
-              <span className="font-medium">Đăng xuất</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

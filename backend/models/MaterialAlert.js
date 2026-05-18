@@ -27,7 +27,7 @@ const materialAlertSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'resolved', 'ignored'],
+    enum: ['pending', 'ordered', 'resolved', 'ignored'],
     default: 'pending',
   },
   resolvedBy: {
@@ -46,5 +46,8 @@ const materialAlertSchema = new mongoose.Schema({
 
 materialAlertSchema.index({ material: 1, status: 1 });
 materialAlertSchema.index({ productionOrder: 1 });
+materialAlertSchema.index({ status: 1, createdAt: -1, _id: -1 });
+materialAlertSchema.index({ productionOrder: 1, status: 1 });
+materialAlertSchema.index({ purchaseOrder: 1 });
 
 export default mongoose.model('MaterialAlert', materialAlertSchema);

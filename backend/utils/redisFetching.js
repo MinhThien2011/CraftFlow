@@ -1,22 +1,31 @@
-import { client } from '../config/redisClient.js';
+import { client, getRedisHealth, getLastLatency } from '../config/redisClient.js';
 
 const CACHE_PREFIX = 'user:role:';
 const DATA_CACHE_PREFIX = 'cache:';
 const DEFAULT_EXPIRY = 3600; // 1 hour
 const LIST_EXPIRY = 300; // 5 minutes
+const CACHE_TIMEOUT_MS = Number(process.env.REDIS_CACHE_TIMEOUT_MS || 50);
+const MAX_CACHE_LATENCY_MS = Number(process.env.REDIS_CACHE_MAX_LATENCY_MS || 250);
+
+const canUseRedisCache = () => {
+    if (process.env.DISABLE_REDIS_CACHE === 'true') return false;
+    if (!client.isOpen || !getRedisHealth()) return false;
+    return getLastLatency() <= MAX_CACHE_LATENCY_MS;
+};
+
+const withTimeout = (promise, timeoutMs = CACHE_TIMEOUT_MS) => Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Redis Timeout')), timeoutMs))
+]);
 
 /**
  * Get data from Redis cache.
  */
 export const getCachedData = async (key) => {
-    if (!client.isOpen) return null;
+    if (!canUseRedisCache()) return null;
     try {
-        const data = await Promise.race([
-            client.get(`${DATA_CACHE_PREFIX}${key}`),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Redis Timeout')), 1000))
-        ]);
+        const data = await withTimeout(client.get(`${DATA_CACHE_PREFIX}${key}`));
         if (!data) return null;
-        console.log(`[Redis] Fetched cached data for ${key}:`);
         return JSON.parse(data);
     } catch (error) {
         if (error.message !== 'Redis Timeout') {
@@ -30,14 +39,13 @@ export const getCachedData = async (key) => {
  * Set data in Redis cache with TTL.
  */
 export const setCachedData = async (key, data, expiry = LIST_EXPIRY) => {
-    if (!client.isOpen) return;
+    if (!canUseRedisCache()) return;
     try {
-        await Promise.race([
+        await withTimeout(
             client.set(`${DATA_CACHE_PREFIX}${key}`, JSON.stringify(data), {
                 EX: expiry
-            }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Redis Timeout')), 1000))
-        ]);
+            })
+        );
     } catch (error) {
         if (error.message !== 'Redis Timeout') {
             console.error(`[Redis] Error setting cached data for ${key}:`, error.message);
@@ -50,7 +58,7 @@ export const setCachedData = async (key, data, expiry = LIST_EXPIRY) => {
  * @param {string} pattern - e.g., 'user:list:*'
  */
 export const clearCacheByPattern = async (pattern) => {
-    if (!client.isOpen) return;
+    if (!canUseRedisCache()) return;
     try {
         const fullPattern = `${DATA_CACHE_PREFIX}${pattern}`;
         console.log(`[Redis] Scanning with pattern: ${fullPattern}`);
@@ -83,15 +91,15 @@ export const clearCacheByPattern = async (pattern) => {
  * @param {string} userId - The user ID.
  * @returns {Promise<Object|null>} - The cached access info or null.
  */
-//Add console.log for successful cache retrieval to maintain logging consistency
+
 export const getUserAccessInfo = async (userId) => {
-    if (!client.isOpen) return null;
+    if (!canUseRedisCache()) return null;
     try {
-        const data = await client.get(`${CACHE_PREFIX}${userId}`);
+        const data = await withTimeout(client.get(`${CACHE_PREFIX}${userId}`));
         if (!data) return null;
         return JSON.parse(data);
     } catch (error) {
-        console.error(`[Redis] Error getting user access info for ${userId}:`, error.message);
+        console.error(`[Redis] Error getting user access info for ${userId}:`, error);
         return null;
     }
 };
@@ -103,12 +111,11 @@ export const getUserAccessInfo = async (userId) => {
  * @param {number} expiry - Expiry time in seconds.
  */
 export const setUserAccessInfo = async (userId, accessInfo, expiry = DEFAULT_EXPIRY) => {
-    if (!client.isOpen) return;
+    if (!canUseRedisCache()) return;
     try {
-        await client.set(`${CACHE_PREFIX}${userId}`, JSON.stringify(accessInfo), {
+        await withTimeout(client.set(`${CACHE_PREFIX}${userId}`, JSON.stringify(accessInfo), {
             EX: expiry
-        });
-        console.log(`[Redis] Set user access info for ${userId} with expiry ${expiry} seconds`);
+        }));
     } catch (error) {
         console.error(`[Redis] Error setting user access info for ${userId}:`, error);
     }
@@ -119,22 +126,19 @@ export const setUserAccessInfo = async (userId, accessInfo, expiry = DEFAULT_EXP
  * @param {string} userId - The user ID.
  */
 export const delUserAccessInfo = async (userId) => {
-    if (!client.isOpen) return;
+    if (!canUseRedisCache()) return;
     try {
-        await client.del(`${CACHE_PREFIX}${userId}`);
-        console.log(`[Redis] User access info deleted for ${userId}`);
+        await withTimeout(client.del(`${CACHE_PREFIX}${userId}`));
     } catch (error) {
         console.log(`[Redis] Error deleting user access info for ${userId}:`, error);
     }
 };
 
 export const roleFetching = async (role) => {
-    if (!client.isOpen) return null;
+    if (!canUseRedisCache()) return null;
     try {
-        console.log(`[Redis] Trying to get role for ${role}`);
-        const data = await client.get(`role:${role}`);
+        const data = await withTimeout(client.get(`role:${role}`));
         if (!data) return null;
-        console.log(`[Redis] Role retrieved for ${role}:`, data);
         return JSON.parse(data);
     } catch (error) {
         console.log(`[Redis] Error getting role for ${role}:`, error);

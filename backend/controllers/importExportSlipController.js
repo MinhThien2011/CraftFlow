@@ -129,6 +129,8 @@ export const getAllSlips = async (req, res) => {
             type,
             page,
             limit,
+            cursor,
+            withTotal,
             status,
             slipNumber,
             personName,
@@ -157,6 +159,8 @@ export const getAllSlips = async (req, res) => {
             category,
             page: parseInt(page) || 1,
             limit: parseInt(limit) || 10,
+            cursor,
+            withTotal,
         }
         const result = await importExportSlipService.getAllSlipsService(query);
         res.status(200).json(result);

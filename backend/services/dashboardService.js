@@ -15,9 +15,10 @@ import {
 } from '../utils/constants.js';
 import mongoose from 'mongoose';
 
-import { client, getRedisHealth } from '../config/redisClient.js';
+import { getCachedData, setCachedData } from '../utils/redisFetching.js';
+import { applyAggregateGuards, applyQueryGuards } from '../utils/queryPerformance.js';
 
-const DASHBOARD_CACHE_KEY = 'cache:dashboard:overview';
+const DASHBOARD_CACHE_KEY = 'dashboard:overview';
 const DASHBOARD_CACHE_TTL = 300; // 5 minutes
 
 /**
@@ -25,17 +26,14 @@ const DASHBOARD_CACHE_TTL = 300; // 5 minutes
  */
 export const getOverviewStats = async () => {
     try {
-        // Try to get from cache first
-        if (getRedisHealth() && client.isOpen) {
-            const cachedData = await client.get(DASHBOARD_CACHE_KEY);
-            if (cachedData) {
-                return { success: true, data: JSON.parse(cachedData), fromCache: true };
-            }
+        const cachedData = await getCachedData(DASHBOARD_CACHE_KEY);
+        if (cachedData) {
+            return { success: true, data: cachedData, fromCache: true };
         }
 
         const [materialStats, productStats, orderStats] = await Promise.all([
             // 1. Material stats: Total items, Total value, Low stock items, Stock percentage
-            Material.aggregate([
+            applyAggregateGuards(Material.aggregate([
                 { $match: { isActive: true } },
                 {
                     $group: {
@@ -60,9 +58,9 @@ export const getOverviewStats = async () => {
                         }
                     }
                 }
-            ]),
+            ])),
             // 2. Product stats: Total items, Total value, Low stock items, Stock percentage
-            Product.aggregate([
+            applyAggregateGuards(Product.aggregate([
                 { $match: { isActive: true } },
                 {
                     $group: {
@@ -87,16 +85,16 @@ export const getOverviewStats = async () => {
                         }
                     }
                 }
-            ]),
+            ])),
             // 3. Production order stats: Counts by status
-            ProductionOrder.aggregate([
+            applyAggregateGuards(ProductionOrder.aggregate([
                 {
                     $group: {
                         _id: '$status',
                         count: { $sum: 1 }
                     }
                 }
-            ])
+            ]))
         ]);
 
         // Format order stats into an object
@@ -112,11 +110,14 @@ export const getOverviewStats = async () => {
         };
 
         // Save to cache asynchronously
-        if (getRedisHealth() && client.isOpen) {
+        setCachedData(DASHBOARD_CACHE_KEY, resultData, DASHBOARD_CACHE_TTL).catch(() => {});
+        /*
+        if (false) {
             client.setEx(DASHBOARD_CACHE_KEY, DASHBOARD_CACHE_TTL, JSON.stringify(resultData)).catch(err => {
                 console.error('⚠️ Dashboard Cache Set Error:', err.message);
             });
         }
+        */
 
         return {
             success: true,
@@ -134,22 +135,22 @@ export const getOverviewStats = async () => {
 export const getRecentAlerts = async (limit = 5) => {
     try {
         const [materials, products] = await Promise.all([
-            Material.find({
+            applyQueryGuards(Material.find({
                 isActive: true,
                 $expr: { $lte: ['$currentStock', '$threshold'] }
             })
                 .sort({ currentStock: 1 })
                 .limit(limit)
                 .select('name currentStock threshold unit')
-                .lean(),
-            Product.find({
+                .lean()),
+            applyQueryGuards(Product.find({
                 isActive: true,
                 $expr: { $lte: ['$currentStock', '$threshold'] }
             })
                 .sort({ currentStock: 1 })
                 .limit(limit)
                 .select('name currentStock threshold unit category')
-                .lean()
+                .lean())
         ]);
 
         const alerts = [
@@ -190,7 +191,7 @@ export const getChartData = async (days = 7) => {
 
         const [inventoryTrends, productionTrends, materialConsumptionTrends] = await Promise.all([
             // 1. Inventory movement trends (Receive vs Issue/Sales)
-            InventoryTransaction.aggregate([
+            applyAggregateGuards(InventoryTransaction.aggregate([
                 { $match: { createdAt: { $gte: startDate } } },
                 {
                     $group: {
@@ -215,9 +216,9 @@ export const getChartData = async (days = 7) => {
                     }
                 },
                 { $sort: { _id: 1 } }
-            ]),
+            ])),
             // 2. Production completion trends
-            ProductionOrder.aggregate([
+            applyAggregateGuards(ProductionOrder.aggregate([
                 {
                     $match: {
                         status: ORDER_STATUS.COMPLETED,
@@ -232,9 +233,9 @@ export const getChartData = async (days = 7) => {
                     }
                 },
                 { $sort: { _id: 1 } }
-            ]),
+            ])),
             // 3. Material Consumption Trends
-            InventoryTransaction.aggregate([
+            applyAggregateGuards(InventoryTransaction.aggregate([
                 {
                     $match: {
                         material: { $exists: true },
@@ -274,7 +275,7 @@ export const getChartData = async (days = 7) => {
                     }
                 },
                 { $sort: { _id: 1 } }
-            ])
+            ]))
         ]);
 
         return {
@@ -298,13 +299,13 @@ export const getTopPerformanceStats = async () => {
     try {
         const [topProducts, criticalMaterials] = await Promise.all([
             // 1. Top 5 products by total produced
-            Product.find({ isActive: true })
+            applyQueryGuards(Product.find({ isActive: true })
                 .sort({ totalProduced: -1 })
                 .limit(5)
                 .select('name code totalProduced currentStock')
-                .lean(),
+                .lean()),
             // 2. Top 5 materials most in need (lowest stock relative to threshold)
-            Material.aggregate([
+            applyAggregateGuards(Material.aggregate([
                 { $match: { isActive: true } },
                 {
                     $addFields: {
@@ -320,7 +321,7 @@ export const getTopPerformanceStats = async () => {
                 { $sort: { stockRatio: 1 } },
                 { $limit: 5 },
                 { $project: { name: 1, code: 1, currentStock: 1, threshold: 1, stockRatio: 1 } }
-            ])
+            ]))
         ]);
 
         return {
@@ -349,19 +350,19 @@ export const getWarehouseStats = async () => {
             pendingSlips
         ] = await Promise.all([
             // 1. Pending Requisitions (Issue/Supplementary) that need action
-            MaterialRequisition.countDocuments({ status: { $in: [REQUISITION_STATUS.PENDING, REQUISITION_STATUS.APPROVED] } }),
+            applyQueryGuards(MaterialRequisition.countDocuments({ status: { $in: [REQUISITION_STATUS.PENDING, REQUISITION_STATUS.APPROVED] } })),
             
             // 2. Pending Returns
-            MaterialRequisition.countDocuments({ type: REQUISITION_TYPE.RETURN, status: REQUISITION_STATUS.RETURN_PENDING }),
+            applyQueryGuards(MaterialRequisition.countDocuments({ type: REQUISITION_TYPE.RETURN, status: REQUISITION_STATUS.RETURN_PENDING })),
 
             // 3. Low stock materials (below threshold)
-            Material.countDocuments({ isActive: true, $expr: { $lte: ['$currentStock', '$threshold'] } }),
+            applyQueryGuards(Material.countDocuments({ isActive: true, $expr: { $lte: ['$currentStock', '$threshold'] } })),
 
             // 4. Pending Defects/Shrinkage
-            InventoryShrinkageReport.countDocuments({ status: SHRINKAGE_STATUS.PENDING }),
+            applyQueryGuards(InventoryShrinkageReport.countDocuments({ status: SHRINKAGE_STATUS.PENDING })),
 
             // 5. Pending Import/Export Slips
-            InventoryImportExportSlip.countDocuments({ status: { $in: [INVENTORY_IMPORT_EXPORT_SLIP_STATUS.PENDING, INVENTORY_IMPORT_EXPORT_SLIP_STATUS.INSPECTED] } })
+            applyQueryGuards(InventoryImportExportSlip.countDocuments({ status: { $in: [INVENTORY_IMPORT_EXPORT_SLIP_STATUS.PENDING, INVENTORY_IMPORT_EXPORT_SLIP_STATUS.INSPECTED] } }))
         ]);
 
         return {
@@ -386,13 +387,13 @@ export const getWarehouseStats = async () => {
  */
 export const getWarehouseRecentActivity = async (limit = 10) => {
     try {
-        const activities = await InventoryTransaction.find()
+        const activities = await applyQueryGuards(InventoryTransaction.find()
             .sort({ createdAt: -1 })
             .limit(limit)
             .populate('material', 'name code unit')
             .populate('product', 'name code unit')
-            .populate('user', 'fullName')
-            .lean();
+            .populate('performedBy', 'fullName')
+            .lean());
         
         return {
             success: true,
@@ -403,7 +404,7 @@ export const getWarehouseRecentActivity = async (limit = 10) => {
                 itemName: act.material?.name || act.product?.name || 'N/A',
                 itemCode: act.material?.code || act.product?.code || 'N/A',
                 unit: act.material?.unit || act.product?.unit || '',
-                user: act.user?.fullName || 'System',
+                user: act.performedBy?.fullName || 'System',
                 notes: act.notes,
                 createdAt: act.createdAt
             }))

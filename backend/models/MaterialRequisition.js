@@ -102,5 +102,9 @@ requisitionSchema.index({ productionOrder: 1 });
 requisitionSchema.index({ createdBy: 1 });
 requisitionSchema.index({ relatedSlip: 1 });
 requisitionSchema.index({ parentRequisition: 1 });
+requisitionSchema.index({ status: 1, type: 1, createdAt: -1, _id: -1 });
+requisitionSchema.index({ productionOrder: 1, status: 1, createdAt: -1 });
+requisitionSchema.index({ requisitionCode: 1, createdAt: -1 });
+requisitionSchema.index({ requisitionCode: 'text', notes: 'text' });
 
 export default mongoose.model('MaterialRequisition', requisitionSchema);

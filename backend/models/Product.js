@@ -53,6 +53,9 @@ productSchema.index({ isActive: 1 });
 productSchema.index({ shelf: 1 });
 productSchema.index({ createdAt: -1 });
 productSchema.index({ currentStock: 1 });
+productSchema.index({ isActive: 1, createdAt: -1, _id: -1 });
+productSchema.index({ isActive: 1, currentStock: 1, _id: 1 });
+productSchema.index({ category: 1, isActive: 1, createdAt: -1, _id: -1 });
 
 /**
  * Virtual property to get current stock level status.

@@ -228,6 +228,9 @@ export function SlipDetailDialog({
         return editableItems.reduce((sum, item) => sum + (item.quantity?.actual || 0), 0)
     }, [editableItems])
 
+    const quantityColumnCount = isImport ? 3 : 2
+    const tableColumnCount = isImport ? 9 : 8
+
     const totalAmountInWords = useMemo(() => {
         return numberToVietnameseWords(totalAmount)
     }, [totalAmount])
@@ -676,15 +679,15 @@ export function SlipDetailDialog({
                                     <tr className="bg-gray-50/50">
                                         <th className="border border-black p-2 w-10 text-center" rowSpan={2}>STT</th>
                                         <th className="border border-black p-2 min-w-[200px] text-center" rowSpan={2}>Tên, nhãn hiệu, quy cách, phẩm chất vật tư, dụng cụ sản phẩm, hàng hóa</th>
-                                        <th className="border border-black p-2 w-20 text-center" rowSpan={2}>Mã số</th>
+                                        <th className="border border-black p-2 w-28 text-center" rowSpan={2}>Mã số</th>
                                         <th className="border border-black p-2 w-20 text-center" rowSpan={2}>ĐVT</th>
-                                        <th className="border border-black p-1 text-center" colSpan={3}>Số lượng</th>
+                                        <th className="border border-black p-1 text-center" colSpan={quantityColumnCount}>Số lượng</th>
                                         <th className="border border-black p-2 w-24 text-center" rowSpan={2}>Đơn giá</th>
                                         <th className="border border-black p-2 w-28 text-center" rowSpan={2}>Thành tiền</th>
                                     </tr>
                                     <tr className="bg-gray-50/50">
-                                        <th className="border border-black p-1 w-20 text-center text-[11px]">Chứng từ</th>
-                                        <th className="border border-black p-1 w-20 text-center text-[11px]">{isImport ? 'Tạm nhập' : 'Tạm xuất'}</th>
+                                        <th className="border border-black p-1 w-20 text-center text-[11px]">Theo chứng từ</th>
+                                        {isImport && <th className="border border-black p-1 w-20 text-center text-[11px]">Tạm nhập</th>}
                                         <th className="border border-black p-1 w-20 text-center text-[11px]">{actualLabel}</th>
                                     </tr>
                                 </thead>
@@ -697,20 +700,21 @@ export function SlipDetailDialog({
                                             <td className="border border-black px-2 text-center">{item.unit}</td>
                                             <td className="border border-black px-2 text-right">{item.quantity?.requested || 0}</td>
 
-                                            {/* Provisional Quantity */}
-                                            <td className="border border-black p-0 text-center min-w-[80px]">
-                                                {canEditProvisional ? (
-                                                    <input
-                                                        type="number"
-                                                        min="0"
-                                                        value={item.quantity?.provisional === 0 ? '' : item.quantity?.provisional}
-                                                        onChange={(e) => handleProvisionalChange(idx, e.target.value)}
-                                                        className="w-full h-full bg-blue-50/50 text-right px-2 font-bold text-blue-700 outline-none focus:bg-blue-100"
-                                                    />
-                                                ) : (
-                                                    <span className="px-2 text-right block">{item.quantity?.provisional || 0}</span>
-                                                )}
-                                            </td>
+                                            {isImport && (
+                                                <td className="border border-black p-0 text-center min-w-[80px]">
+                                                    {canEditProvisional ? (
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            value={item.quantity?.provisional === 0 ? '' : item.quantity?.provisional}
+                                                            onChange={(e) => handleProvisionalChange(idx, e.target.value)}
+                                                            className="w-full h-full bg-blue-50/50 text-right px-2 font-bold text-blue-700 outline-none focus:bg-blue-100"
+                                                        />
+                                                    ) : (
+                                                        <span className="px-2 text-right block">{item.quantity?.provisional || 0}</span>
+                                                    )}
+                                                </td>
+                                            )}
 
                                             {/* Actual Quantity */}
                                             <td className="border border-black p-0 text-center min-w-[80px]">
@@ -738,21 +742,15 @@ export function SlipDetailDialog({
                                     {/* Placeholder rows if few items */}
                                     {Array.from({ length: Math.max(0, 5 - (editableItems.length || 0)) }).map((_, i) => (
                                         <tr key={`empty-${i}`} className="h-9">
-                                            <td className="border border-black px-2"></td>
-                                            <td className="border border-black px-2"></td>
-                                            <td className="border border-black px-2"></td>
-                                            <td className="border border-black px-2"></td>
-                                            <td className="border border-black px-2"></td>
-                                            <td className="border border-black px-2"></td>
-                                            <td className="border border-black px-2"></td>
-                                            <td className="border border-black px-2"></td>
-                                            <td className="border border-black px-2"></td>
+                                            {Array.from({ length: tableColumnCount }).map((__, emptyIdx) => (
+                                                <td key={emptyIdx} className="border border-black px-2"></td>
+                                            ))}
                                         </tr>
                                     ))}
                                     <tr className="h-10 font-bold bg-gray-50/30">
                                         <td className="border border-black px-4 text-center" colSpan={4}>Cộng</td>
                                         <td className="border border-black px-2 text-right text-xs font-mono">{totalRequested}</td>
-                                        <td className="border border-black px-2 text-right text-xs font-mono text-blue-700">{totalProvisional}</td>
+                                        {isImport && <td className="border border-black px-2 text-right text-xs font-mono text-blue-700">{totalProvisional}</td>}
                                         <td className="border border-black px-2 text-right text-xs font-mono text-emerald-700">{totalActual}</td>
                                         <td className="border border-black px-2 text-center text-gray-400 italic font-normal text-xs">x</td>
                                         <td className="border border-black px-2 text-right font-mono text-base min-w-[140px]" title={new Intl.NumberFormat('vi-VN').format(totalAmount)}>
@@ -944,8 +942,8 @@ export function SlipDetailDialog({
                                                     itemCode: item.itemCode,
                                                     material: item.material,
                                                     product: item.product,
-                                                    provisionalQuantity: item.quantity.provisional,
                                                     actualQuantity: item.quantity.actual,
+                                                    ...(isImport ? { provisionalQuantity: item.quantity.provisional } : {}),
                                                     itemNote: ""
                                                 }))
                                                 onStatusUpdate(nextStep.nextStatus, itemsToUpdate)

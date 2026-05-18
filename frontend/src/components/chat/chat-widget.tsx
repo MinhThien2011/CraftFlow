@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { useAuth } from "@/features/auth/hooks/use-auth"
 
 type ChatPart = {
     text?: string
@@ -50,6 +51,24 @@ const hasLatestAssistantResponse = (messages: unknown): messages is ChatMessage[
         .some((message) => message.role === "model" && isVisibleMessage(message))
 }
 
+const getSuggestionsByRole = (role?: string) => {
+    switch(role?.toLowerCase()) {
+        case "admin":
+        case "admin_role":
+            return ["Tóm tắt tình hình sản xuất hôm nay", "Có đơn hàng nào đang trễ hạn không?", "Kiểm tra tồn kho vật tư"];
+        case "kho_manager":
+        case "inventory_manager":
+            return ["Xem vật tư nào sắp hết", "Có yêu cầu nhập kho nào mới không?", "Lập báo cáo tồn kho"];
+        case "production_manager":
+            return ["Tạo đơn sản xuất mới", "Gợi ý phân công nhân sự", "Kiểm tra tiến độ đơn hàng khẩn cấp"];
+        case "staff":
+        case "worker":
+            return ["Xem nhiệm vụ hôm nay của tôi", "Hướng dẫn thao tác máy", "Báo cáo sự cố máy móc"];
+        default:
+            return ["Hướng dẫn sử dụng hệ thống", "Làm thế nào để tạo tài khoản?", "Chức năng chính là gì?"];
+    }
+}
+
 export function ChatWidget() {
     const [isOpen, setIsOpen] = useState(false)
     const [input, setInput] = useState("")
@@ -59,6 +78,15 @@ export function ChatWidget() {
     const streamTextRef = useRef("")
     const streamMsgIndexRef = useRef<number | null>(null)
     const streamFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const { user, role } = useAuth()
+
+    useEffect(() => {
+        if (isOpen && history.length === 0) {
+            setHistory([
+                createTextMessage("model", `Xin chào ${user?.fullName || 'bạn'}! Tôi là trợ lý AI của CraftFlow. Dưới đây là một số gợi ý cho bạn:`),
+            ]);
+        }
+    }, [isOpen, history.length, user]);
 
     // Drag & Drop State
     const [position, setPosition] = useState({ x: 0, y: 0 })
@@ -146,9 +174,10 @@ export function ChatWidget() {
         }
     }
 
-    const handleSend = async () => {
-        if (!input.trim() || isLoading) return
-        const userInput = input.trim()
+    const handleSend = async (overrideInput?: string) => {
+        const textToSend = typeof overrideInput === 'string' ? overrideInput : input;
+        if (!textToSend.trim() || isLoading) return
+        const userInput = textToSend.trim()
         const newMsg = createTextMessage("user", userInput)
         const newHistory = [...history, newMsg]
         const streamMsgIndex = newHistory.length
@@ -300,6 +329,21 @@ export function ChatWidget() {
                                     {getMessageText(msg)}
                                 </div>
                             ))}
+                        
+                        {history.length === 1 && history[0].role === "model" && (
+                            <div className="flex flex-wrap gap-2 mt-1">
+                                {getSuggestionsByRole(role).map((suggestion, idx) => (
+                                    <button
+                                        key={idx}
+                                        onClick={() => handleSend(suggestion)}
+                                        className="text-[12px] bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 rounded-full px-3 py-1.5 transition-colors text-left"
+                                    >
+                                        {suggestion}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+
                         {isWaitingForResponse && (
                             <div className="bg-background/80 border border-border/50 text-foreground self-start p-3.5 rounded-2xl rounded-tl-sm backdrop-blur-md flex items-center gap-3 shadow-sm">
                                 <Loader2 className="h-4 w-4 animate-spin text-primary" /> 
@@ -326,7 +370,7 @@ export function ChatWidget() {
                                     "absolute right-1 h-10 w-10 rounded-full shrink-0 transition-all duration-300",
                                     input.trim() ? "bg-primary text-primary-foreground shadow-[0_0_15px_rgba(219,39,119,0.5)] scale-100" : "bg-muted text-muted-foreground scale-90"
                                 )}
-                                onClick={handleSend} 
+                                onClick={() => handleSend()} 
                                 disabled={isLoading || !input.trim()}
                             >
                                 <Send className="h-4 w-4" />
@@ -340,18 +384,21 @@ export function ChatWidget() {
             <div className="relative cursor-grab active:cursor-grabbing group chat-trigger-area">
                 {/* Hiệu ứng nhịp đập (Ping) đằng sau nút khi đóng */}
                 {!isOpen && (
-                    <div className="absolute inset-0 rounded-full bg-[#D4A574]/60 animate-ping opacity-75 duration-1000"></div>
+                    <div className="absolute inset-0 rounded-full bg-pink-500/60 animate-ping opacity-75 duration-1000"></div>
                 )}
                 <Button 
                     size="icon" 
                     className={cn(
-                        "relative h-14 w-14 sm:h-16 sm:w-16 rounded-full shadow-[0_10px_30px_rgba(139,115,85,0.4)] transition-all duration-300 group-hover:scale-110 pointer-events-none no-drag border-[1.5px] border-white/40",
+                        "relative h-14 w-14 sm:h-16 sm:w-16 rounded-full shadow-[0_10px_30px_rgba(236,72,153,0.4)] transition-all duration-300 group-hover:scale-110 pointer-events-none no-drag border-[1.5px] border-white/40 overflow-hidden",
                         isOpen 
                             ? "bg-card border-border text-foreground shadow-lg hover:bg-card/90" 
-                            : "bg-gradient-to-tr from-[#8B7355] via-[#A88B64] to-[#D4A574] text-white"
+                            : "bg-gradient-to-tr from-pink-500 via-purple-500 to-indigo-500 text-white hover:shadow-[0_10px_40px_rgba(236,72,153,0.6)]"
                     )}
                 >
-                    {isOpen ? <X className="h-6 w-6" /> : <Bot className="h-7 w-7 drop-shadow-md" />}
+                    {!isOpen && (
+                        <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/20 to-white/0 translate-x-[-100%] animate-[shimmer_2s_infinite]"></div>
+                    )}
+                    {isOpen ? <X className="relative z-10 h-6 w-6" /> : <Bot className="relative z-10 h-7 w-7 drop-shadow-md animate-bounce" />}
                 </Button>
                 
                 {/* Lớp phủ ẩn để bắt sự kiện click chuẩn xác cho Drag Handle */}

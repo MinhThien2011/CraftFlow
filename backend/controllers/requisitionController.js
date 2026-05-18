@@ -5,14 +5,16 @@ import { updateRequisitionStatusValidator } from '../validations/requisitionVali
 
 export const getRequisitions = async (req, res) => {
   try {
-    const { status, productionOrderId, search, page, limit, type } = req.query;
+    const { status, productionOrderId, search, page, limit, type, cursor, withTotal } = req.query;
     const result = await requisitionService.getRequisitions({
       status,
       productionOrderId,
       search,
       page,
       limit,
-      type
+      type,
+      cursor,
+      withTotal
     });
 
     return res.status(StatusCodes.OK).json(result);

@@ -16,11 +16,13 @@ import {
 } from "../utils/constants.js";
 import { createNotification } from "./notificationService.js";
 import { emitToRoles } from "../config/socket.js";
+import { emitDataChanged } from "./realtimeService.js";
 import { updateShelfLoad } from "./shelfService.js";
 import { createBatchesFromImport, generateBatchNumber, allocateBatchesForMaterial, allocateBatchesForItem } from "./fifoService.js";
 import { autoUpdateInsufficientOrders } from "./productionOrderService.js";
 import inventoryEvents from "../events/inventoryEvents.js";
 import mongoose from "mongoose";
+import { applyCreatedAtCursor, buildListPagination, normalizePagination } from "../utils/pagination.js";
 
 
 import { ServiceResponse } from "../utils/serviceHelper.js";
@@ -42,6 +44,16 @@ export const createSlipService = async (data, userId, session = null) => {
         };
 
         const [slip] = await InventoryImportExportSlip.create([slipData], { session });
+        if (!session) {
+            await emitDataChanged([ROLES.ADMIN, ROLES.KHO_MANAGER, ROLES.PRODUCTION_MANAGER], {
+                domains: ["slips", "inventory", "materials", "products", "production", "requisitions"],
+                action: "created",
+                entity: "inventory_slip",
+                id: slip._id,
+                message: `Inventory slip ${slip.slipNumber} was created.`,
+                metaData: { slipId: slip._id, slipNumber: slip.slipNumber, type: slip.type, status: slip.status }
+            });
+        }
         return ServiceResponse(true, 'Slip created successfully', slip, 201);
     } catch (error) {
         console.log('[createSlipService] error:', error);
@@ -280,11 +292,20 @@ export const updateSlipStatusService = async (slipId, newStatus, updateData, use
             }
         }
 
-        if (targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.RECEIVED) {
+        if (targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.RECEIVED && isImport) {
             if (inputItems.length === 0) return ServiceResponse(false, 'Update data must contain items when transitioning to RECEIVED status');
             for (const item of inputItems) {
                 if (item.provisionalQuantity === undefined || item.provisionalQuantity === null || item.provisionalQuantity < 0) {
                     return ServiceResponse(false, `Item ${item.itemCode || 'at identifier ' + (item.material || item.product)} is missing valid provisionalQuantity`);
+                }
+            }
+        }
+
+        if (targetStatus === INVENTORY_IMPORT_EXPORT_SLIP_STATUS.RECEIVED && !isImport) {
+            if (inputItems.length === 0) return ServiceResponse(false, 'Update data must contain items when transitioning to RECEIVED status');
+            for (const item of inputItems) {
+                if (item.actualQuantity === undefined || item.actualQuantity === null || item.actualQuantity < 0) {
+                    return ServiceResponse(false, `Item ${item.itemCode || 'at identifier ' + (item.material || item.product)} is missing valid actualQuantity`);
                 }
             }
         }
@@ -450,6 +471,15 @@ export const updateSlipStatusService = async (slipId, newStatus, updateData, use
                     message: `Phiếu ${slip.slipNumber} đã được cập nhật trạng thái: ${targetStatus}.`
                 });
 
+                await emitDataChanged([ROLES.ADMIN, ROLES.KHO_MANAGER, ROLES.PRODUCTION_MANAGER], {
+                    domains: ["slips", "inventory", "materials", "products", "production", "requisitions", "alerts"],
+                    action: "finalized",
+                    entity: "inventory_slip",
+                    id: slip._id,
+                    message: `Inventory slip ${slip.slipNumber} changed to ${targetStatus}.`,
+                    metaData: { slipId: slip._id, slipNumber: slip.slipNumber, status: targetStatus, type: slip.type }
+                });
+
                 inventoryEvents.emit('inventory_finalized', { slip, userId });
 
                 return ServiceResponse(true, `Slip updated to ${targetStatus}`, { slip, warnings });
@@ -457,6 +487,16 @@ export const updateSlipStatusService = async (slipId, newStatus, updateData, use
 
             await slip.save({ session });
             await session.commitTransaction();
+
+            await emitDataChanged([ROLES.ADMIN, ROLES.KHO_MANAGER, ROLES.PRODUCTION_MANAGER], {
+                domains: ["slips", "inventory", "materials", "products", "production", "requisitions"],
+                action: "status_updated",
+                entity: "inventory_slip",
+                id: slip._id,
+                message: `Inventory slip ${slip.slipNumber} changed to ${targetStatus}.`,
+                metaData: { slipId: slip._id, slipNumber: slip.slipNumber, status: targetStatus, type: slip.type }
+            });
+
             return ServiceResponse(true, `Slip updated to ${targetStatus}`, { slip, warnings });
         } catch (error) {
             if (session.inTransaction()) await session.abortTransaction();
@@ -818,6 +858,8 @@ export const getAllSlipsService = async (query = {}) => {
         const {
             page = 1,
             limit = 10,
+            cursor,
+            withTotal = true,
             type,
             status,
             slipNumber,
@@ -831,9 +873,9 @@ export const getAllSlipsService = async (query = {}) => {
             productId,
             category // 'material' or 'product'
         } = query;
-        const skip = (page - 1) * limit;
+        const { pageNum, limitNum, skip, cursor: cursorId, withTotal: shouldCount } = normalizePagination({ page, limit, cursor, withTotal });
 
-        const filter = {};
+        let filter = {};
 
         // Exact match
         if (type) filter.type = type;
@@ -863,15 +905,18 @@ export const getAllSlipsService = async (query = {}) => {
         // Search by items
         if (materialId) filter['items.material'] = materialId;
         if (productId) filter['items.product'] = productId;
+        filter = applyCreatedAtCursor(filter, cursorId);
 
+        const totalPromise = shouldCount ? InventoryImportExportSlip.countDocuments(filter) : Promise.resolve(undefined);
         const [slips, total] = await Promise.all([
             InventoryImportExportSlip.find(filter)
+                .sort({ createdAt: -1, _id: -1 })
                 .skip(skip)
-                .limit(parseInt(limit))
+                .limit(limitNum)
                 .populate('signatures.creator', 'name email')
                 .populate('signatures.storekeeper', 'name email')
-                .sort({ createdAt: -1 }),
-            InventoryImportExportSlip.countDocuments(filter)
+                .lean(),
+            totalPromise
         ]);
 
         return {
@@ -880,10 +925,8 @@ export const getAllSlipsService = async (query = {}) => {
             data: {
                 slips,
                 pagination: {
-                    total,
-                    page: parseInt(page),
-                    limit: parseInt(limit),
-                    totalPages: Math.ceil(total / limit)
+                    ...buildListPagination({ items: slips, total, pageNum, limitNum, cursor: cursorId, withTotal: shouldCount }),
+                    totalPages: total !== undefined ? Math.ceil(total / limitNum) : undefined
                 }
             }
         };

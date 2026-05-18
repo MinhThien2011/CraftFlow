@@ -154,8 +154,13 @@ export const emitToRoles = async (roles, eventName, data) => {
     if (!io) return;
 
     try {
+        const Role = mongoose.model('Role');
         const User = mongoose.model('User');
-        const users = await User.find({ role: { $in: roles }, isActive: true }).select('_id');
+        const roleDocs = await Role.find({ roleName: { $in: roles } }).select('_id').lean();
+        const roleIds = roleDocs.map(r => r._id);
+        if (roleIds.length === 0) return;
+
+        const users = await User.find({ role: { $in: roleIds }, isActive: true }).select('_id');
         const userIds = users.map(u => u._id.toString());
         emitToUsers(userIds, eventName, data);
     } catch (err) {

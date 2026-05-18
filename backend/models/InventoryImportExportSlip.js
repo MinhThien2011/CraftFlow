@@ -181,6 +181,10 @@ InventoryImportExportSlipSchema.pre('save', function () {
 });
 
 InventoryImportExportSlipSchema.index({ type: 1, status: 1 });
+InventoryImportExportSlipSchema.index({ type: 1, status: 1, createdAt: -1, _id: -1 });
+InventoryImportExportSlipSchema.index({ status: 1, createdAt: -1, _id: -1 });
+InventoryImportExportSlipSchema.index({ createdAt: -1, _id: -1 });
+InventoryImportExportSlipSchema.index({ date: -1, _id: -1 });
 InventoryImportExportSlipSchema.index({ relatedProductionOrder: 1 });
 InventoryImportExportSlipSchema.index({ relatedPurchaseOrder: 1 });
 InventoryImportExportSlipSchema.index({ relatedRequisition: 1 });

@@ -73,10 +73,11 @@ export function useAssignOrder() {
     });
 }
 
-export function useStaffSuggestions() {
+export function useStaffSuggestions(enabled = true) {
     return useQuery({
         queryKey: productionKeys.suggestions(),
         queryFn: () => productionApi.getStaffSuggestions(),
+        enabled,
         staleTime: 1000 * 60 * 5, // 5 minutes
     });
 }
@@ -159,5 +160,14 @@ export function useCancelProductionOrder() {
         onError: (error: any) => {
             toast.error(error.response?.data?.message || error.message || "Hủy đơn thất bại");
         }
+    });
+}
+
+export function useOrderBom(id: string) {
+    return useQuery({
+        queryKey: productionKeys.bom(id),
+        queryFn: () => productionApi.getBom(id),
+        enabled: !!id,
+        staleTime: 1000 * 60 * 5, // 5 minutes
     });
 }

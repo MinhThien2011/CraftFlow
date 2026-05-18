@@ -18,7 +18,10 @@ import { allocateBatchesForMaterial, createBatch } from './fifoService.js';
 import { createSlipService } from './importExportSlipService.js';
 import { autoUpdateInsufficientOrders } from './productionOrderService.js';
 import { createNotification } from './notificationService.js';
+import { emitDataChanged, notifyUsersByRole } from './realtimeService.js';
 import mongoose from 'mongoose';
+import { applyCreatedAtCursor, buildListPagination, normalizePagination } from '../utils/pagination.js';
+import { applyAggregateGuards } from '../utils/queryPerformance.js';
 
 /**
  * Production Manager requests materials for a production order.
@@ -47,7 +50,7 @@ export const requestMaterials = async (productionOrderId, managerId, items) => {
     await session.commitTransaction();
 
     // Notify Warehouse Managers
-    const warehouseManagers = await mongoose.model('User').find({ role: ROLES.KHO_MANAGER });
+    const warehouseManagers = [];
     for (const wm of warehouseManagers) {
       await createNotification({
         recipient: wm._id,
@@ -58,6 +61,25 @@ export const requestMaterials = async (productionOrderId, managerId, items) => {
         metaData: { requisitionId: newRequisition._id, orderId: order._id }
       });
     }
+
+    await notifyUsersByRole({
+      roles: [ROLES.KHO_MANAGER],
+      excludeUserId: managerId,
+      title: 'Yeu cau cap vat tu moi',
+      message: `Don san xuat ${order.orderCode} vua tao yeu cau cap vat tu moi (${requisitionCode}).`,
+      type: 'INVENTORY',
+      priority: 'MEDIUM',
+      metaData: { requisitionId: newRequisition._id, orderId: order._id }
+    });
+
+    await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.KHO_MANAGER], {
+      domains: ["requisitions", "production", "inventory", "materials", "slips"],
+      action: "created",
+      entity: "material_requisition",
+      id: newRequisition._id,
+      message: `Material requisition ${requisitionCode} was created.`,
+      metaData: { requisitionId: newRequisition._id, requisitionCode, orderId: order._id }
+    });
 
     return ServiceResponse(true, 'Đã gửi yêu cầu cấp vật tư thành công.', newRequisition, 201);
   } catch (error) {
@@ -113,6 +135,25 @@ export const requestSupplementaryMaterials = async (productionOrderId, managerId
     }
     await productionOrder.save();
 
+    await notifyUsersByRole({
+      roles: [ROLES.KHO_MANAGER],
+      excludeUserId: managerId,
+      title: 'Yeu cau vat tu bo sung',
+      message: `Don ${productionOrder.orderCode} co yeu cau vat tu bo sung moi.`,
+      type: 'INVENTORY',
+      priority: 'HIGH',
+      metaData: { requisitionId: newRequisition._id, orderId: productionOrder._id }
+    });
+
+    await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.KHO_MANAGER], {
+      domains: ["requisitions", "production", "inventory", "materials", "alerts"],
+      action: "created",
+      entity: "material_requisition",
+      id: newRequisition._id,
+      message: `Supplementary requisition was created for order ${productionOrder.orderCode}.`,
+      metaData: { requisitionId: newRequisition._id, orderId: productionOrder._id }
+    });
+
     return {
       success: true,
       message: 'Supplementary material requisition submitted and production order updated.',
@@ -145,6 +186,25 @@ export const requestReturnMaterials = async (productionOrderId, managerId, items
     });
 
     await newRequisition.save();
+
+    await notifyUsersByRole({
+      roles: [ROLES.KHO_MANAGER],
+      excludeUserId: managerId,
+      title: 'Yeu cau hoan tra vat tu',
+      message: `Don ${productionOrder.orderCode} co yeu cau hoan tra vat tu.`,
+      type: 'INVENTORY',
+      priority: 'MEDIUM',
+      metaData: { requisitionId: newRequisition._id, orderId: productionOrder._id }
+    });
+
+    await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.KHO_MANAGER], {
+      domains: ["requisitions", "production", "inventory", "materials"],
+      action: "created",
+      entity: "material_requisition",
+      id: newRequisition._id,
+      message: `Return requisition was created for order ${productionOrder.orderCode}.`,
+      metaData: { requisitionId: newRequisition._id, orderId: productionOrder._id }
+    });
 
     return {
       success: true,
@@ -221,6 +281,16 @@ export const approveReturnRequisition = async (requisitionId, managerId) => {
     await autoUpdateInsufficientOrders(returnedMaterialIds, session);
 
     await session.commitTransaction();
+
+    await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.KHO_MANAGER], {
+      domains: ["requisitions", "production", "inventory", "materials", "slips"],
+      action: "return_approved",
+      entity: "material_requisition",
+      id: requisition._id,
+      message: `Return requisition ${requisition.requisitionCode || requisition._id} was approved.`,
+      metaData: { requisitionId: requisition._id, slipId: slipResult.data._id, orderId: requisition.productionOrder }
+    });
+
     return {
       success: true,
       message: 'Return requisition approved and import slip created.',
@@ -238,15 +308,15 @@ export const approveReturnRequisition = async (requisitionId, managerId) => {
 /**
  * Get all material requisitions with filtering, searching and pagination.
  */
-export const getRequisitions = async ({ status, productionOrderId, search, page = 1, limit = 10, type }) => {
+export const getRequisitions = async ({ status, productionOrderId, search, page = 1, limit = 10, type, cursor, withTotal = true }) => {
   try {
-    const pageNum = Math.max(1, parseInt(page));
-    const limitNum = Math.max(1, parseInt(limit));
-    const skip = (pageNum - 1) * limitNum;
+    const { pageNum, limitNum, skip, cursor: cursorId, withTotal: shouldCount } = normalizePagination({ page, limit, cursor, withTotal });
 
-    const query = {};
+    let query = {};
     if (status) query.status = status;
-    if (productionOrderId) query.productionOrder = productionOrderId;
+    if (productionOrderId && mongoose.Types.ObjectId.isValid(productionOrderId)) {
+      query.productionOrder = new mongoose.Types.ObjectId(productionOrderId);
+    }
 
     if (type) {
       const types = type.split(',');
@@ -254,37 +324,96 @@ export const getRequisitions = async ({ status, productionOrderId, search, page 
     }
 
     if (search) {
-      const searchRegex = { $regex: search, $options: 'i' };
-      query.$or = [
-        { requisitionCode: searchRegex },
-        { notes: searchRegex }
-      ];
+      query.$text = { $search: String(search).trim() };
     }
+    query = applyCreatedAtCursor(query, cursorId);
 
-    const [requisitions, total] = await Promise.all([
-      MaterialRequisition.find(query)
-        .populate('productionOrder', 'orderCode status products deadline priority')
-        .populate('createdBy', 'fullName username')
-        .populate('khoManager', 'fullName username')
-        .populate('items.material', 'name code unit currentStock')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limitNum)
-        .lean(),
-      MaterialRequisition.countDocuments(query)
-    ]);
+    const dataPipeline = [
+      { $sort: { createdAt: -1, _id: -1 } },
+      { $skip: skip },
+      { $limit: limitNum },
+      {
+        $lookup: {
+          from: 'productionorders',
+          localField: 'productionOrder',
+          foreignField: '_id',
+          pipeline: [{ $project: { orderCode: 1, status: 1, products: 1, deadline: 1, priority: 1 } }],
+          as: 'productionOrder'
+        }
+      },
+      { $unwind: { path: '$productionOrder', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'createdBy',
+          foreignField: '_id',
+          pipeline: [{ $project: { fullName: 1, username: 1 } }],
+          as: 'createdBy'
+        }
+      },
+      { $unwind: { path: '$createdBy', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'khoManager',
+          foreignField: '_id',
+          pipeline: [{ $project: { fullName: 1, username: 1 } }],
+          as: 'khoManager'
+        }
+      },
+      { $unwind: { path: '$khoManager', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: 'materials',
+          localField: 'items.material',
+          foreignField: '_id',
+          pipeline: [{ $project: { name: 1, code: 1, unit: 1, currentStock: 1 } }],
+          as: 'itemMaterials'
+        }
+      },
+      {
+        $addFields: {
+          items: {
+            $map: {
+              input: '$items',
+              as: 'item',
+              in: {
+                $mergeObjects: [
+                  '$$item',
+                  {
+                    material: {
+                      $first: {
+                        $filter: {
+                          input: '$itemMaterials',
+                          as: 'material',
+                          cond: { $eq: ['$$material._id', '$$item.material'] }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      { $project: { itemMaterials: 0, __v: 0 } }
+    ];
+
+    const pipeline = shouldCount
+      ? [{ $match: query }, { $facet: { data: dataPipeline, metadata: [{ $count: 'total' }] } }]
+      : [{ $match: query }, ...dataPipeline];
+
+    const aggregateResult = await applyAggregateGuards(MaterialRequisition.aggregate(pipeline));
+    const requisitions = shouldCount ? (aggregateResult[0]?.data || []) : aggregateResult;
+    const total = shouldCount ? (aggregateResult[0]?.metadata?.[0]?.total || 0) : undefined;
 
     return {
       success: true,
       message: 'Requisitions retrieved successfully.',
       data: {
         requisitions,
-        pagination: {
-          total,
-          page: pageNum,
-          limit: limitNum,
-          pages: Math.ceil(total / limitNum)
-        }
+        pagination: buildListPagination({ items: requisitions, total, pageNum, limitNum, cursor: cursorId, withTotal: shouldCount })
       }
     };
   } catch (error) {
@@ -541,6 +670,21 @@ export const updateRequisitionStatus = async (requisitionId, managerId, status, 
 
     await requisition.save({ session });
     await session.commitTransaction();
+
+    await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.KHO_MANAGER], {
+      domains: ["requisitions", "production", "inventory", "materials", "slips"],
+      action: "status_updated",
+      entity: "material_requisition",
+      id: requisition._id,
+      message: `Requisition ${requisition.requisitionCode || requisition._id} changed to ${status}.`,
+      metaData: {
+        requisitionId: requisition._id,
+        requisitionCode: requisition.requisitionCode,
+        orderId: requisition.productionOrder,
+        status
+      }
+    });
+
     return ServiceResponse(true, `Requisition status updated to ${status}.`, requisition);
   } catch (error) {
     await session.abortTransaction();

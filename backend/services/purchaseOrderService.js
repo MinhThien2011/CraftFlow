@@ -7,6 +7,40 @@ import { processMaterialCosts } from "../utils/productHelpers.js";
 import { generateSlipNumber } from "../utils/slipHelper.js";
 import { emitToRoles } from "../config/socket.js";
 import { createNotification } from "./notificationService.js";
+import User from "../models/User.js";
+import Role from "../models/Roles.js";
+import { emitDataChanged } from "./realtimeService.js";
+import { applyCreatedAtCursor, buildListPagination, normalizePagination } from "../utils/pagination.js";
+
+const notifyUsersByRole = async ({ roles, excludeUserId, title, message, type, priority, metaData }) => {
+    const roleDocs = await Role.find({ roleName: { $in: roles } }).select("_id").lean();
+    const roleIds = roleDocs.map((roleDoc) => roleDoc._id);
+
+    if (roleIds.length === 0) return;
+
+    const users = await User.find({
+        role: { $in: roleIds },
+        isActive: true
+    }).select("_id");
+
+    const excludeId = excludeUserId ? excludeUserId.toString() : null;
+    const recipients = users
+        .map((user) => user._id.toString())
+        .filter((userId) => userId !== excludeId);
+
+    await Promise.all(
+        recipients.map((recipient) =>
+            createNotification({
+                recipient,
+                title,
+                message,
+                type,
+                priority,
+                metaData
+            })
+        )
+    );
+};
 
 export const createPurchaseOrderService = async (data, userId) => {
     try {
@@ -147,6 +181,40 @@ export const createPurchaseOrderService = async (data, userId) => {
             );
         }
 
+        await notifyUsersByRole({
+            roles: [ROLES.ADMIN],
+            excludeUserId: userId,
+            title: 'Có yêu cầu mua hàng mới',
+            message: `Đơn mua hàng ${purchaseOrder._id} đang chờ duyệt.`,
+            type: 'APPROVAL',
+            priority: 'HIGH',
+            metaData: {
+                purchaseOrderId: purchaseOrder._id,
+                status: purchaseOrder.status,
+                source: 'purchase_order_created'
+            }
+        });
+
+        await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER], {
+            domains: ["purchaseOrders", "materials", "production", "alerts"],
+            action: "created",
+            entity: "purchase_order",
+            id: purchaseOrder._id,
+            message: `Purchase order ${purchaseOrder._id} is waiting for approval.`,
+            metaData: {
+                purchaseOrderId: purchaseOrder._id,
+                productionOrder: purchaseOrder.productionOrder,
+                materialAlert: purchaseOrder.materialAlert,
+                status: purchaseOrder.status
+            }
+        });
+
+        await emitToRoles([ROLES.ADMIN], 'purchase_order_created', {
+            orderId: purchaseOrder._id,
+            status: purchaseOrder.status,
+            message: `Purchase order ${purchaseOrder._id} is waiting for approval.`
+        });
+
         return { success: true, data: purchaseOrder, message: 'Purchase order created successfully' };
     } catch (error) {
         console.error('[createPurchaseOrderService] error:', error);
@@ -199,6 +267,15 @@ export const updatePurchaseOrderService = async (orderId, data) => {
                 message: `Đơn mua hàng ${purchaseOrderUpdate.orderCode} đã ${statusLabel}.`
             });
 
+            await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.KHO_MANAGER], {
+                domains: ["purchaseOrders", "slips", "inventory", "materials", "production", "alerts"],
+                action: "status_updated",
+                entity: "purchase_order",
+                id: purchaseOrderUpdate._id,
+                message: `Purchase order ${purchaseOrderUpdate.orderCode || purchaseOrderUpdate._id} changed to ${updatePayload.status}.`,
+                metaData: { status: updatePayload.status }
+            });
+
             // Also create persistent notification for the creator if status changed
             if (purchaseOrderUpdate.creator) {
                 await createNotification({
@@ -235,6 +312,14 @@ export const deletePurchaseOrderService = async (orderId) => {
                 status: 'pending'
             }
         );
+
+        await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER], {
+            domains: ["purchaseOrders", "alerts", "production"],
+            action: "deleted",
+            entity: "purchase_order",
+            id: orderId,
+            message: `Purchase order ${orderId} was deleted.`
+        });
 
         return { success: true, data: purchaseOrderDelete, message: 'Purchase order deleted successfully' };
     }
@@ -301,7 +386,58 @@ export const updatePurchaseOrderStatusService = async (orderId, data, adminId) =
 
             await newSlip.save();
             console.log(`[PurchaseOrder] Auto-created Import Slip ${slipNumber} for PO ${orderId}`);
+
+            await notifyUsersByRole({
+                roles: [ROLES.KHO_MANAGER],
+                excludeUserId: adminId,
+                title: 'Có đơn nhập kho mới',
+                message: `PO ${purchaseOrder._id} đã được duyệt và tạo phiếu nhập ${slipNumber}.`,
+                type: 'INVENTORY',
+                priority: 'HIGH',
+                metaData: {
+                    purchaseOrderId: purchaseOrder._id,
+                    slipId: newSlip._id,
+                    slipNumber,
+                    status: purchaseOrder.status,
+                    source: 'purchase_order_accepted'
+                }
+            });
         }
+
+        if (data.status === PURCHASE_ORDER_STATUS.REJECTED || data.status === PURCHASE_ORDER_STATUS.ACCEPTED) {
+            if (purchaseOrder.creator?.toString() !== adminId?.toString()) {
+                await createNotification({
+                    recipient: purchaseOrder.creator,
+                    title: 'Cập nhật yêu cầu mua hàng',
+                    message: data.status === PURCHASE_ORDER_STATUS.ACCEPTED
+                        ? `PO ${purchaseOrder._id} đã được duyệt.`
+                        : `PO ${purchaseOrder._id} đã bị từ chối.`,
+                    type: 'APPROVAL',
+                    priority: data.status === PURCHASE_ORDER_STATUS.ACCEPTED ? 'MEDIUM' : 'HIGH',
+                    metaData: {
+                        purchaseOrderId: purchaseOrder._id,
+                        status: data.status,
+                        source: 'purchase_order_status_changed'
+                    }
+                });
+            }
+        }
+
+        await emitToRoles([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.KHO_MANAGER], 'purchase_order_status_updated', {
+            orderId: purchaseOrder._id,
+            orderCode: purchaseOrder.orderCode,
+            status: purchaseOrder.status,
+            message: `PO ${purchaseOrder._id} changed to ${purchaseOrder.status}.`
+        });
+
+        await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.KHO_MANAGER], {
+            domains: ["purchaseOrders", "slips", "inventory", "materials", "production", "alerts"],
+            action: "status_updated",
+            entity: "purchase_order",
+            id: purchaseOrder._id,
+            message: `PO ${purchaseOrder._id} changed to ${purchaseOrder.status}.`,
+            metaData: { status: purchaseOrder.status }
+        });
 
         return { success: true, data: purchaseOrder, message: 'Purchase order status updated successfully' };
     }
@@ -332,23 +468,43 @@ export const getAllPurchaseOrdersService = async (query = {}) => {
             creator,
             page = 1,
             limit = 10,
+            cursor,
+            withTotal = true,
             status,
             purchaseOrderItems,
         } = query;
-        const skip = (page - 1) * limit;
-        const filter = {};
+        const { pageNum, limitNum, skip, cursor: cursorId, withTotal: shouldCount } = normalizePagination({ page, limit, cursor, withTotal });
+        let filter = {};
         if (creator) filter.creator = creator;
         if (status) filter.status = status;
         if (purchaseOrderItems) filter.purchaseOrderItems = purchaseOrderItems;
+        filter = applyCreatedAtCursor(filter, cursorId);
+        const totalPromise = shouldCount ? PurchaseOrder.countDocuments(filter) : Promise.resolve(undefined);
+        
         const purchaseOrders = await PurchaseOrder.find(filter)
+            .sort({ createdAt: -1, _id: -1 })
             .skip(skip)
-            .limit(limit)
+            .limit(limitNum)
             .populate('creator', 'username email')
-            .populate('purchaseOrderItems.material', 'name price barcode code');
+            .populate('purchaseOrderItems.material', 'name price barcode code')
+            .lean();
+        const total = await totalPromise;
         if (!purchaseOrders || purchaseOrders.length === 0) {
-            return { success: true, message: 'Purchase orders not found', data: null };
+            return {
+                success: true,
+                message: 'Purchase orders not found',
+                data: { items: [], purchaseOrders: [], pagination: buildListPagination({ items: [], total, pageNum, limitNum, cursor: cursorId, withTotal: shouldCount }) }
+            };
         }
-        return { success: true, data: purchaseOrders, message: 'Purchase orders retrieved successfully' };
+        return {
+            success: true,
+            data: {
+                items: purchaseOrders,
+                purchaseOrders,
+                pagination: buildListPagination({ items: purchaseOrders, total, pageNum, limitNum, cursor: cursorId, withTotal: shouldCount })
+            },
+            message: 'Purchase orders retrieved successfully'
+        };
 
     } catch (error) {
         console.log('[getAllPurchaseOrdersService] error:', error);

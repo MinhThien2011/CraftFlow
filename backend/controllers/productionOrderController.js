@@ -16,11 +16,11 @@ import { handleServiceResponse } from '../utils/responseHelper.js';
 
 export const getListProductionOrder = async (req, res) => {
   try {
-    const { status, priority, search, page = 1, limit = 10 } = req.query;
+    const { status, priority, search, page = 1, limit = 10, cursor, withTotal } = req.query;
     const userId = req.userId;
     const userRole = req.userRole;
 
-    const cacheKey = `production:list:${JSON.stringify({ userId, userRole, status, priority, search, page, limit })}`;
+    const cacheKey = `production:list:${JSON.stringify({ userId, userRole, status, priority, search, page, limit, cursor, withTotal })}`;
 
     // 1. Try to get from Redis
     const cachedResult = await getCachedData(cacheKey);
@@ -45,7 +45,7 @@ export const getListProductionOrder = async (req, res) => {
     }
 
     // 3. Cache the result
-    await setCachedData(cacheKey, result.data);
+    setCachedData(cacheKey, result.data).catch(() => {});
 
     return res.status(StatusCodes.OK).json(result);
 

@@ -153,18 +153,10 @@ export default function ProductsPage() {
   }, [products])
 
   return (
-    <AppShell title="Sản phẩm & Định mức" subtitle="Quản lý danh mục sản phẩm và quy trình định mức">
+    <AppShell title="Quản lý sản phẩm & định mức" subtitle="Hệ thống quản lý danh mục sản phẩm và định mức nguyên vật liệu (BOM) chi tiết.">
       <div className="space-y-6">
         {/* Header Section */}
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight text-foreground">
-              Quản lý sản phẩm & định mức
-            </h2>
-            <p className="text-muted-foreground">
-              Hệ thống quản lý sản phẩm thủ công và định mức nguyên vật liệu (BOM) chi tiết.
-            </p>
-          </div>
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-end">
           <div className="flex items-center gap-2">
             <Button variant="outline" size="icon" onClick={handleRefresh} disabled={isRefreshing}>
               <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />

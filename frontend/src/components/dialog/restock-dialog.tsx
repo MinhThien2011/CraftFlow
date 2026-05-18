@@ -60,8 +60,8 @@ export function RestockDialog({ open, onOpenChange, material, onSuccess }: Props
       const res: any = await purchaseOrderApi.create(payload)
       if (res.success || res.status === 'success') {
         toast.success(`Đã tạo yêu cầu mua ${qty} ${material.unit} ${material.name} thành công`)
-        setIsDone(true)
         onSuccess()
+        onOpenChange(false)
       } else {
         throw new Error(res.message || "Không thể tạo yêu cầu mua hàng")
       }
@@ -96,7 +96,7 @@ export function RestockDialog({ open, onOpenChange, material, onSuccess }: Props
           </div>
         )}
         <DialogFooter>
-          {isDone ? <Button variant="outline" onClick={() => onOpenChange(false)}>Đóng</Button> : <><Button variant="outline" onClick={() => onOpenChange(false)}>Hủy</Button><Button onClick={handleRestock} disabled={isLoading}>{isLoading && <Loader2 className="mr-2 size-4 animate-spin"/>} Tạo yêu cầu</Button></>}
+          {isDone ? <Button variant="outline" onClick={() => onOpenChange(false)}>Đóng</Button> : <><Button variant="outline" onClick={() => onOpenChange(false)}>Hủy</Button><Button onClick={handleRestock} disabled={isLoading}>{isLoading && <Loader2 className="mr-2 size-4 animate-spin" />} Tạo yêu cầu</Button></>}
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -97,8 +97,8 @@ export function ProductTable({ products, isLoading, isRefreshing, pagination, cu
                                         </div>
                                     </TableCell>
                                     <TableCell>
-                                        <Badge variant="outline" className={cn("font-medium", (product.stockLevel === "Nguy cấp" || product.stockLevel === "critical") ? "border-red-200 bg-red-50 text-red-700" : (product.stockLevel === "Sắp hết" || product.stockLevel === "low") ? "border-amber-200 bg-amber-50 text-amber-700" : "border-green-200 bg-green-50 text-green-700")}>
-                                            {product.stockLevel === "critical" ? "Nguy cấp" : product.stockLevel === "low" ? "Sắp hết" : product.stockLevel === "normal" ? "Ổn định" : (product.stockLevel || "Ổn định")}
+                                        <Badge variant="outline" className={cn("font-medium", (product.stockLevel === "Nguy cấp" || product.stockLevel === "critical" || product.stockLevel === "out_of_stock") ? "border-red-200 bg-red-50 text-red-700" : (product.stockLevel === "Sắp hết" || product.stockLevel === "low") ? "border-amber-200 bg-amber-50 text-amber-700" : "border-green-200 bg-green-50 text-green-700")}>
+                                            {product.stockLevel === "critical" ? "Nguy cấp" : product.stockLevel === "out_of_stock" ? "Hết hàng" : product.stockLevel === "low" ? "Sắp hết" : product.stockLevel === "normal" ? "Ổn định" : (product.stockLevel || "Ổn định")}
                                         </Badge>
                                     </TableCell>
                                     <TableCell>

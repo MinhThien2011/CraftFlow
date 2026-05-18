@@ -13,6 +13,7 @@ import { connectToDatabase } from './config/db/mongoDB.js';
 import { logJwtAuthStatus } from './middleware/jwtAuth.js';
 import { logSocketStatus } from './config/socket.js';
 import { securityAgent } from './middleware/securityAgentKit.js';
+import { performanceMonitor } from './middleware/performanceMonitor.js';
 
 const app = express();
 
@@ -90,9 +91,12 @@ app.use(cors({
 }));
 
 app.use(cookieParser());
+app.use(performanceMonitor);
 app.use(compression());
 app.use(helmet());
-app.use(morgan('dev'));
+if (process.env.NODE_ENV !== 'production') {
+  app.use(morgan('dev'));
+}
 
 // ─── Defense Layer 1: Request Guards (chạy trước body-parser) ─────────────────
 app.use(slowBodyGuard);

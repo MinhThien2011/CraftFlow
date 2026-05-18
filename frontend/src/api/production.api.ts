@@ -88,7 +88,7 @@ export const productionApi = {
      * Check if materials are sufficient for an order
      */
     checkMaterials: async (id: string): Promise<ApiResponse<any>> => {
-        return axiosInstance.post(`/production/${id}/check-materials`);
+        return axiosInstance.patch(`/production/${id}/check-materials`);
     },
 
     /**

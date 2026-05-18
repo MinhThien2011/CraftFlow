@@ -1,35 +1,23 @@
 "use client"
 
-import { Card } from "@/components/ui/card"
+import { ProductionOrder } from "@/api/production.api"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { getProductionOrderStatusConfig } from "@/features/production/utils/production-status"
+import { format } from "date-fns"
 import { ArrowRight } from "lucide-react"
 import Link from "next/link"
-import { ProductionOrder } from "@/api/production.api"
-import { format } from "date-fns"
 
 interface RecentOrdersProps {
   orders: ProductionOrder[]
 }
 
-const statusConfig: Record<string, { label: string; color: string }> = {
-  "in_production": { label: "Đang sản xuất", color: "bg-[#2B8BE8] text-white" },
-  "completed": { label: "Hoàn thành", color: "bg-[#4A9C6B] text-white" },
-  "cancelled": { label: "Đã hủy", color: "bg-[#E04E4E] text-white" },
-  "pending": { label: "Chờ xử lý", color: "bg-amber-500 text-white" },
-  "insufficient_materials": { label: "Thiếu vật tư", color: "bg-purple-500 text-white" },
-  "on_hold": { label: "Tạm dừng", color: "bg-gray-500 text-white" },
-  "assigned": { label: "Đã phân công", color: "bg-cyan-500 text-white" },
-  "ready_to_assign": { label: "Sẵn sàng phân công", color: "bg-indigo-500 text-white" },
-}
-
 export function RecentOrders({ orders }: RecentOrdersProps) {
   return (
-    <Card className="bg-card border-border">
-      <div className="flex items-center justify-between p-6 border-b border-border">
-        <h3 className="text-lg font-semibold text-card-foreground">
-          Đơn sản xuất gần đây
-        </h3>
+    <Card className="border-border bg-card">
+      <div className="flex items-center justify-between border-b border-border p-6">
+        <h3 className="text-lg font-semibold text-card-foreground">Đơn sản xuất gần đây</h3>
         <Link href="/production-management/orders">
           <Button variant="ghost" size="sm" className="text-primary hover:text-primary/80">
             Xem tất cả
@@ -41,21 +29,11 @@ export function RecentOrders({ orders }: RecentOrdersProps) {
         <table className="w-full">
           <thead>
             <tr className="border-b border-border bg-muted/50">
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
-                Mã đơn
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
-                Sản phẩm
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
-                Số lượng
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
-                Trạng thái
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
-                Hạn hoàn thành
-              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase text-muted-foreground">Mã đơn</th>
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase text-muted-foreground">Sản phẩm</th>
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase text-muted-foreground">Số lượng</th>
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase text-muted-foreground">Trạng thái</th>
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase text-muted-foreground">Hạn hoàn thành</th>
             </tr>
           </thead>
           <tbody>
@@ -67,39 +45,27 @@ export function RecentOrders({ orders }: RecentOrdersProps) {
               </tr>
             ) : (
               orders.map((order) => {
-                const mainProduct = order.products[0];
+                const mainProduct = order.products[0]
                 const productName = mainProduct
-                  ? (mainProduct.productName || (typeof mainProduct.product === 'object' ? mainProduct.product?.name : mainProduct.product))
-                  : 'N/A';
-                const productDisplay = `${productName}${order.products.length > 1 ? ` (+${order.products.length - 1})` : ''}`;
-
-                const totalQuantity = order.products.reduce((sum, p) => sum + p.quantity, 0);
-                const config = statusConfig[order.status] || { label: order.status, color: "bg-gray-500 text-white" };
+                  ? mainProduct.productName || (typeof mainProduct.product === "object" ? mainProduct.product?.name : mainProduct.product)
+                  : "N/A"
+                const productDisplay = `${productName}${order.products.length > 1 ? ` (+${order.products.length - 1})` : ""}`
+                const totalQuantity = order.products.reduce((sum, product) => sum + product.quantity, 0)
+                const statusConfig = getProductionOrderStatusConfig(order.status)
 
                 return (
-                  <tr
-                    key={order._id}
-                    className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
-                  >
-                    <td className="px-6 py-4 text-sm font-medium text-foreground">
-                      {order.orderCode}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground">
-                      {productDisplay}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground">
-                      {totalQuantity}
-                    </td>
+                  <tr key={order._id} className="border-b border-border transition-colors last:border-0 hover:bg-muted/30">
+                    <td className="px-6 py-4 text-sm font-medium text-foreground">{order.orderCode}</td>
+                    <td className="px-6 py-4 text-sm text-muted-foreground">{productDisplay}</td>
+                    <td className="px-6 py-4 text-sm text-muted-foreground">{totalQuantity}</td>
                     <td className="px-6 py-4">
-                      <Badge className={config.color}>
-                        {config.label}
-                      </Badge>
+                      <Badge className={statusConfig.color}>{statusConfig.label}</Badge>
                     </td>
                     <td className="px-6 py-4 text-sm text-muted-foreground">
                       {order.deadline ? format(new Date(order.deadline), "dd/MM/yyyy") : "N/A"}
                     </td>
                   </tr>
-                );
+                )
               })
             )}
           </tbody>

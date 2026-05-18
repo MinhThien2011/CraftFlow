@@ -38,6 +38,49 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const router = useRouter();
     const lastConnectErrorRef = useRef<{ message: string; at: number } | null>(null);
 
+    const invalidateRealtimeDomains = (domains: string[] = []) => {
+        const domainSet = new Set(domains);
+        const invalidateAll = domainSet.size === 0 || domainSet.has("all");
+
+        if (invalidateAll || domainSet.has("notifications")) {
+            queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
+        }
+        if (invalidateAll || domainSet.has("production") || domainSet.has("alerts")) {
+            queryClient.invalidateQueries({ queryKey: queryKeys.production.all });
+        }
+        if (invalidateAll || domainSet.has("purchaseOrders")) {
+            queryClient.invalidateQueries({ queryKey: queryKeys.purchaseOrders.all });
+        }
+        if (invalidateAll || domainSet.has("inventory")) {
+            queryClient.invalidateQueries({ queryKey: queryKeys.inventory.all });
+        }
+        if (invalidateAll || domainSet.has("materials") || domainSet.has("alerts")) {
+            queryClient.invalidateQueries({ queryKey: queryKeys.materials.all });
+        }
+        if (invalidateAll || domainSet.has("products")) {
+            queryClient.invalidateQueries({ queryKey: queryKeys.products.all });
+        }
+        if (invalidateAll || domainSet.has("slips")) {
+            queryClient.invalidateQueries({ queryKey: queryKeys.slips.all });
+        }
+
+        queryClient.invalidateQueries({
+            predicate: (query) => {
+                const root = String(query.queryKey[0] || "");
+                return invalidateAll || domains.includes(root) || (
+                    domainSet.has("requisitions") && root === "requisitions"
+                ) || (
+                    domainSet.has("slips") && root === "receiving-slips"
+                ) || (
+                    (domainSet.has("inventory") || domainSet.has("materials") || domainSet.has("products") || domainSet.has("production") || domainSet.has("requisitions") || domainSet.has("slips")) &&
+                    (root === "dashboard" || root === "warehouse-dashboard")
+                ) || (
+                    domainSet.has("dashboard") && root === "dashboard"
+                );
+            },
+        });
+    };
+
     useEffect(() => {
         if (!isAuthenticated || !user?._id) {
             if (socket) {
@@ -101,9 +144,40 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             });
         });
 
+        newSocket.on("data_changed", (event: any) => {
+            console.log("[Socket] Data changed:", event);
+            invalidateRealtimeDomains(event?.domains || []);
+        });
+
+        newSocket.on("material_shortage_created", (data: any) => {
+            console.log("[Socket] Material shortage created:", data);
+            invalidateRealtimeDomains(["production", "materials", "inventory", "alerts"]);
+            toast.warning("Canh bao thieu vat tu", {
+                description: data.message,
+                duration: 8000,
+                action: {
+                    label: "Xem",
+                    onClick: () => router.push("/alerts?tab=orders"),
+                },
+            });
+        });
+
+        newSocket.on("purchase_order_created", (data: any) => {
+            console.log("[Socket] Purchase order created:", data);
+            invalidateRealtimeDomains(["purchaseOrders", "alerts", "production"]);
+            toast.info("Yeu cau mua hang moi", {
+                description: data.message,
+                duration: 8000,
+                action: {
+                    label: "Xem",
+                    onClick: () => router.push("/production-management/purchase-orders"),
+                },
+            });
+        });
+
         newSocket.on("production_order_created", (data: any) => {
             console.log("[Socket] Production order created:", data);
-            queryClient.invalidateQueries({ queryKey: queryKeys.production.all });
+            invalidateRealtimeDomains(["production", "materials", "inventory", "alerts", "requisitions"]);
             toast.success("Don san xuat moi", {
                 description: data.message,
                 duration: 8000,
@@ -116,7 +190,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         newSocket.on("production_order_status_updated", (data: any) => {
             console.log("[Socket] Production order status updated:", data);
-            queryClient.invalidateQueries({ queryKey: queryKeys.production.all });
+            invalidateRealtimeDomains(["production", "inventory", "products"]);
             toast.info("Cap nhat don san xuat", {
                 description: data.message,
                 duration: 8000,
@@ -125,7 +199,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         newSocket.on("purchase_order_status_updated", (data: any) => {
             console.log("[Socket] Purchase order status updated:", data);
-            queryClient.invalidateQueries({ queryKey: queryKeys.purchaseOrders.all });
+            invalidateRealtimeDomains(["purchaseOrders", "slips", "inventory", "materials", "alerts"]);
             toast.info("Cap nhat don mua hang", {
                 description: data.message,
                 duration: 8000,
@@ -134,10 +208,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         newSocket.on("inventory_slip_updated", (data: any) => {
             console.log("[Socket] Inventory slip updated:", data);
-            queryClient.invalidateQueries({ queryKey: queryKeys.slips.all });
-            queryClient.invalidateQueries({ queryKey: queryKeys.inventory.all });
-            queryClient.invalidateQueries({ queryKey: queryKeys.materials.all });
-            queryClient.invalidateQueries({ queryKey: queryKeys.products.all });
+            invalidateRealtimeDomains(["slips", "inventory", "materials", "products", "production", "requisitions", "alerts"]);
             toast.info("Cap nhat kho", {
                 description: data.message,
                 duration: 6000,

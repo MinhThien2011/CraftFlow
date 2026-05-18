@@ -6,8 +6,8 @@
   "type": "module",
   "scripts": {
     "test": "node --env-file=.env --watch --trace-deprecation index.js",
-    "start": "node --env-file=.env --watch index.js",
-    "dev": "node --watch index.js",
+    "start": "node --env-file=.env index.js",
+    "dev": "node --env-file=.env --watch index.js",
     "docs": "node --env-file=.env ./tools/scanDB.js",
     "rate-limit-test": "node --env-file=.env ./tools/rateLimitTest.js",
     "fix-stock": "node --env-file=.env ./tools/fixStock.js"

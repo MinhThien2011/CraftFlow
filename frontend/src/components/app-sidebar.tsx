@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import React, { useCallback, useMemo } from "react"
 import Image from "next/image"
@@ -27,6 +27,7 @@ import {
   CircleOff,
   ListTodo,
   Bell,
+  LogOut,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -175,11 +176,19 @@ const allNavigationHrefs = [
 
 export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
   const pathname = usePathname()
-  const { user, isAdmin, isKhoManager, role } = useAuth()
+  const { user, isAdmin, isKhoManager, role, logout } = useAuth()
 
   const normalizedPath = useMemo(() => pathname.replace(/\/$/, "") || "/", [pathname])
   const avatarUrl = useMemo(() => getAvatarUrl(user?.avatar), [user?.avatar])
   const roleLabel = role === "kho_manager" ? "Quản lý kho" : role?.replace("_", " ") || ""
+
+  const handleLogout = async () => {
+    try {
+      await logout()
+    } catch (error) {
+      console.error("Logout error", error)
+    }
+  }
 
   const checkActive = useCallback((href: string) => {
     const normalizedHref = href.replace(/\/$/, "") || "/"
@@ -212,7 +221,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
   return (
     <aside
       className={cn(
-        "relative flex h-full shrink-0 flex-col border border-sidebar-border/30 bg-sidebar/80 backdrop-blur-2xl supports-[backdrop-filter]:bg-sidebar/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.2)] rounded-[2rem] overflow-hidden z-40 transition-[width] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] will-change-[width]",
+        "relative flex h-full shrink-0 flex-col border border-sidebar-border/30 bg-sky-50/90 dark:bg-sky-950/90 backdrop-blur-2xl supports-[backdrop-filter]:bg-sky-50/60 dark:supports-[backdrop-filter]:bg-sky-950/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.2)] rounded-[2rem] overflow-hidden z-40 transition-[width] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] will-change-[width]",
         collapsed ? "w-[80px]" : "w-[260px]"
       )}
     >
@@ -234,19 +243,6 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
             <Sparkles className="h-5 w-5" />
           </Link>
         )}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onToggle}
-          className="hidden lg:flex h-8 w-8 rounded-full hover:bg-sidebar-accent/80 transition-colors"
-          aria-label={collapsed ? "Mở rộng sidebar" : "Thu gọn sidebar"}
-        >
-          {collapsed ? (
-            <PanelLeft className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <PanelLeftClose className="h-4 w-4 text-muted-foreground" />
-          )}
-        </Button>
       </div>
 
       {/* User Profile */}
@@ -456,20 +452,14 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
         <Button
           variant="ghost"
           size="sm"
-          onClick={onToggle}
+          onClick={handleLogout}
           className={cn(
-            "group mt-1 w-full justify-start gap-3 rounded-xl text-muted-foreground transition-all hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+            "group mt-1 w-full justify-start gap-3 rounded-xl text-destructive hover:bg-destructive/10 hover:text-destructive transition-all",
             collapsed && "justify-center"
           )}
         >
-          {collapsed ? (
-            <PanelLeft className="h-5 w-5 transition-transform duration-200 group-hover:scale-110" />
-          ) : (
-            <>
-              <PanelLeftClose className="h-5 w-5 transition-transform duration-200 group-hover:scale-110" />
-              <span className="font-medium">Thu gọn</span>
-            </>
-          )}
+          <LogOut className="h-5 w-5 transition-transform duration-200 group-hover:scale-110" />
+          {!collapsed && <span className="font-medium">Đăng xuất</span>}
         </Button>
       </div>
     </aside>

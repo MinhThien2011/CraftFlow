@@ -63,7 +63,11 @@ const productionOrderSchema = new mongoose.Schema({
 
 // Compound indexes
 productionOrderSchema.index({ status: 1, priority: 1, deadline: 1 });
+productionOrderSchema.index({ status: 1, createdAt: -1, _id: -1 });
+productionOrderSchema.index({ priority: 1, createdAt: -1, _id: -1 });
+productionOrderSchema.index({ status: 1, priority: 1, createdAt: -1, _id: -1 });
 productionOrderSchema.index({ 'products.product': 1, status: 1 });
 productionOrderSchema.index({ createdBy: 1 });
+productionOrderSchema.index({ orderCode: 'text', 'products.productName': 'text', 'products.productCode': 'text' });
 
 export default mongoose.model('ProductionOrder', productionOrderSchema);

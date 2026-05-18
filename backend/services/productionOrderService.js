@@ -12,6 +12,8 @@ import { ORDER_STATUS, ROLES, TRANSACTION_TYPE, REQUISITION_STATUS, REQUISITION_
 import { generateSlipNumber } from '../utils/slipHelper.js';
 import mongoose from 'mongoose';
 import { emitToRoles } from '../config/socket.js';
+import { emitDataChanged, notifyUsersByRole } from './realtimeService.js';
+import { applyCreatedAtCursor, buildListPagination, normalizePagination } from '../utils/pagination.js';
 
 
 /**
@@ -19,29 +21,27 @@ import { emitToRoles } from '../config/socket.js';
  */
 export const getAllProductionOrders = async (queryParams) => {
   try {
-    const { status, priority, search, page = 1, limit = 10 } = queryParams;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const { status, priority, search, page = 1, limit = 10, cursor, withTotal = true } = queryParams;
+    const { pageNum, limitNum, skip, cursor: cursorId, withTotal: shouldCount } = normalizePagination({ page, limit, cursor, withTotal });
 
-    const filter = {};
+    let filter = {};
     if (status) filter.status = status;
     if (priority) filter.priority = priority;
     if (search) {
-      filter.$or = [
-        { orderCode: { $regex: search, $options: 'i' } },
-        { 'products.productName': { $regex: search, $options: 'i' } },
-        { 'products.productCode': { $regex: search, $options: 'i' } }
-      ];
+      filter.$text = { $search: String(search).trim() };
     }
+    filter = applyCreatedAtCursor(filter, cursorId);
 
+    const totalPromise = shouldCount ? ProductionOrder.countDocuments(filter) : Promise.resolve(undefined);
     const [orders, total] = await Promise.all([
       ProductionOrder.find(filter)
-        .sort({ createdAt: -1 })
+        .sort({ createdAt: -1, _id: -1 })
         .skip(skip)
-        .limit(parseInt(limit))
+        .limit(limitNum)
         .populate('products.product', 'name code unit baseCost')
         .populate('createdBy', 'fullName username')
         .lean(),
-      ProductionOrder.countDocuments(filter)
+      totalPromise
     ]);
 
     // Fetch assignments for these orders
@@ -62,12 +62,7 @@ export const getAllProductionOrders = async (queryParams) => {
       message: 'Production orders retrieved successfully.',
       data: {
         orders: ordersWithAssignments,
-        pagination: {
-          total,
-          page: parseInt(page),
-          limit: parseInt(limit),
-          pages: Math.ceil(total / parseInt(limit))
-        }
+        pagination: buildListPagination({ items: orders, total, pageNum, limitNum, cursor: cursorId, withTotal: shouldCount })
       }
     };
   } catch (error) {
@@ -81,8 +76,8 @@ export const getAllProductionOrders = async (queryParams) => {
  */
 export const getStaffProductionOrders = async (staffId, queryParams) => {
   try {
-    const { status, page = 1, limit = 10 } = queryParams;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const { status, page = 1, limit = 10, cursor, withTotal = true } = queryParams;
+    const { pageNum, limitNum, skip, cursor: cursorId, withTotal: shouldCount } = normalizePagination({ page, limit, cursor, withTotal });
 
     // First find assignments for this staff
     const assignments = await ProductionOrderAssignment.find({ staff: staffId })
@@ -91,17 +86,19 @@ export const getStaffProductionOrders = async (staffId, queryParams) => {
 
     const orderIds = assignments.map(a => a.productionOrder);
 
-    const filter = { _id: { $in: orderIds } };
+    let filter = { _id: { $in: orderIds } };
     if (status) filter.status = status;
+    filter = applyCreatedAtCursor(filter, cursorId);
 
+    const totalPromise = shouldCount ? ProductionOrder.countDocuments(filter) : Promise.resolve(undefined);
     const [orders, total] = await Promise.all([
       ProductionOrder.find(filter)
-        .sort({ createdAt: -1 })
+        .sort({ createdAt: -1, _id: -1 })
         .skip(skip)
-        .limit(parseInt(limit))
+        .limit(limitNum)
         .populate('products.product', 'name code unit')
         .lean(),
-      ProductionOrder.countDocuments(filter)
+      totalPromise
     ]);
 
     // Fetch assignments for these orders for THIS staff member
@@ -124,12 +121,7 @@ export const getStaffProductionOrders = async (staffId, queryParams) => {
       message: 'Staff production orders retrieved successfully.',
       data: {
         orders: ordersWithAssignments,
-        pagination: {
-          total,
-          page: parseInt(page),
-          limit: parseInt(limit),
-          pages: Math.ceil(total / parseInt(limit))
-        }
+        pagination: buildListPagination({ items: orders, total, pageNum, limitNum, cursor: cursorId, withTotal: shouldCount })
       }
     };
   } catch (error) {
@@ -370,6 +362,34 @@ export const createProductionOrder = async (orderData, creatorId) => {
     await session.commitTransaction();
     console.log(`[Production] Order ${orderCode} created successfully with ${validatedProducts.length} products.`);
 
+    await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.KHO_MANAGER], {
+      domains: ["production", "requisitions", "materials", "inventory", "alerts"],
+      action: "created",
+      entity: "production_order",
+      id: newOrder._id,
+      message: notificationMessage,
+      metaData: { orderId: newOrder._id, orderCode, hasInsufficientStock }
+    });
+
+    if (hasInsufficientStock) {
+      await notifyUsersByRole({
+        roles: [ROLES.ADMIN, ROLES.PRODUCTION_MANAGER],
+        excludeUserId: creatorId,
+        title: 'Canh bao thieu vat tu',
+        message: notificationMessage,
+        type: 'ORDER',
+        priority: 'HIGH',
+        metaData: { orderId: newOrder._id, orderCode, shortages }
+      });
+
+      await emitToRoles([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER], 'material_shortage_created', {
+        orderId: newOrder._id,
+        orderCode,
+        shortages,
+        message: notificationMessage
+      });
+    }
+
     return {
       success: true,
       message: hasInsufficientStock
@@ -441,6 +461,15 @@ export const checkOrderMaterials = async (orderId) => {
       { productionOrder: orderId, status: 'pending' },
       { status: 'resolved' }
     );
+
+    await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.KHO_MANAGER], {
+      domains: ["production", "alerts", "materials", "inventory"],
+      action: "materials_resolved",
+      entity: "production_order",
+      id: order._id,
+      message: `Materials are now sufficient for order ${order.orderCode}.`,
+      metaData: { orderId: order._id, orderCode: order.orderCode, status: order.status }
+    });
 
     return {
       success: true,
@@ -589,6 +618,7 @@ export const autoUpdateInsufficientOrders = async (materialIds = [], session = n
     if (orders.length === 0) return { success: true, updatedCount: 0 };
 
     let updatedCount = 0;
+    const updatedOrders = [];
     for (const order of orders) {
       // Recalculate requirements
       const materialRequirements = new Map();
@@ -640,8 +670,19 @@ export const autoUpdateInsufficientOrders = async (materialIds = [], session = n
         );
 
         updatedCount++;
+        updatedOrders.push({ orderId: order._id, orderCode: order.orderCode });
         console.log(`[Production] Order ${order.orderCode} auto-transitioned to READY_TO_ASSIGN`);
       }
+    }
+
+    if (updatedOrders.length > 0 && !session) {
+      await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.KHO_MANAGER], {
+        domains: ["production", "alerts", "materials", "inventory"],
+        action: "materials_resolved",
+        entity: "production_order",
+        message: `${updatedOrders.length} production order(s) are ready to assign.`,
+        metaData: { orders: updatedOrders }
+      });
     }
 
     return { success: true, updatedCount };
@@ -739,6 +780,15 @@ export const assignProductionOrder = async (orderId, assignments) => {
       });
     }
 
+    await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.STAFF], {
+      domains: ["production"],
+      action: "assigned",
+      entity: "production_order",
+      id: order._id,
+      message: `Order ${order.orderCode} was assigned to staff.`,
+      metaData: { orderId: order._id, orderCode: order.orderCode, assignmentIds: newAssignments.map(a => a._id) }
+    });
+
     // Log final results for debugging
     const summary = Array.from(assignedPerProduct.entries()).map(([pId, qty]) => `${pId}: ${qty}/${productMap.get(pId)}`);
     console.log(`[Production] Order ${orderId} assigned. Summary: ${summary.join(', ')}`);
@@ -787,6 +837,22 @@ export const updateProductionOrderStatus = async (orderId, status, notes = '') =
       type: 'ORDER',
       priority: 'MEDIUM',
       metaData: { orderId: order._id, status }
+    });
+
+    await emitToRoles([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.STAFF], 'production_order_status_updated', {
+      orderId: order._id,
+      orderCode: order.orderCode,
+      status,
+      message: `Production order ${order.orderCode} changed to ${status}.`
+    });
+
+    await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.STAFF], {
+      domains: ["production"],
+      action: "status_updated",
+      entity: "production_order",
+      id: order._id,
+      message: `Production order ${order.orderCode} changed to ${status}.`,
+      metaData: { orderId: order._id, orderCode: order.orderCode, status }
     });
 
     return {
@@ -849,6 +915,16 @@ export const reassignProductionOrder = async (assignmentId, newStaffId, reason =
     });
 
     await session.commitTransaction();
+
+    await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.STAFF], {
+      domains: ["production"],
+      action: "reassigned",
+      entity: "production_assignment",
+      id: assignment._id,
+      message: `Production assignment ${assignment._id} was reassigned.`,
+      metaData: { assignmentId: assignment._id, orderId: assignment.productionOrder, newStaffId }
+    });
+
     return {
       success: true,
       message: 'Đã thay đổi nhân sự thành công.',
@@ -960,6 +1036,21 @@ export const updateAssignmentStatus = async (assignmentId, status, completedQuan
 
     await session.commitTransaction();
 
+    await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.STAFF], {
+      domains: ["production", "products", "inventory"],
+      action: "assignment_status_updated",
+      entity: "production_assignment",
+      id: assignment._id,
+      message: `Assignment ${assignment._id} changed to ${status}.`,
+      metaData: {
+        assignmentId: assignment._id,
+        orderId: order._id,
+        orderCode: order.orderCode,
+        assignmentStatus: assignment.status,
+        orderStatus: order.status
+      }
+    });
+
     return {
       success: true,
       message: 'Assignment updated successfully.',
@@ -1058,6 +1149,25 @@ export const createStockInSlip = async (orderIdentifier, managerId, slipData = {
     await order.save({ session });
 
     await session.commitTransaction();
+
+    await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.KHO_MANAGER], {
+      domains: ["production", "slips", "inventory", "products"],
+      action: "stock_in_slip_created",
+      entity: "inventory_slip",
+      id: newSlip._id,
+      message: `Stock-in slip ${slipNumber} was created for order ${order.orderCode}.`,
+      metaData: { slipId: newSlip._id, slipNumber, orderId: order._id, orderCode: order.orderCode }
+    });
+
+    await notifyUsersByRole({
+      roles: [ROLES.KHO_MANAGER],
+      excludeUserId: managerId,
+      title: 'Co phieu nhap thanh pham moi',
+      message: `Phieu nhap ${slipNumber} cho don ${order.orderCode} dang cho xu ly.`,
+      type: 'INVENTORY',
+      priority: 'HIGH',
+      metaData: { slipId: newSlip._id, slipNumber, orderId: order._id }
+    });
 
     return {
       success: true,
@@ -1315,6 +1425,15 @@ export const updateProductionOrder = async (orderId, updateData, userId) => {
     await order.save({ session });
     await session.commitTransaction();
 
+    await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.KHO_MANAGER], {
+      domains: ["production", "requisitions", "materials", "inventory", "alerts"],
+      action: "updated",
+      entity: "production_order",
+      id: order._id,
+      message: `Production order ${order.orderCode} was updated.`,
+      metaData: { orderId: order._id, orderCode: order.orderCode, status: order.status }
+    });
+
     return {
       success: true,
       message: 'Cập nhật đơn sản xuất thành công.',
@@ -1389,6 +1508,15 @@ export const cancelProductionOrder = async (orderId, reason, userId) => {
 
     await session.commitTransaction();
 
+    await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.STAFF, ROLES.KHO_MANAGER], {
+      domains: ["production", "requisitions", "alerts"],
+      action: "cancelled",
+      entity: "production_order",
+      id: order._id,
+      message: `Production order ${order.orderCode} was cancelled.`,
+      metaData: { orderId: order._id, orderCode: order.orderCode, reason }
+    });
+
     return {
       success: true,
       message: 'Production order cancelled successfully.',
@@ -1427,21 +1555,23 @@ export const getBomByOrderId = async (orderId) => {
  */
 export const getMaterialAlerts = async (queryParams) => {
   try {
-    const { status = 'pending', page = 1, limit = 20 } = queryParams;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const { status = 'pending', page = 1, limit = 20, cursor, withTotal = true } = queryParams;
+    const { pageNum, limitNum, skip, cursor: cursorId, withTotal: shouldCount } = normalizePagination({ page, limit, cursor, withTotal });
 
-    const filter = {};
+    let filter = {};
     if (status !== 'all') filter.status = status;
+    filter = applyCreatedAtCursor(filter, cursorId);
 
+    const totalPromise = shouldCount ? MaterialAlert.countDocuments(filter) : Promise.resolve(undefined);
     const [alerts, total] = await Promise.all([
       MaterialAlert.find(filter)
-        .sort({ createdAt: -1 })
+        .sort({ createdAt: -1, _id: -1 })
         .skip(skip)
-        .limit(parseInt(limit))
+        .limit(limitNum)
         .populate('material', 'name code unit currentStock threshold')
         .populate('productionOrder', 'orderCode status')
         .lean(),
-      MaterialAlert.countDocuments(filter)
+      totalPromise
     ]);
 
     return {
@@ -1449,12 +1579,7 @@ export const getMaterialAlerts = async (queryParams) => {
       message: 'Material alerts retrieved successfully.',
       data: {
         alerts,
-        pagination: {
-          total,
-          page: parseInt(page),
-          limit: parseInt(limit),
-          pages: Math.ceil(total / parseInt(limit))
-        }
+        pagination: buildListPagination({ items: alerts, total, pageNum, limitNum, cursor: cursorId, withTotal: shouldCount })
       }
     };
   } catch (error) {
