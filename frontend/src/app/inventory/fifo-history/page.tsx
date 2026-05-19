@@ -12,12 +12,32 @@ import { toast } from "sonner"
 import { format } from "date-fns"
 import { Search, RefreshCcw } from "lucide-react"
 
+const getFifoItemKey = (item: Pick<WarehouseFifoOverviewItem, "itemType" | "itemId">) => `${item.itemType}:${item.itemId}`
+
+const groupOverviewItems = (rows: WarehouseFifoOverviewItem[]): WarehouseFifoOverviewItem[] => {
+    const grouped = new Map<string, WarehouseFifoOverviewItem>()
+    for (const row of rows) {
+        const key = getFifoItemKey(row)
+        const existing = grouped.get(key)
+        if (!existing) {
+            grouped.set(key, { ...row, summary: { ...row.summary } })
+            continue
+        }
+        existing.summary.batchCount += row.summary.batchCount
+        existing.summary.activeBatchCount += row.summary.activeBatchCount
+        existing.summary.totalReceived += row.summary.totalReceived
+        existing.summary.totalRemaining += row.summary.totalRemaining
+        existing.summary.transactionCount += row.summary.transactionCount
+    }
+    return Array.from(grouped.values())
+}
+
 export default function WarehouseFifoHistoryPage() {
     const [search, setSearch] = useState("")
     const [type, setType] = useState<"all" | "material" | "product">("all")
     const [loadingOverview, setLoadingOverview] = useState(false)
     const [overview, setOverview] = useState<WarehouseFifoOverviewItem[]>([])
-    const [selected, setSelected] = useState<WarehouseFifoOverviewItem | null>(null)
+    const [selectedKey, setSelectedKey] = useState("")
     const [loadingDetail, setLoadingDetail] = useState(false)
     const [detail, setDetail] = useState<FifoItemHistory | null>(null)
 
@@ -27,13 +47,14 @@ export default function WarehouseFifoHistoryPage() {
             const res = await batchApi.getWarehouseFifoOverview({ search: search.trim(), type })
             const rows = res?.data || []
             setOverview(rows)
-            if (!rows.length) {
-                setSelected(null)
+            const groupedRows = groupOverviewItems(rows)
+            if (!groupedRows.length) {
+                setSelectedKey("")
                 setDetail(null)
                 return
             }
-            if (!selected || !rows.some((x) => x.itemId === selected.itemId && x.itemType === selected.itemType)) {
-                setSelected(rows[0])
+            if (!groupedRows.some((x) => getFifoItemKey(x) === selectedKey)) {
+                setSelectedKey(getFifoItemKey(groupedRows[0]))
             }
         } catch (error: any) {
             toast.error(error?.response?.data?.message || "Không tải được tổng quan FIFO kho")
@@ -66,11 +87,15 @@ export default function WarehouseFifoHistoryPage() {
         return () => clearTimeout(t)
     }, [search])
 
+    const groupedOverview = useMemo(() => groupOverviewItems(overview), [overview])
+    const selected = useMemo(
+        () => groupedOverview.find((item) => getFifoItemKey(item) === selectedKey) || null,
+        [groupedOverview, selectedKey]
+    )
+
     useEffect(() => {
         if (selected) fetchDetail(selected)
     }, [selected?.itemId, selected?.itemType])
-
-    const selectedKey = useMemo(() => selected ? `${selected.itemType}:${selected.itemId}` : "", [selected])
 
     return (
         <AppShell title="Lịch sử FIFO kho" subtitle="Theo dõi toàn bộ luồng batch, tồn hiện tại và lịch sử nhập/xuất toàn kho">
@@ -100,16 +125,16 @@ export default function WarehouseFifoHistoryPage() {
                         <CardContent className="space-y-2 max-h-[70vh] overflow-auto">
                             {loadingOverview ? (
                                 <div className="text-sm text-muted-foreground py-4">Đang tải...</div>
-                            ) : overview.length === 0 ? (
+                            ) : groupedOverview.length === 0 ? (
                                 <div className="text-sm text-muted-foreground py-4">Chưa có dữ liệu batch. Có thể seed hiện tại chưa tạo batch giao dịch.</div>
-                            ) : overview.map((row) => {
-                                const key = `${row.itemType}:${row.itemId}`
+                            ) : groupedOverview.map((row) => {
+                                const key = getFifoItemKey(row)
                                 const active = key === selectedKey
                                 return (
                                     <button
                                         key={key}
                                         type="button"
-                                        onClick={() => setSelected(row)}
+                                        onClick={() => setSelectedKey(key)}
                                         className={`w-full rounded-lg border p-3 text-left ${active ? "border-blue-300 bg-blue-50" : "border-border hover:bg-muted/40"}`}
                                     >
                                         <div className="flex items-start justify-between gap-2">

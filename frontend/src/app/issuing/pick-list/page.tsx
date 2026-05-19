@@ -120,13 +120,17 @@ export default function PickListPage() {
   const completePickMutation = useMutation({
     mutationFn: (slip: Slip) => slipApi.updateSlipStatus(slip._id, {
       status: "inspecting",
-      items: slip.items.map((item, index) => ({
-        itemCode: item.itemCode,
-        material: item.material,
-        product: item.product,
-        actualQuantity: (pickDrafts[slip._id] || {})[getSlipItemKey(item, index)] || 0,
-        itemNote: item.itemNote || "",
-      })),
+      items: slip.items.map((item, index) => {
+        const materialId = typeof item.material === 'object' && item.material ? ((item.material as any)._id || (item.material as any).id) : item.material;
+        const productId = typeof item.product === 'object' && item.product ? ((item.product as any)._id || (item.product as any).id) : item.product;
+        return {
+          itemCode: item.itemCode,
+          material: materialId || undefined,
+          product: productId || undefined,
+          actualQuantity: (pickDrafts[slip._id] || {})[getSlipItemKey(item, index)] || 0,
+          itemNote: item.itemNote || "",
+        };
+      }),
     }),
     onSuccess: (_res, slip) => {
       queryClient.invalidateQueries({ queryKey: ["slips"] })

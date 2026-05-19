@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Search, ClipboardList, Eye, Check, X, Loader2, Clock, ExternalLink } from "lucide-react"
+import { Search, ClipboardList, Eye, Check, X, Loader2, Clock, ExternalLink, CheckCircle2, AlertTriangle } from "lucide-react"
 import { requisitionApi } from "@/api/requisition.api"
 import { slipApi, Slip } from "@/api/slip.api"
 import { format } from "date-fns"
@@ -24,6 +24,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { SlipDetailDialog } from "@/components/shared/slip-detail-dialog"
+import { Switch } from "@/components/ui/switch"
 
 const REQUISITION_STATUS_CONFIG: Record<string, { label: string, color: string }> = {
   pending: { label: 'Chờ tiếp nhận', color: 'bg-amber-100 text-amber-700 hover:bg-amber-200' },
@@ -52,6 +53,33 @@ export default function MaterialRequisitionsPage() {
   const [limit] = useState(10)
   const [searchQuery, setSearchQuery] = useState("")
   const [activeTab, setActiveTab] = useState("all")
+
+  // Fetch system settings for auto-accept
+  const { data: settingsData } = useQuery({
+    queryKey: ['requisitionSettings'],
+    queryFn: async () => {
+      const res = await requisitionApi.getSettings();
+      return res.data || res;
+    },
+    enabled: !authLoading && (isKhoManager || isAdmin),
+  });
+
+  const autoAcceptRequisitions = settingsData?.autoAcceptRequisitions ?? false;
+
+  const updateSettingsMutation = useMutation({
+    mutationFn: (autoAccept: boolean) => requisitionApi.updateSettings({ autoAcceptRequisitions: autoAccept }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['requisitionSettings'] })
+      toast.success("Đã cập nhật cấu hình tự động tiếp nhận")
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.message || "Lỗi khi cập nhật cấu hình")
+    }
+  });
+
+  const handleToggleAutoAccept = (checked: boolean) => {
+    updateSettingsMutation.mutate(checked);
+  };
 
   // Detail Dialog states
   const [selectedReq, setSelectedReq] = useState<any>(null)
@@ -177,21 +205,36 @@ export default function MaterialRequisitionsPage() {
           <CardContent className="p-0">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <CardHeader className="pb-0 border-b">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-4">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-4">
                   <TabsList>
                     <TabsTrigger value="all">Tất cả</TabsTrigger>
                     <TabsTrigger value="pending">Chờ tiếp nhận</TabsTrigger>
                     <TabsTrigger value="accepted">Đã tiếp nhận</TabsTrigger>
                     <TabsTrigger value="completed">Hoàn tất</TabsTrigger>
                   </TabsList>
-                  <div className="relative w-full sm:w-64">
-                    <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      placeholder="Tìm theo mã yêu cầu..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-9"
-                    />
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
+                    {(isKhoManager || isAdmin) && (
+                      <div className="flex items-center space-x-2 bg-muted/40 p-2 rounded-lg border border-muted/80 shadow-sm transition-all hover:bg-muted/60">
+                        <Switch
+                          id="auto-accept-mode"
+                          checked={autoAcceptRequisitions}
+                          onCheckedChange={handleToggleAutoAccept}
+                          disabled={updateSettingsMutation.isPending}
+                        />
+                        <Label htmlFor="auto-accept-mode" className="text-xs font-semibold text-foreground cursor-pointer select-none">
+                          Tự động tiếp nhận khi đủ hàng
+                        </Label>
+                      </div>
+                    )}
+                    <div className="relative w-full sm:w-64">
+                      <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        placeholder="Tìm theo mã yêu cầu..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-9"
+                      />
+                    </div>
                   </div>
                 </div>
               </CardHeader>
@@ -328,19 +371,33 @@ export default function MaterialRequisitionsPage() {
                       <TableHead>Vật liệu</TableHead>
                       <TableHead className="text-right">Yêu cầu</TableHead>
                       <TableHead>Đơn vị</TableHead>
+                      <TableHead className="text-right">Tồn kho</TableHead>
+                      <TableHead className="text-center">Trạng thái</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {selectedReq.items?.map((item: any, idx: number) => (
-                      <TableRow key={idx}>
-                        <TableCell>
-                          <p className="font-medium">{item.material?.name}</p>
-                          <p className="text-xs text-muted-foreground">{item.material?.code}</p>
-                        </TableCell>
-                        <TableCell className="text-right font-bold">{item.requestedQuantity}</TableCell>
-                        <TableCell>{item.material?.unit}</TableCell>
-                      </TableRow>
-                    ))}
+                    {selectedReq.items?.map((item: any, idx: number) => {
+                      const currentStock = item.material?.currentStock ?? 0;
+                      const isSufficient = currentStock >= item.requestedQuantity;
+                      return (
+                        <TableRow key={idx}>
+                          <TableCell>
+                            <p className="font-medium">{item.material?.name}</p>
+                            <p className="text-xs text-muted-foreground">{item.material?.code}</p>
+                          </TableCell>
+                          <TableCell className="text-right font-bold">{item.requestedQuantity}</TableCell>
+                          <TableCell>{item.material?.unit}</TableCell>
+                          <TableCell className="text-right font-semibold text-muted-foreground">{currentStock}</TableCell>
+                          <TableCell className="text-center">
+                            {isSufficient ? (
+                              <span title="Đủ tồn kho"><CheckCircle2 className="size-5 text-emerald-500 mx-auto" /></span>
+                            ) : (
+                              <span title="Không đủ tồn kho!"><AlertTriangle className="size-5 text-rose-500 mx-auto animate-pulse" /></span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>

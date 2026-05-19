@@ -10,13 +10,26 @@ import {
     requestMaterials,
     requestSupplementaryMaterials,
     requestReturnMaterials,
-    approveReturnRequisition
+    approveReturnRequisition,
+    getRequisitionSettings,
+    updateRequisitionSettings
 } from '../controllers/requisitionController.js';
 
 const requisitionRouter = Router();
 
 // --- General Access (Authenticated) ---
 requisitionRouter.use(jwtAuth);
+
+// Settings
+requisitionRouter.get('/settings/auto-accept',
+    rolePermission([ROLES.KHO_MANAGER, ROLES.ADMIN]),
+    getRequisitionSettings
+);
+
+requisitionRouter.post('/settings/auto-accept',
+    rolePermission([ROLES.KHO_MANAGER, ROLES.ADMIN]),
+    updateRequisitionSettings
+);
 
 // Viewing Requisitions
 requisitionRouter.get('/',

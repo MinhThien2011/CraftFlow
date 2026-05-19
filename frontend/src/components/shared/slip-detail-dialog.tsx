@@ -325,10 +325,13 @@ export function SlipDetailDialog({
 
     const buildStatusItems = (nextStatus: string) => {
         return editableItems.map(item => {
+            const materialId = typeof item.material === 'object' && item.material ? ((item.material as any)._id || (item.material as any).id) : item.material;
+            const productId = typeof item.product === 'object' && item.product ? ((item.product as any)._id || (item.product as any).id) : item.product;
+
             return {
                 itemCode: item.itemCode,
-                material: item.material,
-                product: item.product,
+                material: materialId || undefined,
+                product: productId || undefined,
                 actualQuantity: item.quantity.actual || 0,
                 ...(isImport ? { provisionalQuantity: item.quantity.provisional } : {}),
                 itemNote: item.itemNote || ""
@@ -441,7 +444,7 @@ export function SlipDetailDialog({
                 case 'pending':
                     return { label: 'Bắt đầu soạn hàng', nextStatus: 'received', color: 'bg-blue-600' }
                 case 'received':
-                    return null
+                    return { label: 'Chuyển sang kiểm hàng', nextStatus: 'inspecting', color: 'bg-purple-600' }
                 case 'inspecting':
                     return { label: 'Hoàn tất xuất kho', nextStatus: 'completed', color: 'bg-emerald-600' }
                 default:
@@ -896,6 +899,45 @@ export function SlipDetailDialog({
                                                 {item.itemType === 'material' ? 'Nguyên liệu' : 'Thành phẩm'}: dùng lô {item.violations[0]?.usedBatchNumber || '-'} trước lô cũ hơn {item.violations[0]?.expectedBatchNumber || '-'}.
                                             </div>
                                         ))}
+                                        {fifoAudit.items.length > 0 && (
+                                            <div className="rounded-lg border border-gray-200 bg-white p-3">
+                                                <div className="mb-2 text-xs font-semibold text-foreground">Lô đã được sử dụng để xuất (đối chiếu FIFO)</div>
+                                                <div className="space-y-2">
+                                                    {fifoAudit.items.map((item) => (
+                                                        <div key={`alloc-${item.itemType}-${item.itemId}`} className="rounded-md border border-gray-100 bg-gray-50/60 p-2">
+                                                            <div className="mb-1 flex items-center justify-between gap-2">
+                                                                <span className="text-[11px] font-medium text-foreground">
+                                                                    {item.itemType === "material" ? "Nguyên liệu" : "Thành phẩm"} · {item.itemId}
+                                                                </span>
+                                                                <Badge className={item.passed ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-red-100 text-red-700 border-red-200"}>
+                                                                    {item.passed ? "Đúng FIFO" : "Lệch FIFO"}
+                                                                </Badge>
+                                                            </div>
+                                                            {item.allocations?.length ? (
+                                                                <div className="space-y-1">
+                                                                    {item.allocations.map((allocation) => (
+                                                                        <div key={allocation.transactionId} className="grid grid-cols-12 gap-2 rounded border border-gray-100 bg-white px-2 py-1 text-[11px]">
+                                                                            <div className="col-span-6 md:col-span-5">
+                                                                                <span className="text-muted-foreground">Lô:</span>{" "}
+                                                                                <span className="font-medium text-foreground">{allocation.batchNumber || "-"}</span>
+                                                                            </div>
+                                                                            <div className="col-span-3 md:col-span-2 text-emerald-700 font-semibold">
+                                                                                {allocation.quantity}
+                                                                            </div>
+                                                                            <div className="col-span-12 md:col-span-5 text-muted-foreground">
+                                                                                Nhập: {allocation.receivedDate ? format(new Date(allocation.receivedDate), "dd/MM/yyyy HH:mm") : "-"}
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            ) : (
+                                                                <div className="text-[11px] text-muted-foreground">Không có dữ liệu phân bổ lô cho mục này.</div>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
                                         <div className="pt-1">
                                             <Button
                                                 type="button"
@@ -1181,11 +1223,21 @@ export function SlipDetailDialog({
                                                 <div key={tx.transactionId} className="grid grid-cols-1 md:grid-cols-7 gap-2 px-4 py-3 text-xs">
                                                     <div><div className="text-muted-foreground">Thời gian</div><div>{format(new Date(tx.createdAt), "dd/MM/yyyy HH:mm")}</div></div>
                                                     <div><div className="text-muted-foreground">Nghiệp vụ</div><div className="font-semibold">{tx.type}</div></div>
-                                                    <div><div className="text-muted-foreground">Batch</div><div>{tx.batchNumber || '-'}</div></div>
+                                                    <div>
+                                                        <div className="text-muted-foreground">{tx.signedQuantity < 0 ? "Xuất từ lô" : "Theo lô"}</div>
+                                                        <div className="font-medium">{tx.batchNumber || '-'}</div>
+                                                    </div>
                                                     <div><div className="text-muted-foreground">Biến động</div><div className={tx.signedQuantity < 0 ? "text-red-600 font-semibold" : "text-emerald-700 font-semibold"}>{tx.signedQuantity > 0 ? `+${tx.signedQuantity}` : tx.signedQuantity} {selectedFifoHistoryItem.unit || ''}</div></div>
-                                                    <div><div className="text-muted-foreground">Đơn liên quan</div><div>{tx.orderRef || tx.productionOrderCode || tx.purchaseOrderCode || tx.requisitionCode || '-'}</div></div>
+                                                    <div>
+                                                        <div className="text-muted-foreground">Đơn liên quan</div>
+                                                        <div className="font-medium">{tx.orderRef || tx.productionOrderCode || tx.purchaseOrderCode || tx.requisitionCode || '-'}</div>
+                                                    </div>
                                                     <div><div className="text-muted-foreground">Vị trí</div><div>{tx.location || '-'}</div></div>
-                                                    <div><div className="text-muted-foreground">Thực hiện</div><div>{tx.performedBy?.name || '-'}</div></div>
+                                                    <div>
+                                                        <div className="text-muted-foreground">Thực hiện</div>
+                                                        <div>{tx.performedBy?.name || '-'}</div>
+                                                        <div className="text-[10px] text-muted-foreground">Tx: {tx.transactionId}</div>
+                                                    </div>
                                                 </div>
                                             ))}
                                         </div>

@@ -23,6 +23,7 @@ import { updateShelfLoad } from "./shelfService.js";
 import { createBatchesFromImport, generateBatchNumber, allocateBatchesForMaterial, allocateBatchesForItem } from "./fifoService.js";
 import { autoUpdateInsufficientOrders } from "./productionOrderService.js";
 import inventoryEvents from "../events/inventoryEvents.js";
+import { autoAcceptRequisitionsIfSufficient } from "./materialRequisitionService.js";
 import mongoose from "mongoose";
 import { applyCreatedAtCursor, buildListPagination, normalizePagination } from "../utils/pagination.js";
 
@@ -769,6 +770,7 @@ async function finalizeInventoryUpdate(slip, userId, session) {
     if (slip.type === INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT) {
         const materialIds = slip.items.map(item => item.material).filter(id => !!id);
         await autoUpdateInsufficientOrders(materialIds, session);
+        await autoAcceptRequisitionsIfSufficient(materialIds, userId, session);
     }
 
     // 2. Handle Material Requisitions & Production Orders (Existing logic)

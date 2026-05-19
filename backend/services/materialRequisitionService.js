@@ -1,4 +1,5 @@
 import MaterialRequisition from '../models/MaterialRequisition.js';
+import SystemSetting from '../models/SystemSetting.js';
 import Material from '../models/Material.js';
 import ProductionOrder from '../models/ProductionOrder.js';
 import InventoryTransaction from '../models/InventoryTransaction.js';
@@ -713,5 +714,136 @@ export const getRequisitionsByOrder = async (orderId) => {
     return { success: true, data: { requisitions } };
   } catch (error) {
     return { status: 'error', message: error.message };
+  }
+};
+
+/**
+ * Fetch global material requisition settings.
+ */
+export const getRequisitionSettings = async () => {
+  try {
+    let setting = await SystemSetting.findOne({ key: 'auto_accept_requisitions' });
+    if (!setting) {
+      setting = await SystemSetting.create({
+        key: 'auto_accept_requisitions',
+        value: false,
+        description: 'Auto-accept material requisitions when stock becomes sufficient after import.'
+      });
+    }
+    return { success: true, data: { autoAcceptRequisitions: setting.value } };
+  } catch (error) {
+    console.error('[materialRequisitionService] getRequisitionSettings error:', error);
+    return { success: false, message: error.message };
+  }
+};
+
+/**
+ * Update global material requisition settings.
+ */
+export const updateRequisitionSettings = async (value) => {
+  try {
+    let setting = await SystemSetting.findOneAndUpdate(
+      { key: 'auto_accept_requisitions' },
+      { $set: { value: !!value } },
+      { new: true, upsert: true }
+    );
+    return { success: true, message: 'Settings updated successfully.', data: { autoAcceptRequisitions: setting.value } };
+  } catch (error) {
+    console.error('[materialRequisitionService] updateRequisitionSettings error:', error);
+    return { success: false, message: error.message };
+  }
+};
+
+/**
+ * Automatically transitions eligible PENDING requisitions to ACCEPTED status
+ * if the global 'auto_accept_requisitions' setting is enabled and warehouse has enough stock.
+ */
+export const autoAcceptRequisitionsIfSufficient = async (materialIds = [], managerId = null, session = null) => {
+  try {
+    // 1. Fetch system setting
+    const setting = await SystemSetting.findOne({ key: 'auto_accept_requisitions' }).session(session);
+    const isEnabled = setting ? setting.value : false;
+    if (!isEnabled) {
+      console.log('[AutoAccept] Auto-accept requisition setting is disabled.');
+      return { success: true, processedCount: 0 };
+    }
+
+    if (!materialIds || materialIds.length === 0) return { success: true, processedCount: 0 };
+
+    // 2. Find pending issue/supplementary requisitions containing the updated materials
+    const pendingRequisitions = await MaterialRequisition.find({
+      status: REQUISITION_STATUS.PENDING,
+      type: { $in: [REQUISITION_TYPE.ISSUE, REQUISITION_TYPE.SUPPLEMENTARY] },
+      'items.material': { $in: materialIds }
+    })
+    .populate('items.material')
+    .populate('createdBy', 'fullName')
+    .session(session);
+
+    if (pendingRequisitions.length === 0) return { success: true, processedCount: 0 };
+
+    let processedCount = 0;
+    for (const requisition of pendingRequisitions) {
+      // 3. Check stock availability for this requisition
+      const stockCheck = await checkStockAvailability(requisition.items, session);
+      if (stockCheck.allAvailable) {
+        // Auto-accept!
+        requisition.status = REQUISITION_STATUS.ACCEPTED;
+        requisition.acceptedAt = new Date();
+        if (managerId) requisition.khoManager = managerId;
+        requisition.notes = "Hệ thống tự động tiếp nhận khi đủ tồn kho vật liệu.";
+
+        // Create Export Slip
+        const slipItems = requisition.items.map(item => ({
+          material: item.material._id,
+          itemName: item.material.name,
+          itemCode: item.material.code,
+          unit: item.material.unit,
+          quantity: {
+            requested: item.requestedQuantity,
+            actual: 0
+          },
+          unitPrice: item.material.price || 0,
+          amount: 0
+        }));
+
+        const slipData = {
+          type: INVENTORY_IMPORT_EXPORT_SLIP_TYPE.EXPORT,
+          reason: `Hệ thống tự động tiếp nhận & tạo phiếu xuất theo yêu cầu ${requisition.requisitionCode}`,
+          personName: requisition.createdBy?.fullName || 'Người yêu cầu',
+          relatedProductionOrder: requisition.productionOrder,
+          relatedRequisition: requisition._id,
+          items: slipItems,
+          date: new Date(),
+          status: INVENTORY_IMPORT_EXPORT_SLIP_STATUS.PENDING
+        };
+
+        const slipResult = await createSlipService(slipData, managerId || requisition.createdBy?._id, session);
+        if (!slipResult.success) {
+          console.error(`[AutoAccept] Failed to create export slip for ${requisition.requisitionCode}: ${slipResult.message}`);
+          continue;
+        }
+
+        requisition.relatedSlip = slipResult.data._id;
+        await requisition.save({ session });
+        processedCount++;
+        console.log(`[AutoAccept] Automatically accepted requisition ${requisition.requisitionCode} and created slip.`);
+
+        // Notify
+        await emitDataChanged([ROLES.ADMIN, ROLES.KHO_MANAGER, ROLES.PRODUCTION_MANAGER], {
+          domains: ["requisitions", "slips"],
+          action: "status_updated",
+          entity: "material_requisition",
+          id: requisition._id,
+          message: `Hệ thống tự động tiếp nhận yêu cầu vật tư ${requisition.requisitionCode} do đủ tồn kho.`,
+          metaData: { requisitionId: requisition._id, requisitionCode: requisition.requisitionCode, status: REQUISITION_STATUS.ACCEPTED }
+        });
+      }
+    }
+
+    return { success: true, processedCount };
+  } catch (error) {
+    console.error('[AutoAccept] Error in autoAcceptRequisitionsIfSufficient:', error);
+    return { success: false, error: error.message };
   }
 };

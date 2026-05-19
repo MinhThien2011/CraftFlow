@@ -77,6 +77,7 @@ export const updateSlipStatus = async (req, res) => {
 
         const { error, value } = slipUpdateStatusValidator(req.body);
         if (error) {
+            console.log(error)
             return res.status(400).json({ error: error.details.map(d => d.message) });
         }
 

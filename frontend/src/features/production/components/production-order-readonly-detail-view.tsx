@@ -61,6 +61,31 @@ export function ProductionOrderReadonlyDetailView({ id, backHref, backLabel = "Q
 
   const order = (orderResponse?.data as any)?.order || orderResponse?.data
 
+  useEffect(() => {
+    const loadStockInSlip = async () => {
+      if (!order?._id || order.status !== PRODUCTION_ORDER_STATUS.COMPLETED) {
+        setStockInSlip(null)
+        return
+      }
+      setIsLoadingStockInSlip(true)
+      try {
+        const response = await slipApi.getSlips({
+          type: "import",
+          category: "product",
+          relatedProductionOrder: order._id,
+          limit: 1,
+          page: 1,
+        })
+        setStockInSlip(response?.data?.slips?.[0] || null)
+      } catch {
+        setStockInSlip(null)
+      } finally {
+        setIsLoadingStockInSlip(false)
+      }
+    }
+    loadStockInSlip()
+  }, [order?._id, order?.status, updateOrderStatusMutation.isSuccess])
+
   if (isLoading) {
     return (
       <div className="flex h-[60vh] flex-col items-center justify-center gap-4 text-muted-foreground">
@@ -97,31 +122,6 @@ export function ProductionOrderReadonlyDetailView({ id, backHref, backLabel = "Q
   const totalQuantity = order.products?.reduce((sum: number, p: any) => sum + p.quantity, 0) || 0
   const totalCompleted = order.assignments?.reduce((sum: number, a: any) => sum + (a.completedQuantity || 0), 0) || 0
   const overallProgress = totalQuantity > 0 ? Math.min(100, Math.round((totalCompleted / totalQuantity) * 100)) : 0
-
-  useEffect(() => {
-    const loadStockInSlip = async () => {
-      if (!order?._id || order.status !== PRODUCTION_ORDER_STATUS.COMPLETED) {
-        setStockInSlip(null)
-        return
-      }
-      setIsLoadingStockInSlip(true)
-      try {
-        const response = await slipApi.getSlips({
-          type: "import",
-          category: "product",
-          relatedProductionOrder: order._id,
-          limit: 1,
-          page: 1,
-        })
-        setStockInSlip(response?.data?.slips?.[0] || null)
-      } catch {
-        setStockInSlip(null)
-      } finally {
-        setIsLoadingStockInSlip(false)
-      }
-    }
-    loadStockInSlip()
-  }, [order?._id, order?.status, updateOrderStatusMutation.isSuccess])
 
   const handleCreateStockInSlip = () => {
     if (!order?._id) return

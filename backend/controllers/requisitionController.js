@@ -210,6 +210,41 @@ export const updateRequisitionDetails = async (req, res) => {
   }
 };
 
+export const getRequisitionSettings = async (req, res) => {
+  try {
+    const result = await requisitionService.getRequisitionSettings();
+    if (!result.success) {
+      return res.status(StatusCodes.BAD_REQUEST).json(result);
+    }
+    return res.status(StatusCodes.OK).json(result);
+  } catch (error) {
+    console.log("[RequisitionController] getRequisitionSettings error:", error);
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: 'Failed to retrieve requisition settings.',
+      data: null
+    });
+  }
+};
+
+export const updateRequisitionSettings = async (req, res) => {
+  try {
+    const { autoAcceptRequisitions } = req.body;
+    const result = await requisitionService.updateRequisitionSettings(autoAcceptRequisitions);
+    if (!result.success) {
+      return res.status(StatusCodes.BAD_REQUEST).json(result);
+    }
+    return res.status(StatusCodes.OK).json(result);
+  } catch (error) {
+    console.log("[RequisitionController] updateRequisitionSettings error:", error);
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: 'Failed to update requisition settings.',
+      data: null
+    });
+  }
+};
+
 export const updateRequisitionStatus = async (req, res) => {
   try {
     const { id } = req.params;

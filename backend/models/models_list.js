@@ -16,6 +16,7 @@ import User from './User.js';
 import Notification from './Notification.js';
 import SystemLog from './SystemLog.js';
 import ProductExportRequest from './ProductExportRequest.js';
+import SystemSetting from './SystemSetting.js';
 
 export const models_list = {
     BOM,
@@ -36,6 +37,5 @@ export const models_list = {
     PurchaseOrder,
     Notification,
     SystemLog,
-
-
+    SystemSetting,
 };
