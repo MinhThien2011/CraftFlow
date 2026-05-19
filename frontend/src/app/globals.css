@@ -129,21 +129,47 @@
   --animate-hologram: hologram 3s linear infinite;
 
   @keyframes float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-20px); }
+
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+
+    50% {
+      transform: translateY(-20px);
+    }
   }
 
   @keyframes blob {
-    0% { transform: translate(0px, 0px) scale(1); }
-    33% { transform: translate(30px, -50px) scale(1.1); }
-    66% { transform: translate(-20px, 20px) scale(0.9); }
-    100% { transform: translate(0px, 0px) scale(1); }
+    0% {
+      transform: translate(0px, 0px) scale(1);
+    }
+
+    33% {
+      transform: translate(30px, -50px) scale(1.1);
+    }
+
+    66% {
+      transform: translate(-20px, 20px) scale(0.9);
+    }
+
+    100% {
+      transform: translate(0px, 0px) scale(1);
+    }
   }
 
   @keyframes hologram {
-    0% { filter: drop-shadow(3px 0 0 rgba(0, 255, 255, 0.5)) drop-shadow(-3px 0 0 rgba(255, 0, 255, 0.5)); }
-    50% { filter: drop-shadow(-3px 0 0 rgba(0, 255, 255, 0.5)) drop-shadow(3px 0 0 rgba(255, 0, 255, 0.5)); }
-    100% { filter: drop-shadow(3px 0 0 rgba(0, 255, 255, 0.5)) drop-shadow(-3px 0 0 rgba(255, 0, 255, 0.5)); }
+    0% {
+      filter: drop-shadow(3px 0 0 rgba(0, 255, 255, 0.5)) drop-shadow(-3px 0 0 rgba(255, 0, 255, 0.5));
+    }
+
+    50% {
+      filter: drop-shadow(-3px 0 0 rgba(0, 255, 255, 0.5)) drop-shadow(3px 0 0 rgba(255, 0, 255, 0.5));
+    }
+
+    100% {
+      filter: drop-shadow(3px 0 0 rgba(0, 255, 255, 0.5)) drop-shadow(-3px 0 0 rgba(255, 0, 255, 0.5));
+    }
   }
 }
 
@@ -167,4 +193,149 @@
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
+
+  /* Performance optimizations for smooth 60fps+ animations */
+  .will-change-transform {
+    will-change: transform;
+  }
+
+  .will-change-opacity {
+    will-change: opacity;
+  }
+
+  /* GPU acceleration for smooth animations */
+  .gpu-accelerated {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    perspective: 1000px;
+  }
+
+  /* Optimize backdrop-blur for better performance */
+  .backdrop-blur-xl {
+    -webkit-backdrop-filter: blur(24px);
+    backdrop-filter: blur(24px);
+    transform: translateZ(0);
+  }
+
+  .backdrop-blur-md {
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    transform: translateZ(0);
+  }
+
+  /* Smooth transitions with hardware acceleration */
+  .smooth-transition {
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transform: translateZ(0);
+  }
+
+  /* Optimize animations to use only transform and opacity */
+  @keyframes float {
+
+    0%,
+    100% {
+      transform: translateY(0) translateZ(0);
+    }
+
+    50% {
+      transform: translateY(-20px) translateZ(0);
+    }
+  }
+
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+    will-change: transform;
+  }
+
+  /* Optimize pulse animation */
+  @keyframes optimized-pulse {
+
+    0%,
+    100% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: 0.5;
+    }
+  }
+
+  .animate-pulse {
+    animation: optimized-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    will-change: opacity;
+  }
+}
+
+/* Cloud drift animation for light mode */
+@keyframes cloud-drift {
+
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+
+  33% {
+    transform: translate(20px, -30px) scale(1.05);
+  }
+
+  66% {
+    transform: translate(-15px, 15px) scale(0.95);
+  }
+}
+
+.animate-cloud-drift {
+  animation: cloud-drift 20s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* Cloud drift reverse animation */
+@keyframes cloud-drift-reverse {
+
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+
+  33% {
+    transform: translate(-25px, 20px) scale(0.95);
+  }
+
+  66% {
+    transform: translate(18px, -25px) scale(1.08);
+  }
+}
+
+.animate-cloud-drift-reverse {
+  animation: cloud-drift-reverse 25s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* Floating particles animation for light mode */
+@keyframes float-particle {
+
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.3;
+  }
+
+  25% {
+    transform: translate(30px, -40px) scale(1.1);
+    opacity: 0.5;
+  }
+
+  50% {
+    transform: translate(-20px, -80px) scale(0.9);
+    opacity: 0.4;
+  }
+
+  75% {
+    transform: translate(40px, -120px) scale(1.05);
+    opacity: 0.6;
+  }
+}
+
+.animate-float-particle {
+  animation: float-particle 20s ease-in-out infinite;
+  will-change: transform, opacity;
 }
