@@ -114,7 +114,7 @@ function ProductionAlertsPage() {
       const [matLowRes, prodLowRes, orderRes, poPendingRes, poAcceptedRes] = await Promise.all([
         materialApi.getLowStockMaterials({ search, limit: 100 }).catch(() => ({ success: false })),
         productApi.getLowStockProducts({ search, limit: 100 }).catch(() => ({ success: false })),
-        productionApi.getMaterialAlerts({ status: 'pending', limit: 100 }).catch(() => ({ success: false })),
+        productionApi.getMaterialAlerts({ status: 'all', limit: 100 }).catch(() => ({ success: false })),
         purchaseOrderApi.getAll({ status: 'pending' }).catch(() => ({ success: false })),
         purchaseOrderApi.getAll({ status: 'accepted' }).catch(() => ({ success: false }))
       ])
@@ -155,7 +155,7 @@ function ProductionAlertsPage() {
         mappedOrders = orderData.alerts
           .filter((alert: any) => {
             const normalizedStatus = String(alert?.status || "").toLowerCase()
-            return normalizedStatus === "pending" && !alert?.purchaseOrder
+            return normalizedStatus !== "resolved" && normalizedStatus !== "ignored"
           })
           .map((alert: any) => {
             const materialInfo = alert.material && typeof alert.material === 'object' ? alert.material : {};
@@ -170,7 +170,9 @@ function ProductionAlertsPage() {
               alertId: alert._id,
               alertType: 'order_requirement',
               itemType: 'material',
+              status: alert.status,
               productionOrder: alert.productionOrder,
+              purchaseOrder: alert.purchaseOrder,
               shortageQuantity: alert.shortageQuantity || 0
             }
           })
@@ -244,7 +246,7 @@ function ProductionAlertsPage() {
   }, [activeTab, currentDisplayItems])
 
   const selectableOrderItems = useMemo(() => {
-    return filteredOrders.filter((item) => !!item.alertId)
+    return filteredOrders.filter((item: any) => !!item.alertId && !item.purchaseOrder && String(item.status || '').toLowerCase() === 'pending')
   }, [filteredOrders])
 
   const isAllSelected = useMemo(() => {
@@ -391,7 +393,8 @@ function ProductionAlertsPage() {
                 ) : (
                   paginatedOrderGroups.map((group) => {
                     const isExpanded = expandedOrderIds.has(group.orderId)
-                    const groupSelected = group.alerts.every((item) => item.alertId && selectedAlertIds.has(item.alertId))
+                    const groupSelectable = group.alerts.filter((item: any) => !item.purchaseOrder && String(item.status || '').toLowerCase() === 'pending')
+                    const groupSelected = groupSelectable.length > 0 && groupSelectable.every((item) => item.alertId && selectedAlertIds.has(item.alertId))
                     const totalShortage = group.alerts.reduce((sum, item) => sum + (item.shortageQuantity || 0), 0)
                     const criticalCount = group.alerts.filter((item) => item.currentStock === 0).length
 
@@ -415,6 +418,9 @@ function ProductionAlertsPage() {
                                 <Badge variant="outline" className="bg-red-50 text-red-700">
                                   {group.alerts.length} vật tư thiếu
                                 </Badge>
+                                {group.alerts.some((item: any) => !!item.purchaseOrder) && (
+                                  <Badge variant="outline" className="bg-blue-50 text-blue-700">Đã lên PO</Badge>
+                                )}
                                 {criticalCount > 0 && (
                                   <Badge className="bg-[#DC3545] text-white">{criticalCount} nguy cấp</Badge>
                                 )}
@@ -433,7 +439,8 @@ function ProductionAlertsPage() {
                               {!isAdmin && (
                                 <Checkbox
                                   checked={groupSelected}
-                                  onCheckedChange={(checked) => toggleOrderGroupSelection(group.alerts, !!checked)}
+                                  disabled={groupSelectable.length === 0}
+                                  onCheckedChange={(checked) => toggleOrderGroupSelection(groupSelectable, !!checked)}
                                 />
                               )}
                             </div>
@@ -451,14 +458,19 @@ function ProductionAlertsPage() {
                               )}>
                                 {!isAdmin && (
                                   <Checkbox checked={selectedAlertIds.has(item.alertId!)} onCheckedChange={(checked) => {
+                                    const isLocked = !!(item as any).purchaseOrder || String((item as any).status || '').toLowerCase() !== 'pending'
+                                    if (isLocked) return
                                     const newSet = new Set(selectedAlertIds)
                                     checked ? newSet.add(item.alertId!) : newSet.delete(item.alertId!)
                                     setSelectedAlertIds(newSet)
-                                  }} />
+                                  }} disabled={!!(item as any).purchaseOrder || String((item as any).status || '').toLowerCase() !== 'pending'} />
                                 )}
                                 <div className="min-w-0">
                                   <p className="truncate font-medium text-foreground">{item.name}</p>
-                                  <p className="text-xs text-muted-foreground">{item.code}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {item.code}
+                                    {!!(item as any).purchaseOrder ? " • Đã tạo PO, chờ nhập kho" : ""}
+                                  </p>
                                 </div>
                                 <div className="md:justify-self-start">{getStatusBadge(item)}</div>
                                 <div className="text-sm font-semibold text-foreground whitespace-nowrap md:text-right">

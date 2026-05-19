@@ -11,6 +11,7 @@ import User from "../models/User.js";
 import Role from "../models/Roles.js";
 import { emitDataChanged } from "./realtimeService.js";
 import { applyCreatedAtCursor, buildListPagination, normalizePagination } from "../utils/pagination.js";
+import mongoose from "mongoose";
 
 const notifyUsersByRole = async ({ roles, excludeUserId, title, message, type, priority, metaData }) => {
     const roleDocs = await Role.find({ roleName: { $in: roles } }).select("_id").lean();
@@ -43,14 +44,17 @@ const notifyUsersByRole = async ({ roles, excludeUserId, title, message, type, p
 };
 
 export const createPurchaseOrderService = async (data, userId) => {
+    const session = await mongoose.startSession();
     try {
+        session.startTransaction();
         const {
             purchaseOrderItems: manualItems = [],
             orderReason,
             priority = PRIORITY.MEDIUM,
             productionOrder,
             materialAlert,
-            materialAlerts = []
+            materialAlerts = [],
+            sourceProductionOrders = []
         } = data;
 
         // Clean up data to avoid "none" or empty strings causing ObjectId cast errors
@@ -59,9 +63,13 @@ export const createPurchaseOrderService = async (data, userId) => {
         const cleanMaterialAlerts = (materialAlerts && Array.isArray(materialAlerts))
             ? materialAlerts.filter(id => id && id !== 'none')
             : [];
+        const cleanSourceProductionOrders = (sourceProductionOrders && Array.isArray(sourceProductionOrders))
+            ? sourceProductionOrders.filter(id => id && id !== 'none')
+            : [];
 
         const consolidatedRequirements = new Map(); // materialId -> quantity
         const alertsToLink = new Set();
+        const linkedProductionOrders = new Set(cleanSourceProductionOrders.map((id) => id.toString()));
 
         // 1. Process manual items
         manualItems.forEach(item => {
@@ -82,7 +90,7 @@ export const createPurchaseOrderService = async (data, userId) => {
         }
 
         if (cleanProductionOrder || cleanMaterialAlert || cleanMaterialAlerts.length > 0) {
-            const relevantAlerts = await MaterialAlert.find(alertQuery).lean();
+            const relevantAlerts = await MaterialAlert.find(alertQuery).session(session).lean();
 
             // Validation for specifically requested alerts
             const requestedAlertIds = cleanMaterialAlerts.length > 0 ? cleanMaterialAlerts : (cleanMaterialAlert ? [cleanMaterialAlert] : []);
@@ -92,7 +100,7 @@ export const createPurchaseOrderService = async (data, userId) => {
                 for (const id of requestedAlertIds) {
                     const found = relevantAlerts.find(a => a._id.toString() === id.toString());
                     if (!found) {
-                        const checkAlert = await MaterialAlert.findById(id).select('purchaseOrder status').lean();
+                        const checkAlert = await MaterialAlert.findById(id).select('purchaseOrder status').session(session).lean();
                         if (checkAlert?.purchaseOrder) {
                             throw new Error(`Material alert ${id} is already linked to purchase order ${checkAlert.purchaseOrder}`);
                         }
@@ -107,6 +115,7 @@ export const createPurchaseOrderService = async (data, userId) => {
                 const matId = alert.material.toString();
                 consolidatedRequirements.set(matId, (consolidatedRequirements.get(matId) || 0) + (alert.shortageQuantity || 0));
                 alertsToLink.add(alert._id.toString());
+                if (alert.productionOrder) linkedProductionOrders.add(alert.productionOrder.toString());
             });
         }
 
@@ -123,10 +132,10 @@ export const createPurchaseOrderService = async (data, userId) => {
         const { processedMaterials, totalBaseCost } = await processMaterialCosts(finalItemsToProcess);
 
         // 4. Performance Check: Shelf Capacity (only for general stock fill)
-        const isGeneralStockFill = !cleanProductionOrder && !cleanMaterialAlert;
+        const isGeneralStockFill = !cleanProductionOrder && !cleanMaterialAlert && cleanMaterialAlerts.length === 0;
         if (isGeneralStockFill) {
             const materialIds = processedMaterials.map(m => m.material);
-            const materials = await Material.find({ _id: { $in: materialIds } }).populate('shelf').lean();
+            const materials = await Material.find({ _id: { $in: materialIds } }).populate('shelf').session(session).lean();
             const materialMap = new Map(materials.map(m => [m._id.toString(), m]));
 
             for (const item of processedMaterials) {
@@ -151,35 +160,46 @@ export const createPurchaseOrderService = async (data, userId) => {
         }));
 
         // 6. Clean and Descriptive Reason
+        const sourceProductionOrderIds = Array.from(linkedProductionOrders);
         const defaultReason = cleanProductionOrder
             ? `Purchase for Production Order ${cleanProductionOrder}`
+            : sourceProductionOrderIds.length > 0
+                ? `Purchase for shortages from ${sourceProductionOrderIds.length} production order(s)`
             : cleanMaterialAlert
                 ? `Purchase for Material Alert ${cleanMaterialAlert}`
                 : 'General Stock Replenishment';
 
         const finalReason = orderReason || `${defaultReason}. Priority: ${priority}. Total items: ${finalPurchaseOrderItems.length}.`;
 
-        const purchaseOrder = await PurchaseOrder.create({
+        const [purchaseOrder] = await PurchaseOrder.create([{
             creator: userId,
             status: PURCHASE_ORDER_STATUS.PENDING,
             priority,
-            productionOrder: cleanProductionOrder,
+            productionOrder: cleanProductionOrder || (sourceProductionOrderIds.length === 1 ? sourceProductionOrderIds[0] : null),
+            sourceProductionOrders: sourceProductionOrderIds,
             materialAlert: cleanMaterialAlert,
             orderReason: finalReason,
             purchaseOrderItems: finalPurchaseOrderItems,
             totalBaseCost
-        });
+        }], { session });
 
         // 7. Update MaterialAlerts link (Optimized bulk update)
         if (alertsToLink.size > 0) {
-            await MaterialAlert.updateMany(
-                { _id: { $in: Array.from(alertsToLink) } },
+            const alertIds = Array.from(alertsToLink);
+            const linkResult = await MaterialAlert.updateMany(
+                { _id: { $in: alertIds }, status: 'pending', purchaseOrder: { $exists: false } },
                 {
                     purchaseOrder: purchaseOrder._id,
                     status: 'ordered' // Update status to prevent picking up in other POs
-                }
+                },
+                { session }
             );
+            if (linkResult.modifiedCount !== alertIds.length) {
+                throw new Error('Some material alerts were already linked by another request. Please reload and try again.');
+            }
         }
+
+        await session.commitTransaction();
 
         await notifyUsersByRole({
             roles: [ROLES.ADMIN],
@@ -190,6 +210,7 @@ export const createPurchaseOrderService = async (data, userId) => {
             priority: 'HIGH',
             metaData: {
                 purchaseOrderId: purchaseOrder._id,
+                sourceProductionOrders: purchaseOrder.sourceProductionOrders || [],
                 status: purchaseOrder.status,
                 source: 'purchase_order_created'
             }
@@ -204,6 +225,7 @@ export const createPurchaseOrderService = async (data, userId) => {
             metaData: {
                 purchaseOrderId: purchaseOrder._id,
                 productionOrder: purchaseOrder.productionOrder,
+                sourceProductionOrders: purchaseOrder.sourceProductionOrders || [],
                 materialAlert: purchaseOrder.materialAlert,
                 status: purchaseOrder.status
             }
@@ -217,8 +239,13 @@ export const createPurchaseOrderService = async (data, userId) => {
 
         return { success: true, data: purchaseOrder, message: 'Purchase order created successfully' };
     } catch (error) {
+        if (session.inTransaction()) {
+            await session.abortTransaction();
+        }
         console.error('[createPurchaseOrderService] error:', error);
         return { success: false, message: error.message || 'Failed to create purchase order', data: null };
+    } finally {
+        session.endSession();
     }
 };
 
@@ -451,6 +478,7 @@ export const getAllPurchaseOrdersByIdService = async (id) => {
     try {
         const purchaseOrder = await PurchaseOrder.findById(id)
             .populate('creator', 'username email')
+            .populate('sourceProductionOrders', 'orderCode status')
             .populate('purchaseOrderItems.material', 'name price barcode code');
         if (!purchaseOrder) {
             return { success: false, message: 'Purchase order not found', data: null };
@@ -486,6 +514,7 @@ export const getAllPurchaseOrdersService = async (query = {}) => {
             .skip(skip)
             .limit(limitNum)
             .populate('creator', 'username email')
+            .populate('sourceProductionOrders', 'orderCode status')
             .populate('purchaseOrderItems.material', 'name price barcode code')
             .lean();
         const total = await totalPromise;

@@ -5,10 +5,10 @@ import { useQueryClient } from "@tanstack/react-query"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Save, CheckCircle2, Image as ImageIcon, Upload, X, AlertTriangle, CheckCircle, ScanLine } from "lucide-react"
+import { Save, CheckCircle2, Image as ImageIcon, Upload, X, AlertTriangle, CheckCircle, ScanLine, History } from "lucide-react"
 import { format } from "date-fns"
 import { vi } from "date-fns/locale"
-import { slipApi, Slip, SlipItem } from "@/api/slip.api"
+import { slipApi, Slip, SlipItem, FifoAuditResult, FifoHistoryResult } from "@/api/slip.api"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { QRCodeSVG } from 'qrcode.react'
@@ -109,6 +109,12 @@ export function SlipDetailDialog({
     const [uploading, setUploading] = useState(false)
     const [selectedFiles, setSelectedFiles] = useState<File[]>([])
     const [isScannerOpen, setIsScannerOpen] = useState(false)
+    const [fifoAudit, setFifoAudit] = useState<FifoAuditResult | null>(null)
+    const [fifoLoading, setFifoLoading] = useState(false)
+    const [fifoHistoryOpen, setFifoHistoryOpen] = useState(false)
+    const [fifoHistoryLoading, setFifoHistoryLoading] = useState(false)
+    const [fifoHistory, setFifoHistory] = useState<FifoHistoryResult | null>(null)
+    const [selectedFifoItemKey, setSelectedFifoItemKey] = useState<string>("")
     const audioCtxRef = useRef<AudioContext | null>(null)
     const isImport = type === 'import'
     // Lấy danh sách kệ để chọn
@@ -131,6 +137,8 @@ export function SlipDetailDialog({
     const canEditInfo = canSaveDetails && (isImport
         ? ['pending', 'received', 'inspected'].includes(currentStatus)
         : ['pending', 'received', 'inspecting'].includes(currentStatus))
+
+    const shouldShowFifoAudit = !isImport && ['inspecting', 'completed', 'verified'].includes(currentStatus)
 
     useEffect(() => {
         if (slip) {
@@ -205,6 +213,40 @@ export function SlipDetailDialog({
         }
     }, [slip])
 
+    useEffect(() => {
+        if (!open || !slip || !shouldShowFifoAudit) {
+            setFifoAudit(null)
+            setFifoLoading(false)
+            return
+        }
+
+        let isCancelled = false
+
+        const loadFifoAudit = async () => {
+            try {
+                setFifoLoading(true)
+                const response = await slipApi.getFifoAudit(slip._id)
+                if (!isCancelled) {
+                    setFifoAudit(response?.data?.data || null)
+                }
+            } catch {
+                if (!isCancelled) {
+                    setFifoAudit(null)
+                }
+            } finally {
+                if (!isCancelled) {
+                    setFifoLoading(false)
+                }
+            }
+        }
+
+        loadFifoAudit()
+
+        return () => {
+            isCancelled = true
+        }
+    }, [open, slip?._id, shouldShowFifoAudit, slip])
+
     const totalAmount = useMemo(() => {
         return editableItems.reduce((sum, item) => sum + (item.amount || 0), 0)
     }, [editableItems])
@@ -227,6 +269,36 @@ export function SlipDetailDialog({
     const totalAmountInWords = useMemo(() => {
         return numberToVietnameseWords(totalAmount)
     }, [totalAmount])
+
+    const selectedFifoHistoryItem = useMemo(() => {
+        if (!fifoHistory?.items?.length) return null
+        if (!selectedFifoItemKey) return fifoHistory.items[0]
+        return fifoHistory.items.find((item) => `${item.itemType}:${item.itemId}` === selectedFifoItemKey) || fifoHistory.items[0]
+    }, [fifoHistory, selectedFifoItemKey])
+
+    const handleOpenFifoHistory = async () => {
+        if (!slip) return
+        setFifoHistoryOpen(true)
+        if (fifoHistory?.slipId === slip._id) return
+        try {
+            setFifoHistoryLoading(true)
+            const response = await slipApi.getFifoHistory(slip._id)
+            const payload = response?.data?.data || null
+            setFifoHistory(payload)
+            if (payload?.items?.length) {
+                const firstKey = `${payload.items[0].itemType}:${payload.items[0].itemId}`
+                setSelectedFifoItemKey(firstKey)
+            } else {
+                setSelectedFifoItemKey("")
+            }
+        } catch {
+            setFifoHistory(null)
+            setSelectedFifoItemKey("")
+            toast.error("Không tải được lịch sử FIFO")
+        } finally {
+            setFifoHistoryLoading(false)
+        }
+    }
 
     const handleProvisionalChange = (idx: number, value: string) => {
         let val = Number(value)
@@ -800,6 +872,47 @@ export function SlipDetailDialog({
                             </div>
                         </div>
 
+                        {shouldShowFifoAudit && (
+                            <div className="mb-8 rounded-xl border border-gray-200 bg-gray-50/60 p-4 print:hidden">
+                                <div className="flex items-center justify-between gap-3">
+                                    <div className="text-sm font-semibold">Kiểm chứng FIFO</div>
+                                    {fifoLoading ? (
+                                        <Badge className="bg-gray-100 text-gray-700 border-gray-200">Đang kiểm tra...</Badge>
+                                    ) : fifoAudit ? (
+                                        <Badge className={fifoAudit.passed ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-red-100 text-red-700 border-red-200"}>
+                                            {fifoAudit.passed ? "Đạt FIFO" : "Lệch FIFO"}
+                                        </Badge>
+                                    ) : (
+                                        <Badge className="bg-amber-100 text-amber-700 border-amber-200">Chưa có dữ liệu</Badge>
+                                    )}
+                                </div>
+                                {fifoAudit && (
+                                    <div className="mt-3 space-y-2 text-xs text-muted-foreground">
+                                        <div>
+                                            Đã kiểm tra {fifoAudit.itemCount} mặt hàng, phát hiện {fifoAudit.violationCount} điểm lệch.
+                                        </div>
+                                        {!fifoAudit.passed && fifoAudit.items.filter(item => !item.passed).slice(0, 3).map((item, idx) => (
+                                            <div key={`${item.itemId}-${idx}`} className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-red-700">
+                                                {item.itemType === 'material' ? 'Nguyên liệu' : 'Thành phẩm'}: dùng lô {item.violations[0]?.usedBatchNumber || '-'} trước lô cũ hơn {item.violations[0]?.expectedBatchNumber || '-'}.
+                                            </div>
+                                        ))}
+                                        <div className="pt-1">
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                className="gap-2"
+                                                onClick={handleOpenFifoHistory}
+                                            >
+                                                <History className="size-4" />
+                                                Xem lịch sử FIFO đầy đủ
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         {/* Evidence Images Section */}
                         {slip?.images && slip.images.length > 0 && (
                             <div className="mb-8 p-6 rounded-2xl border bg-gray-50/30 print:hidden">
@@ -998,6 +1111,91 @@ export function SlipDetailDialog({
                 onOpenChange={setIsScannerOpen}
                 onScanSuccess={handleScanSuccess}
             />
+            <Dialog open={fifoHistoryOpen} onOpenChange={setFifoHistoryOpen}>
+                <DialogContent className="w-[95vw] max-w-6xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Lịch sử FIFO theo phiếu {slip?.slipNumber}</DialogTitle>
+                        <DialogDescription>
+                            Theo dõi đầy đủ batch, luồng nhập/xuất, vị trí hiện tại và chứng từ liên quan của từng mặt hàng.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {fifoHistoryLoading ? (
+                        <div className="text-sm text-muted-foreground py-6">Đang tải lịch sử FIFO...</div>
+                    ) : !fifoHistory?.items?.length ? (
+                        <div className="text-sm text-muted-foreground py-6">Chưa có dữ liệu lịch sử FIFO cho phiếu này.</div>
+                    ) : (
+                        <div className="space-y-4">
+                            <div className="flex flex-wrap gap-2">
+                                {fifoHistory.items.map((item) => {
+                                    const itemKey = `${item.itemType}:${item.itemId}`
+                                    const active = selectedFifoHistoryItem && `${selectedFifoHistoryItem.itemType}:${selectedFifoHistoryItem.itemId}` === itemKey
+                                    return (
+                                        <button
+                                            key={itemKey}
+                                            type="button"
+                                            onClick={() => setSelectedFifoItemKey(itemKey)}
+                                            className={cn(
+                                                "rounded-lg border px-3 py-2 text-left text-xs transition-colors",
+                                                active ? "border-blue-300 bg-blue-50 text-blue-700" : "border-gray-200 bg-white hover:bg-gray-50"
+                                            )}
+                                        >
+                                            <div className="font-semibold">{item.itemName || item.itemCode || item.itemId}</div>
+                                            <div className="text-muted-foreground">
+                                                {item.summary.batchCount} batch • Còn {item.summary.totalRemaining} {item.unit || ''}
+                                            </div>
+                                        </button>
+                                    )
+                                })}
+                            </div>
+
+                            {selectedFifoHistoryItem && (
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+                                        <div className="rounded-lg border p-3"><div className="text-muted-foreground">Mã hàng</div><div className="font-semibold">{selectedFifoHistoryItem.itemCode || '-'}</div></div>
+                                        <div className="rounded-lg border p-3"><div className="text-muted-foreground">Tổng batch</div><div className="font-semibold">{selectedFifoHistoryItem.summary.batchCount}</div></div>
+                                        <div className="rounded-lg border p-3"><div className="text-muted-foreground">Batch còn hàng</div><div className="font-semibold">{selectedFifoHistoryItem.summary.activeBatchCount}</div></div>
+                                        <div className="rounded-lg border p-3"><div className="text-muted-foreground">Đã nhập</div><div className="font-semibold">{selectedFifoHistoryItem.summary.totalReceived} {selectedFifoHistoryItem.unit || ''}</div></div>
+                                        <div className="rounded-lg border p-3"><div className="text-muted-foreground">Còn lại</div><div className="font-semibold">{selectedFifoHistoryItem.summary.totalRemaining} {selectedFifoHistoryItem.unit || ''}</div></div>
+                                    </div>
+
+                                    <div className="rounded-xl border overflow-hidden">
+                                        <div className="bg-muted/40 px-4 py-2 text-sm font-semibold">Danh sách batch hiện có</div>
+                                        <div className="divide-y">
+                                            {selectedFifoHistoryItem.batches.map((batch) => (
+                                                <div key={batch.batchId} className="grid grid-cols-1 md:grid-cols-6 gap-2 px-4 py-3 text-xs">
+                                                    <div><div className="text-muted-foreground">Batch</div><div className="font-semibold">{batch.batchNumber}</div></div>
+                                                    <div><div className="text-muted-foreground">Nhập ngày</div><div>{format(new Date(batch.receivedDate), "dd/MM/yyyy HH:mm")}</div></div>
+                                                    <div><div className="text-muted-foreground">Số lượng</div><div>{batch.quantityRemaining}/{batch.quantityReceived} {selectedFifoHistoryItem.unit || ''}</div></div>
+                                                    <div><div className="text-muted-foreground">Vị trí</div><div>{batch.currentLocation?.shelfCode || 'Chưa gán kệ'}</div></div>
+                                                    <div><div className="text-muted-foreground">Đơn nguồn</div><div>{batch.source.purchaseOrderCode || batch.source.importSlipNumber || batch.source.productionOrderCode || '-'}</div></div>
+                                                    <div><div className="text-muted-foreground">Hạn dùng</div><div>{batch.expirationDate ? format(new Date(batch.expirationDate), "dd/MM/yyyy") : '-'}</div></div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="rounded-xl border overflow-hidden">
+                                        <div className="bg-muted/40 px-4 py-2 text-sm font-semibold">Lịch sử luân chuyển</div>
+                                        <div className="max-h-[360px] overflow-auto divide-y">
+                                            {selectedFifoHistoryItem.transactions.map((tx) => (
+                                                <div key={tx.transactionId} className="grid grid-cols-1 md:grid-cols-7 gap-2 px-4 py-3 text-xs">
+                                                    <div><div className="text-muted-foreground">Thời gian</div><div>{format(new Date(tx.createdAt), "dd/MM/yyyy HH:mm")}</div></div>
+                                                    <div><div className="text-muted-foreground">Nghiệp vụ</div><div className="font-semibold">{tx.type}</div></div>
+                                                    <div><div className="text-muted-foreground">Batch</div><div>{tx.batchNumber || '-'}</div></div>
+                                                    <div><div className="text-muted-foreground">Biến động</div><div className={tx.signedQuantity < 0 ? "text-red-600 font-semibold" : "text-emerald-700 font-semibold"}>{tx.signedQuantity > 0 ? `+${tx.signedQuantity}` : tx.signedQuantity} {selectedFifoHistoryItem.unit || ''}</div></div>
+                                                    <div><div className="text-muted-foreground">Đơn liên quan</div><div>{tx.orderRef || tx.productionOrderCode || tx.purchaseOrderCode || tx.requisitionCode || '-'}</div></div>
+                                                    <div><div className="text-muted-foreground">Vị trí</div><div>{tx.location || '-'}</div></div>
+                                                    <div><div className="text-muted-foreground">Thực hiện</div><div>{tx.performedBy?.name || '-'}</div></div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
         </Dialog>
     )
 }

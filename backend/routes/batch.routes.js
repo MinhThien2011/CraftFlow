@@ -38,6 +38,18 @@ batchRouter.get('/active',
     batchController.getActiveBatches
 );
 
+// Warehouse-level FIFO overview
+batchRouter.get('/fifo-history/overview',
+    rolePermission([ROLES.KHO_MANAGER, ROLES.PRODUCTION_MANAGER, ROLES.ADMIN]),
+    batchController.getWarehouseFifoOverview
+);
+
+// FIFO history for a single material/product
+batchRouter.get('/fifo-history/item',
+    rolePermission([ROLES.KHO_MANAGER, ROLES.PRODUCTION_MANAGER, ROLES.ADMIN]),
+    batchController.getItemFifoHistory
+);
+
 // Assign or move a batch to a shelf
 batchRouter.post('/assign/:batchId',
     rolePermission([ROLES.KHO_MANAGER, ROLES.ADMIN]),

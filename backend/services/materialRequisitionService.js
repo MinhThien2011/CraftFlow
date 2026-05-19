@@ -640,7 +640,7 @@ export const updateRequisitionStatus = async (requisitionId, managerId, status, 
           const updatedMaterial = await Material.findOneAndUpdate(
             { _id: material._id, currentStock: { $gte: item.requestedQuantity } },
             { $inc: { currentStock: -item.requestedQuantity } },
-            { new: true, session }
+            { returnDocument: 'after', session }
           );
 
           if (!updatedMaterial) {

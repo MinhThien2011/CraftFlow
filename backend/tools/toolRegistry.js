@@ -1,12 +1,23 @@
-import { getActiveProductionOrders } from './productionTools.js';
+import { getActiveProductionOrders, getTodayProductionSummary } from './productionTools.js';
 import { getLowStockMaterials, searchMaterialStock } from './inventoryTools.js';
 import { getRequisitions, getRequisitionDetails } from './requisitionTools.js';
 import { getPurchaseOrders } from './purchaseOrderTools.js';
 import { searchUsers } from './userTools.js';
+import { getSystemSnapshotTool } from './systemTools.js';
+import {
+    getInventoryOverviewTool,
+    getLowStockAlertsTool,
+    getProductionDashboardStatsTool,
+    getWarehouseDashboardStatsTool,
+    getWarehouseFifoOverviewTool,
+    getItemFifoHistoryTool,
+    getSlipsSummaryTool
+} from './analyticsTools.js';
 
 const registeredTools = [
     // Production
     getActiveProductionOrders,
+    getTodayProductionSummary,
 
     // Inventory
     getLowStockMaterials,
@@ -18,6 +29,14 @@ const registeredTools = [
 
     // Purchase Orders
     getPurchaseOrders,
+    getInventoryOverviewTool,
+    getLowStockAlertsTool,
+    getProductionDashboardStatsTool,
+    getWarehouseDashboardStatsTool,
+    getWarehouseFifoOverviewTool,
+    getItemFifoHistoryTool,
+    getSlipsSummaryTool,
+    getSystemSnapshotTool,
 
     // Users (Admin only)
     searchUsers,
@@ -29,7 +48,13 @@ const toolAliases = {
 
 const normalizeFunctionName = (functionName) => {
     const rawName = String(functionName || '');
-    const nameWithoutNamespace = rawName.includes(':') ? rawName.split(':').pop() : rawName;
+    const nameWithoutNamespace = rawName
+        .split(':')
+        .pop()
+        .split('.')
+        .pop()
+        .split('/')
+        .pop();
     return toolAliases[nameWithoutNamespace] || nameWithoutNamespace;
 };
 
@@ -37,8 +62,8 @@ const normalizeFunctionName = (functionName) => {
  * Lấy danh sách các tool khả dụng dựa trên Role của User
  */
 export const getToolsForRole = (role) => {
+    if (role === 'admin') return registeredTools;
     return registeredTools.filter(tool => 
-        tool.roles.includes('admin') || 
         tool.roles.includes(role)
     );
 };
@@ -56,7 +81,7 @@ export const executeTool = async (functionName, args, user) => {
 
     // Bảo mật 2 lớp: Check quyền thực thi
     const userRole = user.role || 'staff';
-    const isAllowed = tool.roles.includes('admin') || tool.roles.includes(userRole);
+    const isAllowed = userRole === 'admin' || tool.roles.includes(userRole);
 
     if (!isAllowed) {
         return { error: `Bạn (${userRole}) không có quyền sử dụng công cụ này.` };

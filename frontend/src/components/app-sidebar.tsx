@@ -10,6 +10,7 @@ import {
   PackageOpen,
   PackagePlus,
   PackageMinus,
+  Workflow,
   Boxes,
   Factory,
   AlertTriangle,
@@ -67,15 +68,17 @@ const navigation = [
   { name: "Kiểm kê kho", href: "/inventory/stocktake", icon: ClipboardList, roles: ["kho_manager"] },
   { name: "Nhập kho", href: "/receiving", icon: PackagePlus, roles: ["kho_manager"] },
   { name: "Xuất kho", href: "/issuing/materials", icon: PackageMinus, roles: ["kho_manager"] },
+  { name: "Lịch sử FIFO kho", href: "/inventory/fifo-history", icon: Workflow, roles: ["admin", "kho_manager", "production_manager"] },
 
   // --- Requisitions & Orders ---
-  { name: "Yêu cầu vật liệu", href: "/requisitions/materials", icon: ClipboardList, roles: ["admin", "kho_manager", "production_manager"] },
+  { name: "Yêu cầu", href: "/requisitions/materials", icon: ClipboardList, roles: ["admin", "kho_manager", "production_manager"] },
   { name: "Xuất thành phẩm", href: "/requisitions/products", icon: PackageMinus, roles: ["admin", "production_manager"] },
   { name: "Yêu cầu mua hàng", href: "/production-management/purchase-orders", icon: PackagePlus, roles: ["admin", "production_manager"] },
 
   // --- Alerts & Issues ---
   {
-    name: "Cảnh báo tồn kho", href: "/alerts", icon: Bell, roles: ["admin", "production_manager", "kho_manager"] },
+    name: "Cảnh báo tồn kho", href: "/alerts", icon: Bell, roles: ["admin", "production_manager", "kho_manager"]
+  },
   { name: "Hao hụt", href: "/production-management/issues", icon: AlertTriangle, roles: ["admin", "production_manager"] },
 
   // --- Reports ---
@@ -114,6 +117,7 @@ const warehouseGroupedNavigation = [
       { name: "Kệ nguyên liệu", href: "/locations/materials" },
       { name: "Kệ thành phẩm", href: "/locations/materials/products" },
       { name: "Truy xuất lô hàng", href: "/inventory/traceability" },
+      { name: "Lịch sử FIFO kho", href: "/inventory/fifo-history" },
       { name: "Gắn vị trí lô hàng", href: "/locations/materials/assign" },
     ],
   },
@@ -128,7 +132,7 @@ const warehouseGroupedNavigation = [
     ],
   },
   {
-    name: "Yêu cầu vật liệu",
+    name: "Yêu cầu",
     icon: ClipboardList,
     badge: "4",
     roles: ["admin", "kho_manager", "production_manager"],

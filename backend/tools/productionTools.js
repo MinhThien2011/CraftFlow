@@ -18,7 +18,24 @@ export const getActiveProductionOrders = {
 
     execute: async (args, user) => {
         try {
-            const queryStatus = args.status ? [args.status] : ['pending', 'processing'];
+            const allowedStatus = new Set([
+                'pending',
+                'materials_checking',
+                'materials_allocated',
+                'ready_to_assign',
+                'assigned',
+                'in_preparation',
+                'in_production',
+                'partially_complete',
+                'completed',
+                'on_hold',
+                'overdue',
+                'cancelled',
+                'insufficient_materials'
+            ]);
+            const fallbackStatuses = ['pending', 'assigned', 'in_preparation', 'in_production', 'partially_complete', 'overdue'];
+            const normalized = typeof args?.status === 'string' ? args.status.trim().toLowerCase() : '';
+            const queryStatus = normalized && allowedStatus.has(normalized) ? [normalized] : fallbackStatuses;
             const orders = await ProductionOrder.find({ status: { $in: queryStatus } })
                 .select('orderCode products status deadline')
                 .limit(10)
@@ -39,6 +56,40 @@ export const getActiveProductionOrders = {
         } catch (error) {
             console.error('Error in getActiveProductionOrders:', error);
             return { error: "Không thể lấy danh sách đơn sản xuất." };
+        }
+    }
+};
+
+export const getTodayProductionSummary = {
+    declaration: {
+        name: "get_today_production_summary",
+        description: "Lấy tóm tắt tình hình sản xuất hôm nay: số đơn đang chạy, số đơn hoàn thành hôm nay, tổng số đơn tạo hôm nay.",
+        parameters: { type: "OBJECT", properties: {} }
+    },
+    roles: ['production_manager', 'admin'],
+    execute: async () => {
+        try {
+            const start = new Date();
+            start.setHours(0, 0, 0, 0);
+            const end = new Date();
+            end.setHours(23, 59, 59, 999);
+
+            const [inProduction, completedToday, createdToday] = await Promise.all([
+                ProductionOrder.countDocuments({ status: { $in: ['in_production', 'partially_complete', 'assigned', 'in_preparation'] } }),
+                ProductionOrder.countDocuments({ completedAt: { $gte: start, $lte: end } }),
+                ProductionOrder.countDocuments({ createdAt: { $gte: start, $lte: end } }),
+            ]);
+
+            return {
+                date: start.toISOString(),
+                inProductionOrders: inProduction,
+                completedTodayOrders: completedToday,
+                createdTodayOrders: createdToday,
+                updatedAt: new Date().toISOString(),
+            };
+        } catch (error) {
+            console.error('Error in getTodayProductionSummary:', error);
+            return { error: "Không thể lấy tóm tắt sản xuất hôm nay." };
         }
     }
 };

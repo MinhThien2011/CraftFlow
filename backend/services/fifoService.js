@@ -112,7 +112,7 @@ export const allocateBatchesForItem = async ({ materialId, productId, quantityNe
                     quantityRemaining: { $gte: quantityToAllocate }
                 },
                 { $inc: { quantityRemaining: -quantityToAllocate } },
-                { new: true, session }
+                { returnDocument: "after", session }
             );
 
             if (!updatedBatch) {
@@ -397,6 +397,228 @@ export const getExpiringBatches = async (daysAhead = 30) => {
         return { success: true, data: batches, message: 'Expiring batches retrieved successfully' };
     } catch (error) {
         console.error('[FIFOService] getExpiringBatches error:', error);
+        return { success: false, message: error.message, data: null };
+    }
+};
+
+export const getWarehouseFifoOverview = async (params = {}) => {
+    try {
+        const { search = '', type = 'all' } = params;
+
+        const [batchGrouped, txGrouped] = await Promise.all([
+            InventoryBatch.aggregate([
+                {
+                    $match: {
+                        $or: [
+                            { material: { $ne: null } },
+                            { product: { $ne: null } }
+                        ]
+                    }
+                },
+                {
+                    $group: {
+                        _id: { material: '$material', product: '$product' },
+                        batchCount: { $sum: 1 },
+                        activeBatchCount: {
+                            $sum: { $cond: [{ $gt: ['$quantityRemaining', 0] }, 1, 0] }
+                        },
+                        totalReceived: { $sum: '$quantityReceived' },
+                        totalRemaining: { $sum: '$quantityRemaining' },
+                        oldestReceivedDate: { $min: '$receivedDate' },
+                        newestReceivedDate: { $max: '$receivedDate' }
+                    }
+                }
+            ]),
+            InventoryTransaction.aggregate([
+                {
+                    $match: {
+                        $or: [
+                            { material: { $ne: null } },
+                            { product: { $ne: null } }
+                        ]
+                    }
+                },
+                {
+                    $group: {
+                        _id: { material: '$material', product: '$product' },
+                        transactionCount: { $sum: 1 },
+                        latestTransactionAt: { $max: '$createdAt' }
+                    }
+                }
+            ])
+        ]);
+
+        const materialIds = [];
+        const productIds = [];
+        for (const row of batchGrouped) {
+            if (row._id?.material) materialIds.push(row._id.material);
+            if (row._id?.product) productIds.push(row._id.product);
+        }
+
+        const [materials, products] = await Promise.all([
+            materialIds.length > 0 ? Material.find({ _id: { $in: materialIds } }).select('name code unit').lean() : [],
+            productIds.length > 0 ? Product.find({ _id: { $in: productIds } }).select('name code unit').lean() : []
+        ]);
+
+        const materialMap = new Map(materials.map((m) => [m._id.toString(), m]));
+        const productMap = new Map(products.map((p) => [p._id.toString(), p]));
+        const txMap = new Map(txGrouped.map((t) => [`${t._id.material || ''}:${t._id.product || ''}`, t]));
+
+        const normalizedSearch = search.trim().toLowerCase();
+        const items = batchGrouped
+            .map((row) => {
+                const materialId = row._id?.material?.toString?.() || null;
+                const productId = row._id?.product?.toString?.() || null;
+                const itemType = materialId ? 'material' : 'product';
+                if (type === 'material' && itemType !== 'material') return null;
+                if (type === 'product' && itemType !== 'product') return null;
+
+                const meta = materialId ? materialMap.get(materialId) : productMap.get(productId);
+                if (!meta) return null;
+
+                const tx = txMap.get(`${row._id.material || ''}:${row._id.product || ''}`);
+                const result = {
+                    itemType,
+                    itemId: materialId || productId,
+                    itemCode: meta.code || '',
+                    itemName: meta.name || '',
+                    unit: meta.unit || '',
+                    summary: {
+                        batchCount: Number(row.batchCount || 0),
+                        activeBatchCount: Number(row.activeBatchCount || 0),
+                        totalReceived: Number(row.totalReceived || 0),
+                        totalRemaining: Number(row.totalRemaining || 0),
+                        transactionCount: Number(tx?.transactionCount || 0),
+                        oldestReceivedDate: row.oldestReceivedDate || null,
+                        newestReceivedDate: row.newestReceivedDate || null,
+                        latestTransactionAt: tx?.latestTransactionAt || null
+                    }
+                };
+
+                if (!normalizedSearch) return result;
+                const s = `${result.itemCode} ${result.itemName}`.toLowerCase();
+                return s.includes(normalizedSearch) ? result : null;
+            })
+            .filter(Boolean)
+            .sort((a, b) => (b.summary.latestTransactionAt || 0) - (a.summary.latestTransactionAt || 0));
+
+        return { success: true, message: 'Warehouse FIFO overview retrieved successfully', data: items };
+    } catch (error) {
+        console.error('[FIFOService] getWarehouseFifoOverview error:', error);
+        return { success: false, message: error.message, data: null };
+    }
+};
+
+export const getItemFifoHistory = async ({ itemType, itemId }) => {
+    try {
+        if (!itemType || !itemId || !['material', 'product'].includes(itemType)) {
+            return { success: false, message: 'itemType and itemId are required', data: null };
+        }
+
+        const filter = itemType === 'material' ? { material: itemId } : { product: itemId };
+        const entity = itemType === 'material'
+            ? await Material.findById(itemId).select('name code unit').lean()
+            : await Product.findById(itemId).select('name code unit').lean();
+
+        if (!entity) {
+            return { success: false, message: `${itemType} not found`, data: null };
+        }
+
+        const outboundTypes = new Set([
+            TRANSACTION_TYPE.SALES_OUT,
+            TRANSACTION_TYPE.DAMAGE_OUT,
+            TRANSACTION_TYPE.ISSUE,
+            TRANSACTION_TYPE.DEDUCT,
+            TRANSACTION_TYPE.ALLOCATE
+        ]);
+
+        const [batches, transactions] = await Promise.all([
+            InventoryBatch.find(filter)
+                .populate('shelf', 'shelfCode warehouseSection zone aisle level bin status')
+                .populate('relatedImportSlip', 'slipNumber status date')
+                .populate('relatedPurchaseOrder', 'orderCode status')
+                .populate('relatedProductionOrder', 'orderCode status')
+                .sort({ receivedDate: 1, createdAt: 1, _id: 1 })
+                .lean(),
+            InventoryTransaction.find(filter)
+                .populate('batch', 'batchNumber')
+                .populate('performedBy', 'fullName username email')
+                .populate('productionOrder', 'orderCode status')
+                .populate('requisition', 'requisitionCode status')
+                .populate('purchaseOrder', 'orderCode status')
+                .sort({ createdAt: 1, _id: 1 })
+                .lean()
+        ]);
+
+        const result = {
+            itemType,
+            itemId,
+            itemCode: entity.code || '',
+            itemName: entity.name || '',
+            unit: entity.unit || '',
+            summary: {
+                batchCount: batches.length,
+                activeBatchCount: batches.filter((b) => Number(b.quantityRemaining || 0) > 0).length,
+                totalReceived: batches.reduce((sum, b) => sum + Number(b.quantityReceived || 0), 0),
+                totalRemaining: batches.reduce((sum, b) => sum + Number(b.quantityRemaining || 0), 0),
+                transactionCount: transactions.length
+            },
+            batches: batches.map((batch) => ({
+                batchId: batch._id,
+                batchNumber: batch.batchNumber,
+                receivedDate: batch.receivedDate,
+                expirationDate: batch.expirationDate || null,
+                quantityReceived: Number(batch.quantityReceived || 0),
+                quantityRemaining: Number(batch.quantityRemaining || 0),
+                unitCost: Number(batch.unitCost || 0),
+                isExhausted: Boolean(batch.isExhausted),
+                currentLocation: batch.shelf ? {
+                    shelfId: batch.shelf._id,
+                    shelfCode: batch.shelf.shelfCode || '',
+                    warehouseSection: batch.shelf.warehouseSection || '',
+                    zone: batch.shelf.zone || '',
+                    aisle: batch.shelf.aisle || '',
+                    level: batch.shelf.level || '',
+                    bin: batch.shelf.bin || '',
+                    status: batch.shelf.status || ''
+                } : null,
+                source: {
+                    importSlipNumber: batch.relatedImportSlip?.slipNumber || null,
+                    purchaseOrderCode: batch.relatedPurchaseOrder?.orderCode || null,
+                    productionOrderCode: batch.relatedProductionOrder?.orderCode || null
+                }
+            })),
+            transactions: transactions.map((tx) => {
+                const rawQty = Number(tx.quantity || 0);
+                const signedQuantity = outboundTypes.has(tx.type) ? -Math.abs(rawQty) : Math.abs(rawQty);
+                return {
+                    transactionId: tx._id,
+                    createdAt: tx.createdAt,
+                    type: tx.type,
+                    quantity: rawQty,
+                    signedQuantity,
+                    beforeStock: tx.beforeStock ?? null,
+                    afterStock: tx.afterStock ?? null,
+                    batchId: tx.batch?._id || null,
+                    batchNumber: tx.batch?.batchNumber || null,
+                    location: tx.location || null,
+                    orderRef: tx.orderRef || null,
+                    productionOrderCode: tx.productionOrder?.orderCode || null,
+                    requisitionCode: tx.requisition?.requisitionCode || null,
+                    purchaseOrderCode: tx.purchaseOrder?.orderCode || null,
+                    performedBy: tx.performedBy ? {
+                        userId: tx.performedBy._id,
+                        name: tx.performedBy.fullName || tx.performedBy.username || '',
+                        email: tx.performedBy.email || null
+                    } : null,
+                    note: tx.note || null
+                };
+            })
+        };
+
+        return { success: true, message: 'FIFO item history retrieved successfully', data: result };
+    } catch (error) {
+        console.error('[FIFOService] getItemFifoHistory error:', error);
         return { success: false, message: error.message, data: null };
     }
 };

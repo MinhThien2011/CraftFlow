@@ -6,6 +6,8 @@ import { imageUploader } from '../middleware/cloudinary_uploader.js';
 import { 
     createImportExportSlip, 
     getAllSlips, 
+    getSlipFifoAudit,
+    getSlipFifoHistory,
     getSlipById, 
     updateSlipStatus, 
     uploadSlipImages, 
@@ -18,6 +20,8 @@ const slipRouter = Router();
 slipRouter.use(jwtAuth);
 
 slipRouter.get('/', getAllSlips);
+slipRouter.get('/:id/fifo-audit', getSlipFifoAudit);
+slipRouter.get('/:id/fifo-history', getSlipFifoHistory);
 slipRouter.get('/:id', getSlipById);
 
 // --- Operations (Production Manager & Admin) ---

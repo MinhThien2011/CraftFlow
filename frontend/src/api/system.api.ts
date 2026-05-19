@@ -27,6 +27,13 @@ export const systemApi = {
   },
 
   /**
+   * Get production manager dashboard stats
+   */
+  getProductionManagerDashboardStats: async (days: number = 14, staffLimit: number = 8): Promise<any> => {
+    return axiosInstance.get("/dashboard/production-manager", { params: { days, staffLimit } });
+  },
+
+  /**
    * Get system settings
    */
   getSettings: async (): Promise<any> => {

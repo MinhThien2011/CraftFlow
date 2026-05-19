@@ -56,6 +56,86 @@ export interface BatchTraceResult {
     history: BatchTransaction[];
 }
 
+export interface WarehouseFifoOverviewItem {
+    itemType: 'material' | 'product';
+    itemId: string;
+    itemCode: string;
+    itemName: string;
+    unit: string;
+    summary: {
+        batchCount: number;
+        activeBatchCount: number;
+        totalReceived: number;
+        totalRemaining: number;
+        transactionCount: number;
+        oldestReceivedDate: string | null;
+        newestReceivedDate: string | null;
+        latestTransactionAt: string | null;
+    };
+}
+
+export interface FifoItemHistory {
+    itemType: 'material' | 'product';
+    itemId: string;
+    itemCode: string;
+    itemName: string;
+    unit: string;
+    summary: {
+        batchCount: number;
+        activeBatchCount: number;
+        totalReceived: number;
+        totalRemaining: number;
+        transactionCount: number;
+    };
+    batches: Array<{
+        batchId: string;
+        batchNumber: string;
+        receivedDate: string;
+        expirationDate: string | null;
+        quantityReceived: number;
+        quantityRemaining: number;
+        unitCost: number;
+        isExhausted: boolean;
+        currentLocation: {
+            shelfId: string;
+            shelfCode: string;
+            warehouseSection: string;
+            zone: string;
+            aisle: string;
+            level: string;
+            bin: string;
+            status: string;
+        } | null;
+        source: {
+            importSlipNumber: string | null;
+            purchaseOrderCode: string | null;
+            productionOrderCode: string | null;
+        };
+    }>;
+    transactions: Array<{
+        transactionId: string;
+        createdAt: string;
+        type: string;
+        quantity: number;
+        signedQuantity: number;
+        beforeStock: number | null;
+        afterStock: number | null;
+        batchId: string | null;
+        batchNumber: string | null;
+        location: string | null;
+        orderRef: string | null;
+        productionOrderCode: string | null;
+        requisitionCode: string | null;
+        purchaseOrderCode: string | null;
+        performedBy: {
+            userId: string;
+            name: string;
+            email: string | null;
+        } | null;
+        note: string | null;
+    }>;
+}
+
 export const batchApi = {
     /**
      * Trace a batch by its batch number
@@ -76,6 +156,14 @@ export const batchApi = {
      */
     getActiveBatches: async (params: { search?: string, unassignedOnly?: boolean, type?: 'Material' | 'Product' } = {}): Promise<ApiResponse<Batch[]>> => {
         return axiosInstance.get('/batches/active', { params });
+    },
+
+    getWarehouseFifoOverview: async (params: { search?: string; type?: 'all' | 'material' | 'product' } = {}): Promise<ApiResponse<WarehouseFifoOverviewItem[]>> => {
+        return axiosInstance.get('/batches/fifo-history/overview', { params });
+    },
+
+    getItemFifoHistory: async (params: { itemType: 'material' | 'product'; itemId: string }): Promise<ApiResponse<FifoItemHistory>> => {
+        return axiosInstance.get('/batches/fifo-history/item', { params });
     },
 
     /**

@@ -89,3 +89,32 @@ export const getWarehouseDashboardStats = async (req, res) => {
     });
   }
 };
+
+/**
+ * Controller to get dashboard statistics for Production Manager.
+ */
+export const getProductionManagerDashboardStats = async (req, res) => {
+  try {
+    const days = parseInt(req.query.days, 10) || 14;
+    const staffLimit = parseInt(req.query.staffLimit, 10) || 8;
+
+    const result = await dashboardService.getProductionManagerDashboardStats(days, staffLimit);
+    if (!result.success) {
+      return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+        success: false,
+        message: result.message || 'Failed to retrieve production dashboard statistics.'
+      });
+    }
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      data: result.data
+    });
+  } catch (error) {
+    console.log('[DashboardController] getProductionManagerDashboardStats error:', error);
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: 'Internal server error while fetching production dashboard statistics.'
+    });
+  }
+};

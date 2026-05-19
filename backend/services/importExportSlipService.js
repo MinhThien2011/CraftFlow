@@ -5,7 +5,9 @@ import Product from "../models/Product.js";
 import ProductionOrder from "../models/ProductionOrder.js";
 import MaterialRequisition from "../models/MaterialRequisition.js";
 import InventoryTransaction from "../models/InventoryTransaction.js";
+import InventoryBatch from "../models/InventoryBatch.js";
 import Shelf from "../models/Shelf.js";
+import MaterialAlert from "../models/MaterialAlert.js";
 import {
     INVENTORY_IMPORT_EXPORT_SLIP_STATUS,
     INVENTORY_IMPORT_EXPORT_SLIP_TYPE,
@@ -138,7 +140,7 @@ async function processMaterialUpdate(item, slip, userId, session, transactionDoc
         const updatedMaterial = await Material.findOneAndUpdate(
             { _id: item.material, currentStock: { $gte: quantity } },
             { $inc: { currentStock: -quantity } },
-            { new: true, session }
+            { returnDocument: 'after', session, session }
         );
         if (!updatedMaterial) {
             throw new Error(`Insufficient stock for material ${material.code}.`);
@@ -152,7 +154,7 @@ async function processMaterialUpdate(item, slip, userId, session, transactionDoc
         const updatedMaterial = await Material.findByIdAndUpdate(
             item.material,
             update,
-            { new: true, session }
+            { returnDocument: 'after', session }
         );
         if (!updatedMaterial) {
             throw new Error(`Material ${item.material} not found.`);
@@ -235,7 +237,7 @@ async function processProductUpdate(item, slip, userId, session, transactionDocs
         const updatedProduct = await Product.findOneAndUpdate(
             { _id: item.product, currentStock: { $gte: quantity } },
             { $inc: { currentStock: -quantity } },
-            { new: true, session }
+            { returnDocument: 'after', session }
         );
         if (!updatedProduct) {
             throw new Error(`Insufficient stock for product ${product.code}.`);
@@ -456,6 +458,15 @@ export const updateSlipStatusService = async (slipId, newStatus, updateData, use
                 }
 
                 if (transactionDocs.length > 0) await InventoryTransaction.create(transactionDocs, { session, ordered: true });
+
+                // Resolve all alerts linked to this purchase order once goods are stocked in.
+                if (isImport && slip.relatedPurchaseOrder) {
+                    await MaterialAlert.updateMany(
+                        { purchaseOrder: slip.relatedPurchaseOrder, status: { $in: ['pending', 'ordered'] } },
+                        { $set: { status: 'resolved', resolvedBy: userId } },
+                        { session }
+                    );
+                }
 
                 slip.finalizedAt = new Date();
                 if (isImport) slip.inStockAt = slip.finalizedAt;
@@ -933,5 +944,265 @@ export const getAllSlipsService = async (query = {}) => {
     } catch (error) {
         console.log('[getAllSlipsService] error:', error);
         return { success: false, message: 'Failed to retrieve slips: ' + error.message, data: null };
+    }
+};
+
+export const getSlipFifoAuditService = async (slipId) => {
+    try {
+        const slip = await InventoryImportExportSlip.findById(slipId).lean();
+        if (!slip) return { success: false, message: 'Slip not found', data: null };
+
+        if (slip.type !== INVENTORY_IMPORT_EXPORT_SLIP_TYPE.EXPORT) {
+            return {
+                success: true,
+                message: 'FIFO audit is applicable for export slips only',
+                data: { slipId, slipNumber: slip.slipNumber, type: slip.type, passed: true, applicable: false, items: [] }
+            };
+        }
+
+        const txs = await InventoryTransaction.find({
+            orderRef: slip.slipNumber,
+            type: TRANSACTION_TYPE.SALES_OUT
+        })
+            .populate('batch')
+            .sort({ createdAt: 1, _id: 1 })
+            .lean();
+
+        const grouped = new Map(); // key: m:<id> or p:<id>
+        for (const tx of txs) {
+            const key = tx.material ? `m:${tx.material.toString()}` : tx.product ? `p:${tx.product.toString()}` : null;
+            if (!key || !tx.batch) continue;
+            if (!grouped.has(key)) grouped.set(key, []);
+            grouped.get(key).push(tx);
+        }
+
+        const itemAudits = [];
+
+        for (const [key, allocs] of grouped.entries()) {
+            const [kind, itemId] = key.split(':');
+            const batchFilter = kind === 'm' ? { material: itemId } : { product: itemId };
+            const allBatches = await InventoryBatch.find(batchFilter)
+                .sort({ receivedDate: 1, createdAt: 1, _id: 1 })
+                .lean();
+
+            const allocatedByBatch = new Map();
+            for (const tx of allocs) {
+                const bid = tx.batch._id.toString();
+                const qty = Math.abs(Number(tx.quantity || 0));
+                allocatedByBatch.set(bid, (allocatedByBatch.get(bid) || 0) + qty);
+            }
+
+            // Reconstruct remaining before this slip by adding back this slip's allocations
+            const preRemaining = new Map();
+            for (const b of allBatches) {
+                const bid = b._id.toString();
+                preRemaining.set(bid, Number(b.quantityRemaining || 0) + Number(allocatedByBatch.get(bid) || 0));
+            }
+
+            const violations = [];
+            for (const tx of allocs) {
+                const usedBatchId = tx.batch._id.toString();
+                const usedQty = Math.abs(Number(tx.quantity || 0));
+
+                const expected = allBatches.find((b) => (preRemaining.get(b._id.toString()) || 0) > 0);
+                const expectedId = expected?._id?.toString();
+
+                if (expectedId && expectedId !== usedBatchId) {
+                    violations.push({
+                        usedBatchId,
+                        usedBatchNumber: tx.batch.batchNumber,
+                        expectedBatchId: expectedId,
+                        expectedBatchNumber: expected.batchNumber,
+                        usedQty
+                    });
+                }
+
+                preRemaining.set(usedBatchId, Math.max(0, (preRemaining.get(usedBatchId) || 0) - usedQty));
+            }
+
+            itemAudits.push({
+                itemType: kind === 'm' ? 'material' : 'product',
+                itemId,
+                passed: violations.length === 0,
+                violations,
+                allocations: allocs.map((tx) => ({
+                    transactionId: tx._id,
+                    batchId: tx.batch._id,
+                    batchNumber: tx.batch.batchNumber,
+                    receivedDate: tx.batch.receivedDate,
+                    quantity: Math.abs(Number(tx.quantity || 0)),
+                    createdAt: tx.createdAt
+                }))
+            });
+        }
+
+        const passed = itemAudits.every((i) => i.passed);
+        return {
+            success: true,
+            message: passed ? 'FIFO compliance check passed' : 'FIFO compliance violations detected',
+            data: {
+                slipId: slip._id,
+                slipNumber: slip.slipNumber,
+                type: slip.type,
+                applicable: true,
+                passed,
+                itemCount: itemAudits.length,
+                violationCount: itemAudits.reduce((sum, i) => sum + i.violations.length, 0),
+                items: itemAudits
+            }
+        };
+    } catch (error) {
+        console.log('[getSlipFifoAuditService] error:', error);
+        return { success: false, message: 'Failed to audit FIFO: ' + error.message, data: null };
+    }
+};
+
+const normalizeObjectId = (value) => {
+    if (!value) return null;
+    if (typeof value === 'string') return value;
+    if (value instanceof mongoose.Types.ObjectId) return value.toString();
+    if (typeof value === 'object' && value._id) return value._id.toString();
+    return null;
+};
+
+export const getSlipFifoHistoryService = async (slipId) => {
+    try {
+        const slip = await InventoryImportExportSlip.findById(slipId).lean();
+        if (!slip) return { success: false, message: 'Slip not found', data: null };
+
+        const itemMap = new Map();
+        for (const item of slip.items || []) {
+            const materialId = normalizeObjectId(item.material);
+            const productId = normalizeObjectId(item.product);
+            const itemType = materialId ? 'material' : productId ? 'product' : null;
+            const itemId = materialId || productId;
+            if (!itemType || !itemId) continue;
+
+            const key = `${itemType}:${itemId}`;
+            if (!itemMap.has(key)) {
+                itemMap.set(key, {
+                    itemType,
+                    itemId,
+                    itemName: item.itemName || '',
+                    itemCode: item.itemCode || '',
+                    unit: item.unit || ''
+                });
+            }
+        }
+
+        const timeline = [];
+        const outboundTypes = new Set([
+            TRANSACTION_TYPE.SALES_OUT,
+            TRANSACTION_TYPE.DAMAGE_OUT,
+            TRANSACTION_TYPE.ISSUE,
+            TRANSACTION_TYPE.DEDUCT,
+            TRANSACTION_TYPE.ALLOCATE
+        ]);
+
+        for (const meta of itemMap.values()) {
+            const batchFilter = meta.itemType === 'material' ? { material: meta.itemId } : { product: meta.itemId };
+            const txFilter = meta.itemType === 'material' ? { material: meta.itemId } : { product: meta.itemId };
+
+            const [batches, transactions] = await Promise.all([
+                InventoryBatch.find(batchFilter)
+                    .populate('shelf', 'shelfCode warehouseSection zone aisle level bin status')
+                    .populate('relatedImportSlip', 'slipNumber status date')
+                    .populate('relatedPurchaseOrder', 'orderCode status')
+                    .populate('relatedProductionOrder', 'orderCode status')
+                    .sort({ receivedDate: 1, createdAt: 1, _id: 1 })
+                    .lean(),
+                InventoryTransaction.find(txFilter)
+                    .populate('batch', 'batchNumber receivedDate shelf')
+                    .populate('performedBy', 'fullName username email')
+                    .populate('productionOrder', 'orderCode status')
+                    .populate('requisition', 'requisitionCode status')
+                    .populate('purchaseOrder', 'orderCode status')
+                    .sort({ createdAt: 1, _id: 1 })
+                    .lean()
+            ]);
+
+            const batchRows = batches.map((batch) => ({
+                batchId: batch._id,
+                batchNumber: batch.batchNumber,
+                receivedDate: batch.receivedDate,
+                expirationDate: batch.expirationDate || null,
+                quantityReceived: Number(batch.quantityReceived || 0),
+                quantityRemaining: Number(batch.quantityRemaining || 0),
+                unitCost: Number(batch.unitCost || 0),
+                isExhausted: Boolean(batch.isExhausted),
+                currentLocation: batch.shelf ? {
+                    shelfId: batch.shelf._id,
+                    shelfCode: batch.shelf.shelfCode || '',
+                    warehouseSection: batch.shelf.warehouseSection || '',
+                    zone: batch.shelf.zone || '',
+                    aisle: batch.shelf.aisle || '',
+                    level: batch.shelf.level || '',
+                    bin: batch.shelf.bin || '',
+                    status: batch.shelf.status || ''
+                } : null,
+                source: {
+                    importSlipNumber: batch.relatedImportSlip?.slipNumber || null,
+                    purchaseOrderCode: batch.relatedPurchaseOrder?.orderCode || null,
+                    productionOrderCode: batch.relatedProductionOrder?.orderCode || null
+                }
+            }));
+
+            const transactionRows = transactions.map((tx) => {
+                const rawQty = Number(tx.quantity || 0);
+                const isOutbound = outboundTypes.has(tx.type);
+                const signedQuantity = isOutbound ? -Math.abs(rawQty) : Math.abs(rawQty);
+
+                return {
+                    transactionId: tx._id,
+                    createdAt: tx.createdAt,
+                    type: tx.type,
+                    quantity: rawQty,
+                    signedQuantity,
+                    beforeStock: tx.beforeStock ?? null,
+                    afterStock: tx.afterStock ?? null,
+                    batchId: tx.batch?._id || null,
+                    batchNumber: tx.batch?.batchNumber || null,
+                    location: tx.location || null,
+                    orderRef: tx.orderRef || null,
+                    productionOrderCode: tx.productionOrder?.orderCode || null,
+                    requisitionCode: tx.requisition?.requisitionCode || null,
+                    purchaseOrderCode: tx.purchaseOrder?.orderCode || null,
+                    performedBy: tx.performedBy ? {
+                        userId: tx.performedBy._id,
+                        name: tx.performedBy.fullName || tx.performedBy.username || '',
+                        email: tx.performedBy.email || null
+                    } : null,
+                    note: tx.note || null
+                };
+            });
+
+            timeline.push({
+                ...meta,
+                summary: {
+                    batchCount: batchRows.length,
+                    activeBatchCount: batchRows.filter((b) => b.quantityRemaining > 0).length,
+                    totalReceived: batchRows.reduce((sum, b) => sum + b.quantityReceived, 0),
+                    totalRemaining: batchRows.reduce((sum, b) => sum + b.quantityRemaining, 0),
+                    transactionCount: transactionRows.length
+                },
+                batches: batchRows,
+                transactions: transactionRows
+            });
+        }
+
+        return {
+            success: true,
+            message: 'FIFO history retrieved successfully',
+            data: {
+                slipId: slip._id,
+                slipNumber: slip.slipNumber,
+                slipType: slip.type,
+                generatedAt: new Date(),
+                items: timeline
+            }
+        };
+    } catch (error) {
+        console.log('[getSlipFifoHistoryService] error:', error);
+        return { success: false, message: 'Failed to retrieve FIFO history: ' + error.message, data: null };
     }
 };

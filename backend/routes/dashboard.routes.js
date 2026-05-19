@@ -19,5 +19,10 @@ dashboardRouter.get('/warehouse',
     rolePermission([ROLES.ADMIN, ROLES.KHO_MANAGER]), 
     dashboardController.getWarehouseDashboardStats
 );
+// Dashboard Statistics (Production Manager)
+dashboardRouter.get('/production-manager',
+    rolePermission([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER]),
+    dashboardController.getProductionManagerDashboardStats
+);
 
 export default dashboardRouter;

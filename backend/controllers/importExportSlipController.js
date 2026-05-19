@@ -198,3 +198,29 @@ export const uploadSlipImages = async (req, res) => {
         return res.status(500).json({ error: 'Failed to upload slip images: ' + error.message });
     }
 };
+
+export const getSlipFifoAudit = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const result = await importExportSlipService.getSlipFifoAuditService(id);
+        if (!result.success) {
+            return res.status(400).json(result);
+        }
+        return res.status(200).json(result);
+    } catch (error) {
+        return res.status(500).json({ success: false, message: 'Failed to retrieve FIFO audit: ' + error.message, data: null });
+    }
+};
+
+export const getSlipFifoHistory = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const result = await importExportSlipService.getSlipFifoHistoryService(id);
+        if (!result.success) {
+            return res.status(400).json(result);
+        }
+        return res.status(200).json(result);
+    } catch (error) {
+        return res.status(500).json({ success: false, message: 'Failed to retrieve FIFO history: ' + error.message, data: null });
+    }
+};

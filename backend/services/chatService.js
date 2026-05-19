@@ -31,13 +31,23 @@ Thông tin người dùng: Tên: ${user.fullName || user.username}, Vai trò: ${
 Quy tắc:
 1. Chỉ trả lời các vấn đề liên quan đến công việc, sản xuất, tồn kho và quy trình trong CraftFlow.
 2. Khi người dùng hỏi về số liệu (đơn hàng, tồn kho, vật tư...), BẮT BUỘC phải sử dụng các công cụ (tools) được cung cấp. Tuyệt đối KHÔNG TỰ BỊA RA SỐ LIỆU.
+2.1. Nếu câu hỏi liên quan "hôm nay", ưu tiên gọi tool chuyên biệt theo ngày (ví dụ get_today_production_summary) trước khi kết luận.
 3. Nếu công cụ trả về lỗi hoặc không có dữ liệu, hãy báo cáo trung thực cho người dùng.
-4. Trả lời bằng ngôn ngữ tự nhiên, chuyên nghiệp và ngắn gọn.
-5. Từ chối lịch sự các yêu cầu ngoài phạm vi công việc hoặc không có trong quyền hạn của vai trò hiện tại.` }]
+4. BẮT BUỘC dùng đúng mẫu cố định dưới đây cho mọi câu trả lời dữ liệu:
+Kết luận: <1-2 câu ngắn>
+3 chỉ số:
+- <Chỉ số 1: giá trị + đơn vị>
+- <Chỉ số 2: giá trị + đơn vị>
+- <Chỉ số 3: giá trị + đơn vị>
+Ghi chú thời gian cập nhật: <thời gian từ dữ liệu/tool, nếu thiếu thì ghi "chưa có timestamp từ nguồn dữ liệu">
+5. Không trả về JSON thô trừ khi người dùng yêu cầu. Luôn diễn giải dữ liệu theo ngôn ngữ tự nhiên.
+6. Nếu thiếu dữ liệu cho đủ 3 chỉ số thì vẫn giữ đúng mẫu, dùng "N/A" cho chỉ số thiếu.
+7. Từ chối lịch sự các yêu cầu ngoài phạm vi công việc hoặc không có trong quyền hạn của vai trò hiện tại.` }]
     };
 
     let currentModel = modelConfig.model;
     const fallbackModel = "gemini-2.0-flash"; // Model dự phòng
+    let hasVisibleTextResponse = false;
 
     try {
         let keepLooping = true;
@@ -100,6 +110,7 @@ Quy tắc:
                     if (text) {
                         fullTextResponse += text;
                         yield text;
+                        hasVisibleTextResponse = true;
                         accumulatedModelParts.push({ text });
                     }
                 } catch (e) {}
@@ -156,6 +167,12 @@ Quy tắc:
                 }
                 keepLooping = false;
             }
+        }
+
+        if (!hasVisibleTextResponse) {
+            const fallbackText = "Tôi đã xử lý yêu cầu và truy vấn dữ liệu thành công, nhưng chưa tổng hợp được câu trả lời hiển thị. Anh vui lòng hỏi lại cùng nội dung, tôi sẽ trả về theo dạng tóm tắt rõ ràng."
+            history.push({ role: 'model', parts: [{ text: fallbackText }] });
+            yield fallbackText;
         }
     } catch (error) {
         console.error("[AI] processChatMessageStream error:", error);

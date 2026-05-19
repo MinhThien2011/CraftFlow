@@ -21,6 +21,10 @@ const PurchaseOrderSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'ProductionOrder',
     },
+    sourceProductionOrders: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'ProductionOrder',
+    }],
     materialAlert: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'MaterialAlert',
@@ -85,6 +89,7 @@ const PurchaseOrderSchema = new mongoose.Schema({
 PurchaseOrderSchema.index({ status: 1, createdAt: -1, _id: -1 });
 PurchaseOrderSchema.index({ creator: 1, createdAt: -1, _id: -1 });
 PurchaseOrderSchema.index({ productionOrder: 1, createdAt: -1 });
+PurchaseOrderSchema.index({ sourceProductionOrders: 1, createdAt: -1 });
 PurchaseOrderSchema.index({ materialAlert: 1 });
 PurchaseOrderSchema.index({ 'purchaseOrderItems.material': 1 });
 

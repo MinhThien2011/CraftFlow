@@ -150,3 +150,32 @@ export const assignLocation = async (req, res) => {
         });
     }
 };
+
+export const getWarehouseFifoOverview = async (req, res) => {
+    try {
+        const result = await fifoService.getWarehouseFifoOverview(req.query);
+        return handleServiceResponse(res, result);
+    } catch (error) {
+        console.error('[BatchController] getWarehouseFifoOverview error:', error);
+        return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+            success: false,
+            message: error.message,
+            data: null
+        });
+    }
+};
+
+export const getItemFifoHistory = async (req, res) => {
+    try {
+        const { itemType, itemId } = req.query;
+        const result = await fifoService.getItemFifoHistory({ itemType, itemId });
+        return handleServiceResponse(res, result);
+    } catch (error) {
+        console.error('[BatchController] getItemFifoHistory error:', error);
+        return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+            success: false,
+            message: error.message,
+            data: null
+        });
+    }
+};

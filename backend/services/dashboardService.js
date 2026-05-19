@@ -5,6 +5,8 @@ import InventoryTransaction from '../models/InventoryTransaction.js';
 import MaterialRequisition from '../models/MaterialRequisition.js';
 import InventoryShrinkageReport from '../models/InventoryShrinkageReport.js';
 import InventoryImportExportSlip from '../models/InventoryImportExportSlip.js';
+import MaterialAlert from '../models/MaterialAlert.js';
+import ProductionOrderAssignment from '../models/ProductionOrderAssignment.js';
 import { 
     ORDER_STATUS, 
     TRANSACTION_TYPE, 
@@ -412,5 +414,132 @@ export const getWarehouseRecentActivity = async (limit = 10) => {
     } catch (error) {
         console.log('[DashboardService] getWarehouseRecentActivity error:', error);
         return { success: false, message: error.message, data: [] };
+    }
+};
+
+/**
+ * Service to get dedicated dashboard data for Production Manager.
+ */
+export const getProductionManagerDashboardStats = async (days = 14, staffLimit = 8) => {
+    try {
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - days);
+        startDate.setHours(0, 0, 0, 0);
+
+        const [
+            totalProducts,
+            totalOrders,
+            statusDistribution,
+            priorityDistribution,
+            pendingMaterialAlerts,
+            staffWorkload,
+            completionTrend,
+            recentOrders
+        ] = await Promise.all([
+            applyQueryGuards(Product.countDocuments({ isActive: true })),
+            applyQueryGuards(ProductionOrder.countDocuments({})),
+            applyAggregateGuards(ProductionOrder.aggregate([
+                { $group: { _id: '$status', count: { $sum: 1 } } }
+            ])),
+            applyAggregateGuards(ProductionOrder.aggregate([
+                { $group: { _id: '$priority', count: { $sum: 1 } } }
+            ])),
+            applyQueryGuards(MaterialAlert.countDocuments({ status: 'pending' })),
+            applyAggregateGuards(ProductionOrderAssignment.aggregate([
+                {
+                    $addFields: {
+                        remainingQuantity: { $max: [{ $subtract: ['$assignedQuantity', '$completedQuantity'] }, 0] }
+                    }
+                },
+                {
+                    $match: {
+                        remainingQuantity: { $gt: 0 }
+                    }
+                },
+                {
+                    $group: {
+                        _id: '$staff',
+                        assignedQuantity: { $sum: '$assignedQuantity' },
+                        completedQuantity: { $sum: '$completedQuantity' },
+                        remainingQuantity: { $sum: '$remainingQuantity' },
+                        activeAssignments: { $sum: 1 }
+                    }
+                },
+                { $sort: { remainingQuantity: -1, activeAssignments: -1 } },
+                { $limit: staffLimit },
+                {
+                    $lookup: {
+                        from: 'users',
+                        localField: '_id',
+                        foreignField: '_id',
+                        as: 'staffInfo'
+                    }
+                },
+                { $unwind: { path: '$staffInfo', preserveNullAndEmptyArrays: true } },
+                {
+                    $project: {
+                        _id: 0,
+                        staffId: '$_id',
+                        fullName: '$staffInfo.fullName',
+                        username: '$staffInfo.username',
+                        assignedQuantity: 1,
+                        completedQuantity: 1,
+                        remainingQuantity: 1,
+                        activeAssignments: 1,
+                    }
+                }
+            ])),
+            applyAggregateGuards(ProductionOrder.aggregate([
+                {
+                    $match: {
+                        status: ORDER_STATUS.COMPLETED,
+                        completedAt: { $gte: startDate }
+                    }
+                },
+                {
+                    $group: {
+                        _id: { $dateToString: { format: '%Y-%m-%d', date: '$completedAt' } },
+                        completedOrders: { $sum: 1 },
+                        totalProduced: { $sum: { $sum: '$products.quantity' } }
+                    }
+                },
+                { $sort: { _id: 1 } }
+            ])),
+            applyQueryGuards(ProductionOrder.find({})
+                .sort({ createdAt: -1 })
+                .limit(5)
+                .populate('products.product', 'name code')
+                .lean())
+        ]);
+
+        const statusMap = statusDistribution.reduce((acc, row) => {
+            acc[row._id || 'unknown'] = row.count;
+            return acc;
+        }, {});
+
+        const priorityMap = priorityDistribution.reduce((acc, row) => {
+            acc[row._id || 'unknown'] = row.count;
+            return acc;
+        }, {});
+
+        return {
+            success: true,
+            data: {
+                overview: {
+                    totalProducts,
+                    totalOrders,
+                    inProductionOrders: statusMap[ORDER_STATUS.IN_PRODUCTION] || 0,
+                    pendingMaterialAlerts
+                },
+                statusDistribution: statusMap,
+                priorityDistribution: priorityMap,
+                staffWorkload,
+                completionTrend,
+                recentOrders
+            }
+        };
+    } catch (error) {
+        console.log('[DashboardService] getProductionManagerDashboardStats error:', error);
+        return { success: false, message: error.message, data: null };
     }
 };
