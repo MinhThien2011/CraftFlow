@@ -227,7 +227,7 @@ export function SlipDetailDialog({
                 setFifoLoading(true)
                 const response = await slipApi.getFifoAudit(slip._id)
                 if (!isCancelled) {
-                    setFifoAudit(response?.data?.data || null)
+                    setFifoAudit(response?.data || null)
                 }
             } catch {
                 if (!isCancelled) {
@@ -283,7 +283,7 @@ export function SlipDetailDialog({
         try {
             setFifoHistoryLoading(true)
             const response = await slipApi.getFifoHistory(slip._id)
-            const payload = response?.data?.data || null
+            const payload = response?.data || null
             setFifoHistory(payload)
             if (payload?.items?.length) {
                 const firstKey = `${payload.items[0].itemType}:${payload.items[0].itemId}`

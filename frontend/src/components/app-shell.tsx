@@ -9,6 +9,7 @@ import { ChatWidget } from "@/components/chat/chat-widget"
 import { useAuth } from "@/features/auth/hooks/use-auth"
 import { useUIStore } from "@/hooks/use-ui-store"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ChevronRight } from "lucide-react"
 
 interface AppShellProps {
   children: React.ReactNode
@@ -174,8 +175,21 @@ export function AppShell({ children, title, subtitle }: AppShellProps) {
     <div className="flex h-dvh w-full overflow-hidden bg-zinc-50 dark:bg-[#030303] text-foreground selection:bg-primary/20">
       
       {/* Vùng không gian (Margin) bọc Sidebar tạo Floating Island */}
-      <div className="py-4 pl-4 h-full shrink-0 z-40 hidden md:block transition-all duration-300">
+      <div className="py-4 pl-4 h-full shrink-0 z-40 hidden md:block transition-all duration-300 relative group/sidebar">
         <MemoizedSidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
+        
+        {/* Notion-style Floating Toggle Button */}
+        <button
+          onClick={toggleSidebar}
+          className="absolute -right-3 top-10 z-50 flex h-6 w-6 items-center justify-center rounded-full border border-border/70 bg-card hover:bg-accent text-muted-foreground hover:text-foreground shadow-md transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-primary/50 opacity-0 group-hover/sidebar:opacity-100 focus-visible:opacity-100 cursor-pointer"
+          title={sidebarCollapsed ? "Mở rộng thanh menu" : "Thu gọn thanh menu"}
+        >
+          {sidebarCollapsed ? (
+            <ChevronRight className="h-3.5 w-3.5" />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5 rotate-180" />
+          )}
+        </button>
       </div>
 
       {/* Dành cho Mobile Sidebar (sẽ hiển thị dạng absolute/drawer nếu code có hỗ trợ) */}

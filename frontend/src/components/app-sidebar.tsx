@@ -68,10 +68,10 @@ const navigation = [
   { name: "Kiểm kê kho", href: "/inventory/stocktake", icon: ClipboardList, roles: ["kho_manager"] },
   { name: "Nhập kho", href: "/receiving", icon: PackagePlus, roles: ["kho_manager"] },
   { name: "Xuất kho", href: "/issuing/materials", icon: PackageMinus, roles: ["kho_manager"] },
-  { name: "Lịch sử FIFO kho", href: "/inventory/fifo-history", icon: Workflow, roles: ["admin", "kho_manager", "production_manager"] },
+  { name: "Lịch sử FIFO kho", href: "/inventory/fifo-history", icon: Workflow, roles: ["admin", "kho_manager"] },
 
   // --- Requisitions & Orders ---
-  { name: "Yêu cầu", href: "/requisitions/materials", icon: ClipboardList, roles: ["admin", "kho_manager", "production_manager"] },
+  { name: "Yêu cầu vật liệu", href: "/requisitions/materials", icon: ClipboardList, roles: ["admin", "kho_manager", "production_manager"] },
   { name: "Xuất thành phẩm", href: "/requisitions/products", icon: PackageMinus, roles: ["admin", "production_manager"] },
   { name: "Yêu cầu mua hàng", href: "/production-management/purchase-orders", icon: PackagePlus, roles: ["admin", "production_manager"] },
 
@@ -238,14 +238,14 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
         {!collapsed && (
           <Link href="/dashboard" className="flex items-center gap-2 group outline-none">
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-md transition-transform duration-300 group-hover:scale-110">
-              <Sparkles className="h-4 w-4" />
+              <Factory className="h-4 w-4" />
             </div>
             <span className="text-lg font-bold tracking-tight text-sidebar-foreground">CRAFTFLOW</span>
           </Link>
         )}
         {collapsed && (
           <Link href="/dashboard" className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-md transition-transform duration-300 hover:scale-110 outline-none">
-            <Sparkles className="h-5 w-5" />
+            <Factory className="h-5 w-5" />
           </Link>
         )}
       </div>
@@ -302,7 +302,12 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
       </div>
 
       {/* Navigation */}
-      <div className="flex-1 overflow-y-auto py-6 px-3 scrollbar-none">
+      <div className={cn(
+        "flex-1 py-6 px-3 scroll-smooth overscroll-y-contain [webkit-overflow-scrolling:touch]",
+        collapsed
+          ? "overflow-y-hidden overflow-x-hidden scrollbar-none"
+          : "overflow-y-auto scrollbar-thin scrollbar-thumb-muted-foreground/10 hover:scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent"
+      )}>
         <nav className="space-y-1.5">
           {isKhoRole && !collapsed ? (
             <>
