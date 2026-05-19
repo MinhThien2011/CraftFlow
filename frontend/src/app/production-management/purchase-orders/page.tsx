@@ -108,6 +108,7 @@ function PurchaseOrdersContent() {
   const { role, isAdmin } = useAuth()
   const searchParams = useSearchParams()
   const autoCreateKeyRef = useRef<string | null>(null)
+  const statusSubmitLockRef = useRef(false)
   const [orders, setOrders] = useState<PurchaseOrder[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -306,6 +307,8 @@ function PurchaseOrdersContent() {
   }
 
   const handleUpdateStatus = async (id: string, newStatus: string) => {
+    if (statusSubmitLockRef.current) return
+    statusSubmitLockRef.current = true
     setIsSubmitting(true)
     try {
       await purchaseOrderApi.updateStatus(id, newStatus, adminNote)
@@ -317,6 +320,7 @@ function PurchaseOrdersContent() {
       console.error("Update PO status error:", error?.response?.data || error)
       toast.error(error?.response?.data?.message || error?.response?.data?.error || error?.message || "Không thể cập nhật trạng thái")
     } finally {
+      statusSubmitLockRef.current = false
       setIsSubmitting(false)
     }
   }

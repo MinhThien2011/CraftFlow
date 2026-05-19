@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { CheckCircle2, ChevronRight, Package } from "lucide-react"
-import { format } from "date-fns"
+import { format, isToday } from "date-fns"
 import { vi } from "date-fns/locale"
 
 import {
@@ -78,6 +78,7 @@ export function StaffTaskReportDialog({ open, onOpenChange, task }: StaffTaskRep
   const maxQuantity: number = task?.assignedQuantity ?? 0
   const product = task?.product ?? {}
   const isCompleted = task?.status === "completed"
+  const reportedToday = task?.lastReportedAt ? isToday(new Date(task.lastReportedAt)) : false
 
   const onSubmit = (values: ReportFormValues) => {
     if (!task) return
@@ -159,13 +160,25 @@ export function StaffTaskReportDialog({ open, onOpenChange, task }: StaffTaskRep
               </div>
             </div>
 
-            {/* Form or Completed State */}
+            {/* Form, Completed or Already Reported State */}
             {isCompleted ? (
               <div className="p-4 rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900 text-center space-y-2">
                 <CheckCircle2 className="w-8 h-8 text-green-600 mx-auto" />
                 <p className="font-semibold text-green-700 dark:text-green-400">Công việc này đã hoàn thành!</p>
                 <p className="text-sm text-green-600/80">
                   Bạn đã hoàn thành đủ {maxQuantity} {product.unit} được giao.
+                </p>
+              </div>
+            ) : reportedToday ? (
+              <div className="p-4 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/50 dark:border-amber-900/50 text-center space-y-2 py-5 shadow-inner">
+                <CheckCircle2 className="w-8 h-8 text-amber-600 mx-auto animate-pulse" />
+                <p className="font-bold text-amber-800 dark:text-amber-400">Đã báo cáo tiến độ hôm nay!</p>
+                <p className="text-xs text-amber-700/90 dark:text-amber-300 leading-relaxed px-2">
+                  Bạn đã thực hiện báo cáo cho nhiệm vụ này hôm nay lúc{" "}
+                  <strong className="text-amber-900 dark:text-amber-200">
+                    {task.lastReportedAt ? format(new Date(task.lastReportedAt), "HH:mm") : ""}
+                  </strong>
+                  .<br />Theo quy định, mỗi ngày chỉ được báo cáo tối đa <strong>1 lần</strong>. Vui lòng quay lại vào ngày mai!
                 </p>
               </div>
             ) : (
@@ -231,7 +244,7 @@ export function StaffTaskReportDialog({ open, onOpenChange, task }: StaffTaskRep
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Đóng
           </Button>
-          {task && !isCompleted && (
+          {task && !isCompleted && !reportedToday && (
             <Button type="submit" form="report-form" disabled={isPending} className="gap-2">
               {isPending ? "Đang cập nhật..." : "Cập nhật tiến độ"}
               <ChevronRight className="w-4 h-4" />

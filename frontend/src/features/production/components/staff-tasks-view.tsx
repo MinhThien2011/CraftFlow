@@ -50,12 +50,38 @@ export function StaffTasksView() {
     if (!response?.data?.orders) return []
     return response.data.orders
       .flatMap((order: any) =>
-        (order.assignments || []).map((a: any) => ({
-          ...a,
-          orderCode: order.orderCode,
-          orderPriority: order.priority,
-          orderDeadline: order.deadline,
-        }))
+        (order.assignments || []).map((a: any) => {
+          // Find the product details by matching product IDs from the order products array
+          const matchingProduct = order.products?.find((p: any) => {
+            const orderProductId = typeof p.product === "object" ? p.product?._id || p.product?.id : p.product;
+            const assignmentProductId = typeof a.product === "object" ? a.product?._id || a.product?.id : a.product;
+            return orderProductId === assignmentProductId;
+          });
+
+          // Resolve name, code, and unit from either populated objects or custom flat properties
+          const name = matchingProduct?.productName || 
+                       (typeof matchingProduct?.product === "object" ? matchingProduct?.product?.name : null) || 
+                       (typeof a.product === "object" ? a.product?.name : null) || 
+                       "—";
+                       
+          const code = matchingProduct?.productCode || 
+                       (typeof matchingProduct?.product === "object" ? matchingProduct?.product?.code : null) || 
+                       (typeof a.product === "object" ? a.product?.code : null) || 
+                       "—";
+                       
+          const unit = (typeof matchingProduct?.product === "object" ? matchingProduct?.product?.unit : null) || 
+                       matchingProduct?.unit || 
+                       (typeof a.product === "object" ? a.product?.unit : null) || 
+                       "sản phẩm";
+
+          return {
+            ...a,
+            orderCode: order.orderCode,
+            orderPriority: order.priority,
+            orderDeadline: order.deadline,
+            productDetails: { name, code, unit }
+          };
+        })
       )
       .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
   }, [response])
@@ -64,8 +90,8 @@ export function StaffTasksView() {
     return allTasks.filter((task: any) => {
       const matchesSearch =
         task.orderCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        task.product?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        task.product?.code?.toLowerCase().includes(searchTerm.toLowerCase())
+        task.productDetails?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        task.productDetails?.code?.toLowerCase().includes(searchTerm.toLowerCase())
       const matchesStatus = statusFilter === "all" || task.status === statusFilter
       return matchesSearch && matchesStatus
     })
@@ -178,11 +204,11 @@ export function StaffTasksView() {
                       <Package className="w-5 h-5" />
                     </div>
                     <div className="min-w-0">
-                      <h4 className="font-semibold text-base line-clamp-1" title={task.product?.name}>
-                        {task.product?.name ?? "—"}
+                      <h4 className="font-semibold text-base line-clamp-1" title={task.productDetails?.name}>
+                        {task.productDetails?.name}
                       </h4>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Mã SP: <span className="font-medium text-foreground">{task.product?.code ?? "—"}</span>
+                        Mã SP: <span className="font-medium text-foreground">{task.productDetails?.code}</span>
                       </p>
                     </div>
                   </div>
@@ -209,8 +235,8 @@ export function StaffTasksView() {
                       </div>
                       <Progress value={myProgress} className="h-2" />
                       <div className="flex justify-between text-xs text-muted-foreground pt-1">
-                        <span>Đã làm: <strong className="text-foreground">{task.completedQuantity ?? 0}</strong> {task.product?.unit}</span>
-                        <span>Chỉ tiêu của tôi: <strong className="text-foreground">{task.assignedQuantity}</strong> {task.product?.unit}</span>
+                        <span>Đã làm: <strong className="text-foreground">{task.completedQuantity ?? 0}</strong> {task.productDetails?.unit}</span>
+                        <span>Chỉ tiêu của tôi: <strong className="text-foreground">{task.assignedQuantity}</strong> {task.productDetails?.unit}</span>
                       </div>
                     </div>
 

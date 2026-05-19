@@ -882,7 +882,8 @@ export const getAllSlipsService = async (query = {}) => {
             creator,
             materialId,
             productId,
-            category // 'material' or 'product'
+            category, // 'material' or 'product'
+            relatedProductionOrder
         } = query;
         const { pageNum, limitNum, skip, cursor: cursorId, withTotal: shouldCount } = normalizePagination({ page, limit, cursor, withTotal });
 
@@ -916,6 +917,7 @@ export const getAllSlipsService = async (query = {}) => {
         // Search by items
         if (materialId) filter['items.material'] = materialId;
         if (productId) filter['items.product'] = productId;
+        if (relatedProductionOrder) filter.relatedProductionOrder = relatedProductionOrder;
         filter = applyCreatedAtCursor(filter, cursorId);
 
         const totalPromise = shouldCount ? InventoryImportExportSlip.countDocuments(filter) : Promise.resolve(undefined);

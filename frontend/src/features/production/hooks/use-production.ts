@@ -2,29 +2,35 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { productionApi } from "@/api/production.api";
 import { toast } from "sonner";
 import { queryKeys } from "@/lib/query-keys";
+import { useAuth } from "@/features/auth/hooks/use-auth";
 
 export const productionKeys = {
-    all: queryKeys.production.all,
-    orders: (params: any) => [...productionKeys.all, 'orders', { params }] as const,
-    order: (id: string) => [...productionKeys.all, 'order', id] as const,
-    suggestions: () => [...productionKeys.all, 'suggestions'] as const,
-    alerts: (params: any) => [...productionKeys.all, 'alerts', { params }] as const,
-    bom: (id: string) => [...productionKeys.all, 'bom', id] as const,
+  all: queryKeys.production.all,
+  orders: (params: any, scope: string | null) => [...productionKeys.all, 'orders', { scope, params }] as const,
+  order: (id: string, scope: string | null) => [...productionKeys.all, 'order', scope, id] as const,
+  suggestions: () => [...productionKeys.all, 'suggestions'] as const,
+  alerts: (params: any) => [...productionKeys.all, 'alerts', { params }] as const,
+  bom: (id: string, scope: string | null) => [...productionKeys.all, 'bom', scope, id] as const,
 };
 
 export function useProductionOrders(params: any = {}) {
+    const { user } = useAuth();
+    const scope = user?._id || null;
     return useQuery({
-        queryKey: productionKeys.orders(params),
+        queryKey: productionKeys.orders(params, scope),
         queryFn: () => productionApi.getOrders(params),
+        enabled: !!scope,
         staleTime: 1000 * 60 * 2, // 2 minutes
     });
 }
 
 export function useProductionOrder(id: string) {
+    const { user } = useAuth();
+    const scope = user?._id || null;
     return useQuery({
-        queryKey: productionKeys.order(id),
+        queryKey: productionKeys.order(id, scope),
         queryFn: () => productionApi.getOrderById(id),
-        enabled: !!id,
+        enabled: !!id && !!scope,
         staleTime: 1000 * 60 * 5, // 5 minutes
     });
 }
@@ -52,7 +58,7 @@ export function useUpdateOrderStatus() {
             productionApi.updateStatus(id, status, notes),
         onSuccess: (response, variables) => {
             queryClient.invalidateQueries({ queryKey: productionKeys.all });
-            toast.success("Cập nhật trạng thái thành công");
+            toast.success((response as any)?.message || "Cap nhat trang thai thanh cong");
         },
     });
 }
@@ -99,10 +105,12 @@ export function useStaffSuggestions(enabled = true) {
 }
 
 export function useSuggestedAssignments(id: string, enabled = true) {
+    const { user } = useAuth();
+    const scope = user?._id || null;
     return useQuery({
-        queryKey: [...productionKeys.order(id), 'suggest'],
+        queryKey: [...productionKeys.order(id, scope), 'suggest'],
         queryFn: () => productionApi.getSuggestedAssignments(id),
-        enabled: !!id && enabled,
+        enabled: !!id && !!scope && enabled,
         staleTime: 1000 * 60 * 2, // 2 minutes
     });
 }
@@ -180,10 +188,12 @@ export function useCancelProductionOrder() {
 }
 
 export function useOrderBom(id: string) {
+    const { user } = useAuth();
+    const scope = user?._id || null;
     return useQuery({
-        queryKey: productionKeys.bom(id),
+        queryKey: productionKeys.bom(id, scope),
         queryFn: () => productionApi.getBom(id),
-        enabled: !!id,
+        enabled: !!id && !!scope,
         staleTime: 1000 * 60 * 5, // 5 minutes
     });
 }

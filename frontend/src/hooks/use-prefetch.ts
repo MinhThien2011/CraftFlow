@@ -22,7 +22,7 @@ export function usePrefetch() {
 
   const prefetchProductionOrders = () => {
     queryClient.prefetchQuery({
-      queryKey: productionKeys.orders({}),
+      queryKey: productionKeys.orders({}, null),
       queryFn: () => productionApi.getOrders({}),
     });
   };

@@ -29,7 +29,7 @@ export const createPurchaseOrder = async (req, res) => {
         const result = await createPurchaseOrderService(value, req.userId);
         if (result.success) {
             // Invalidate list cache
-            clearCacheByPattern('purchaseOrder:list:*');
+            await clearCacheByPattern('purchaseOrder:list:*');
 
             await logActivity({
                 author: req.userId,
@@ -139,14 +139,16 @@ export const deletePurchaseOrder = async (req, res) => {
             // Invalidate list cache
             await clearCacheByPattern('purchaseOrder:list:*');
 
-            await logActivity({
-                author: req.userId,
-                action: 'DELETE_PURCHASE_ORDER',
-                module: 'PURCHASE_ORDER',
-                details: `Purchase order deleted: ${result.data._id}`,
-                targetId: result.data._id,
-                metadata: { status: result.data.status }
-            }, req);
+            if (result.data?._id) {
+                await logActivity({
+                    author: req.userId,
+                    action: 'DELETE_PURCHASE_ORDER',
+                    module: 'PURCHASE_ORDER',
+                    details: `Purchase order deleted: ${result.data._id}`,
+                    targetId: result.data._id,
+                    metadata: { status: result.data.status }
+                }, req);
+            }
         }
 
         return handleServiceResponse(res, result);

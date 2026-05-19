@@ -187,6 +187,27 @@ InventoryImportExportSlipSchema.index({ createdAt: -1, _id: -1 });
 InventoryImportExportSlipSchema.index({ date: -1, _id: -1 });
 InventoryImportExportSlipSchema.index({ relatedProductionOrder: 1 });
 InventoryImportExportSlipSchema.index({ relatedPurchaseOrder: 1 });
+InventoryImportExportSlipSchema.index(
+    { type: 1, relatedPurchaseOrder: 1 },
+    {
+        unique: true,
+        partialFilterExpression: {
+            type: INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT,
+            relatedPurchaseOrder: { $exists: true }
+        }
+    }
+);
+InventoryImportExportSlipSchema.index(
+    { type: 1, relatedProductionOrder: 1 },
+    {
+        unique: true,
+        partialFilterExpression: {
+            type: INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT,
+            relatedProductionOrder: { $exists: true },
+            'items.product': { $exists: true }
+        }
+    }
+);
 InventoryImportExportSlipSchema.index({ relatedRequisition: 1 });
 InventoryImportExportSlipSchema.index({ relatedProductExportRequest: 1 });
 InventoryImportExportSlipSchema.index({ 'signatures.creator': 1 });

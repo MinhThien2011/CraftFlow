@@ -283,7 +283,7 @@ export const updatePurchaseOrderService = async (orderId, data) => {
 
         // Notify Production Managers and Admins real-time when PO status changes (e.g., approved/rejected)
         if (updatePayload.status) {
-            const statusLabel = updatePayload.status === PURCHASE_ORDER_STATUS.APPROVED ? 'được duyệt' :
+            const statusLabel = updatePayload.status === PURCHASE_ORDER_STATUS.ACCEPTED ? 'được duyệt' :
                 updatePayload.status === PURCHASE_ORDER_STATUS.REJECTED ? 'bị từ chối' :
                     updatePayload.status;
 
@@ -310,7 +310,7 @@ export const updatePurchaseOrderService = async (orderId, data) => {
                     title: 'Cập nhật đơn mua hàng',
                     message: `Đơn mua hàng ${purchaseOrderUpdate.orderCode} của bạn đã ${statusLabel}.`,
                     type: 'PURCHASE_ORDER',
-                    priority: updatePayload.status === PURCHASE_ORDER_STATUS.APPROVED ? 'MEDIUM' : 'HIGH',
+                    priority: updatePayload.status === PURCHASE_ORDER_STATUS.ACCEPTED ? 'MEDIUM' : 'HIGH',
                     metaData: { orderId: purchaseOrderUpdate._id, orderCode: purchaseOrderUpdate.orderCode }
                 });
             }
@@ -357,97 +357,138 @@ export const deletePurchaseOrderService = async (orderId) => {
 }
 
 export const updatePurchaseOrderStatusService = async (orderId, data, adminId) => {
+    const session = await mongoose.startSession();
+    let purchaseOrder = null;
+    let importSlip = null;
+    let shouldNotifyWarehouse = false;
+    let shouldNotifyCreator = false;
+
     try {
-        const purchaseOrder = await PurchaseOrder.findById(orderId);
+        session.startTransaction();
+
+        const updatePayload = { status: data.status };
+        if (data.adminNotes !== undefined) updatePayload.adminNotes = data.adminNotes;
+
+        purchaseOrder = await PurchaseOrder.findOneAndUpdate(
+            { _id: orderId, status: PURCHASE_ORDER_STATUS.PENDING },
+            { $set: updatePayload },
+            { new: true, session }
+        );
+
         if (!purchaseOrder) {
-            return { success: false, message: 'Purchase order not found', data: null };
+            const existingPurchaseOrder = await PurchaseOrder.findById(orderId).session(session);
+            if (!existingPurchaseOrder) {
+                await session.abortTransaction();
+                return { success: false, message: 'Purchase order not found', data: null };
+            }
+
+            if (existingPurchaseOrder.status === data.status) {
+                await session.commitTransaction();
+                return {
+                    success: true,
+                    data: existingPurchaseOrder,
+                    message: 'Purchase order status was already updated'
+                };
+            }
+
+            await session.abortTransaction();
+            return {
+                success: false,
+                message: `Cannot change purchase order status from ${existingPurchaseOrder.status} to ${data.status}.`,
+                data: existingPurchaseOrder
+            };
         }
 
-        // Update status and notes
-        const oldStatus = purchaseOrder.status;
-        purchaseOrder.status = data.status;
-        if (data.adminNotes) purchaseOrder.adminNotes = data.adminNotes;
-
-        await purchaseOrder.save();
-
-        // If status becomes CANCELLED, unlink alerts
-        if (data.status === PURCHASE_ORDER_STATUS.CANCELLED && oldStatus !== PURCHASE_ORDER_STATUS.CANCELLED) {
+        if (data.status === PURCHASE_ORDER_STATUS.REJECTED) {
             await MaterialAlert.updateMany(
                 { purchaseOrder: orderId },
                 {
                     $unset: { purchaseOrder: "" },
                     status: 'pending'
-                }
+                },
+                { session }
             );
         }
 
-        // If status becomes ACCEPTED, automatically create an Import Slip
         if (data.status === PURCHASE_ORDER_STATUS.ACCEPTED) {
-            const slipNumber = await generateSlipNumber(INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT);
-
-            const slipItems = purchaseOrder.purchaseOrderItems.map(item => ({
-                material: item.material,
-                itemName: `Material: ${item.materialCode}`, // Simplification, could be more detailed
-                itemCode: item.materialCode,
-                unit: item.unit,
-                quantity: {
-                    requested: item.quantity,
-                    actual: 0 // Will be filled by kho manager
-                },
-                unitPrice: item.priceAtTimePurchase,
-                amount: 0
-            }));
-
-            const newSlip = new InventoryImportExportSlip({
+            importSlip = await InventoryImportExportSlip.findOne({
                 type: INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT,
-                slipNumber,
-                relatedPurchaseOrder: purchaseOrder._id,
-                relatedProductionOrder: purchaseOrder.productionOrder,
-                reason: `Nhập kho từ đơn mua hàng ${purchaseOrder._id}. Lý do: ${purchaseOrder.orderReason}`,
-                items: slipItems,
-                signatures: {
-                    creator: adminId, // Admin who approved the PO
-                },
-                status: INVENTORY_IMPORT_EXPORT_SLIP_STATUS.PENDING
-            });
+                relatedPurchaseOrder: purchaseOrder._id
+            }).session(session);
 
-            await newSlip.save();
-            console.log(`[PurchaseOrder] Auto-created Import Slip ${slipNumber} for PO ${orderId}`);
+            if (!importSlip) {
+                const slipNumber = await generateSlipNumber(INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT);
 
+                const slipItems = purchaseOrder.purchaseOrderItems.map(item => ({
+                    material: item.material,
+                    itemName: `Material: ${item.materialCode}`,
+                    itemCode: item.materialCode,
+                    unit: item.unit,
+                    quantity: {
+                        requested: item.quantity,
+                        actual: 0
+                    },
+                    unitPrice: item.priceAtTimePurchase,
+                    amount: 0
+                }));
+
+                [importSlip] = await InventoryImportExportSlip.create([{
+                    type: INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT,
+                    slipNumber,
+                    relatedPurchaseOrder: purchaseOrder._id,
+                    relatedProductionOrder: purchaseOrder.productionOrder,
+                    reason: `Import slip from purchase order ${purchaseOrder._id}. Reason: ${purchaseOrder.orderReason}`,
+                    items: slipItems,
+                    signatures: {
+                        creator: adminId,
+                    },
+                    status: INVENTORY_IMPORT_EXPORT_SLIP_STATUS.PENDING
+                }], { session });
+
+                shouldNotifyWarehouse = true;
+                console.log(`[PurchaseOrder] Auto-created Import Slip ${slipNumber} for PO ${orderId}`);
+            }
+        }
+
+        if (data.status === PURCHASE_ORDER_STATUS.REJECTED || data.status === PURCHASE_ORDER_STATUS.ACCEPTED) {
+            shouldNotifyCreator = purchaseOrder.creator?.toString() !== adminId?.toString();
+        }
+
+        await session.commitTransaction();
+
+        if (shouldNotifyWarehouse && importSlip) {
             await notifyUsersByRole({
                 roles: [ROLES.KHO_MANAGER],
                 excludeUserId: adminId,
-                title: 'Có đơn nhập kho mới',
-                message: `PO ${purchaseOrder._id} đã được duyệt và tạo phiếu nhập ${slipNumber}.`,
+                title: 'New import slip created',
+                message: `PO ${purchaseOrder._id} was accepted and import slip ${importSlip.slipNumber} was created.`,
                 type: 'INVENTORY',
                 priority: 'HIGH',
                 metaData: {
                     purchaseOrderId: purchaseOrder._id,
-                    slipId: newSlip._id,
-                    slipNumber,
+                    slipId: importSlip._id,
+                    slipNumber: importSlip.slipNumber,
                     status: purchaseOrder.status,
                     source: 'purchase_order_accepted'
                 }
             });
         }
 
-        if (data.status === PURCHASE_ORDER_STATUS.REJECTED || data.status === PURCHASE_ORDER_STATUS.ACCEPTED) {
-            if (purchaseOrder.creator?.toString() !== adminId?.toString()) {
-                await createNotification({
-                    recipient: purchaseOrder.creator,
-                    title: 'Cập nhật yêu cầu mua hàng',
-                    message: data.status === PURCHASE_ORDER_STATUS.ACCEPTED
-                        ? `PO ${purchaseOrder._id} đã được duyệt.`
-                        : `PO ${purchaseOrder._id} đã bị từ chối.`,
-                    type: 'APPROVAL',
-                    priority: data.status === PURCHASE_ORDER_STATUS.ACCEPTED ? 'MEDIUM' : 'HIGH',
-                    metaData: {
-                        purchaseOrderId: purchaseOrder._id,
-                        status: data.status,
-                        source: 'purchase_order_status_changed'
-                    }
-                });
-            }
+        if (shouldNotifyCreator) {
+            await createNotification({
+                recipient: purchaseOrder.creator,
+                title: 'Purchase order updated',
+                message: data.status === PURCHASE_ORDER_STATUS.ACCEPTED
+                    ? `PO ${purchaseOrder._id} was accepted.`
+                    : `PO ${purchaseOrder._id} was rejected.`,
+                type: 'APPROVAL',
+                priority: data.status === PURCHASE_ORDER_STATUS.ACCEPTED ? 'MEDIUM' : 'HIGH',
+                metaData: {
+                    purchaseOrderId: purchaseOrder._id,
+                    status: data.status,
+                    source: 'purchase_order_status_changed'
+                }
+            });
         }
 
         await emitToRoles([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.KHO_MANAGER], 'purchase_order_status_updated', {
@@ -469,10 +510,28 @@ export const updatePurchaseOrderStatusService = async (orderId, data, adminId) =
         return { success: true, data: purchaseOrder, message: 'Purchase order status updated successfully' };
     }
     catch (error) {
+        if (session.inTransaction()) {
+            await session.abortTransaction();
+        }
         console.log('[updatePurchaseOrderStatusService] error:', error);
+        if (error?.code === 11000) {
+            const duplicateKey = Object.keys(error?.keyPattern || {});
+            const isImportSlipConflict = duplicateKey.includes('type') || duplicateKey.includes('relatedPurchaseOrder');
+            if (isImportSlipConflict) {
+                const existingPurchaseOrder = await PurchaseOrder.findById(orderId);
+                return {
+                    success: true,
+                    data: existingPurchaseOrder,
+                    message: 'Purchase order status was already updated'
+                };
+            }
+        }
         return { success: false, message: 'Failed to update purchase order status: ' + error.message, data: null };
+    } finally {
+        session.endSession();
     }
 }
+
 
 export const getAllPurchaseOrdersByIdService = async (id) => {
     try {

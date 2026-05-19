@@ -20,6 +20,15 @@ import { applyCreatedAtCursor, buildListPagination, normalizePagination } from '
  * Get all production orders with pagination and filters (Admin/Production Manager).
  */
 export const getAllProductionOrders = async (queryParams) => {
+  // Auto-heal old assignment records that have progress but are missing lastReportedAt
+  try {
+    await ProductionOrderAssignment.updateMany(
+      { completedQuantity: { $gt: 0 }, lastReportedAt: null },
+      { $set: { lastReportedAt: new Date() } }
+    );
+  } catch (err) {
+    console.error("Auto-heal failed:", err);
+  }
   try {
     const { status, priority, search, page = 1, limit = 10, cursor, withTotal = true } = queryParams;
     const { pageNum, limitNum, skip, cursor: cursorId, withTotal: shouldCount } = normalizePagination({ page, limit, cursor, withTotal });
@@ -108,6 +117,7 @@ export const getStaffProductionOrders = async (staffId, queryParams) => {
       staff: staffId
     })
       .populate('staff', 'fullName username currentAssignedQuantity')
+      .populate('product', 'name code unit')
       .lean();
 
     // Map assignments to their respective orders
@@ -166,6 +176,47 @@ export const getProductionOrderById = async (orderIdentifier) => {
     };
   } catch (error) {
     console.error('[ProductionOrderService] getProductionOrderById error:', error);
+    return { success: false, message: error.message, data: null };
+  }
+};
+
+export const getStaffProductionOrderById = async (orderIdentifier, staffId) => {
+  try {
+    const isObjectId = mongoose.Types.ObjectId.isValid(orderIdentifier);
+    const order = isObjectId
+      ? await ProductionOrder.findById(orderIdentifier)
+        .populate('products.product')
+        .populate('createdBy', 'fullName username')
+        .lean()
+      : await ProductionOrder.findOne({ orderCode: orderIdentifier })
+        .populate('products.product')
+        .populate('createdBy', 'fullName username')
+        .lean();
+
+    if (!order) return { success: false, message: 'Production order not found.', data: null };
+
+    const assignments = await ProductionOrderAssignment.find({
+      productionOrder: order._id,
+      staff: staffId
+    })
+      .populate('staff', 'fullName username currentAssignedQuantity')
+      .populate('product', 'name code unit')
+      .lean();
+
+    if (!assignments.length) {
+      return { success: false, message: 'You are not assigned to this production order.', data: null };
+    }
+
+    return {
+      success: true,
+      message: 'Production order details retrieved.',
+      data: {
+        ...order,
+        assignments
+      }
+    };
+  } catch (error) {
+    console.error('[ProductionOrderService] getStaffProductionOrderById error:', error);
     return { success: false, message: error.message, data: null };
   }
 };
@@ -811,6 +862,79 @@ export const assignProductionOrder = async (orderId, assignments) => {
  * Update the overall production order status.
  * Only accessible by Production Manager or Admin.
  */
+const createOrGetFinishedGoodsStockInSlip = async ({
+  order,
+  actorId,
+  session,
+  notes = '',
+  personInOut = 'Bo phan san xuat'
+}) => {
+  const existingSlip = await InventoryImportExportSlip.findOne({
+    type: INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT,
+    relatedProductionOrder: order._id,
+    'items.product': { $exists: true }
+  }).session(session);
+
+  if (existingSlip) return { slip: existingSlip, created: false };
+
+  const productIds = order.products
+    .map((item) => item.product?._id || item.product)
+    .filter((id) => mongoose.Types.ObjectId.isValid(id));
+
+  const products = await Product.find({ _id: { $in: productIds } })
+    .select('name code unit baseCost')
+    .session(session)
+    .lean();
+  const productMap = new Map(products.map((item) => [item._id.toString(), item]));
+
+  const slipNumber = await generateSlipNumber(INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT);
+  const slipItems = order.products.map((item) => {
+    const productId = (item.product?._id || item.product)?.toString();
+    const productInfo = productMap.get(productId) || {};
+    return {
+      product: productId,
+      itemName: item.productName || productInfo.name || 'Finished Product',
+      itemCode: item.productCode || productInfo.code || `P-${productId?.slice(-6) || 'NA'}`,
+      unit: productInfo.unit || 'cai',
+      quantity: {
+        requested: item.quantity,
+        actual: 0
+      },
+      unitPrice: productInfo.baseCost || 0,
+      amount: 0
+    };
+  });
+
+  try {
+    const [newSlip] = await InventoryImportExportSlip.create([{
+      slipNumber,
+      type: INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT,
+      status: INVENTORY_IMPORT_EXPORT_SLIP_STATUS.PENDING,
+      relatedProductionOrder: order._id,
+      reason: `Nhap kho thanh pham cho don hang ${order.orderCode}`,
+      items: slipItems,
+      totalAmount: 0,
+      signatures: {
+        creator: actorId,
+        personInOut
+      },
+      notes: notes?.trim() || `Tu dong tao khi hoan thanh don ${order.orderCode}`
+    }], { session });
+
+    return { slip: newSlip, created: true };
+  } catch (error) {
+    if (error?.code === 11000) {
+      const duplicatedSlip = await InventoryImportExportSlip.findOne({
+        type: INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT,
+        relatedProductionOrder: order._id,
+        'items.product': { $exists: true }
+      }).session(session);
+      if (duplicatedSlip) return { slip: duplicatedSlip, created: false };
+    }
+    throw error;
+  }
+};
+
 export const updateProductionOrderStatus = async (orderId, status, notes = '') => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -819,11 +943,18 @@ export const updateProductionOrderStatus = async (orderId, status, notes = '') =
     if (!order) return { success: false, message: 'Production order not found.', data: null };
 
     const oldStatus = order.status;
+    let stockInResult = null;
     order.status = status;
     if (notes) order.holdReason = notes; // Using holdReason as a general note field for status changes
 
     if (status === ORDER_STATUS.COMPLETED && oldStatus !== ORDER_STATUS.COMPLETED) {
       order.completedAt = new Date();
+      stockInResult = await createOrGetFinishedGoodsStockInSlip({
+        order,
+        actorId: order.createdBy,
+        session,
+        notes
+      });
     }
 
     await order.save({ session });
@@ -855,10 +986,46 @@ export const updateProductionOrderStatus = async (orderId, status, notes = '') =
       metaData: { orderId: order._id, orderCode: order.orderCode, status }
     });
 
+    if (stockInResult?.slip && stockInResult.created) {
+      await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.KHO_MANAGER], {
+        domains: ["production", "slips", "inventory", "products"],
+        action: "stock_in_slip_created",
+        entity: "inventory_slip",
+        id: stockInResult.slip._id,
+        message: `Stock-in slip ${stockInResult.slip.slipNumber} was created for order ${order.orderCode}.`,
+        metaData: {
+          slipId: stockInResult.slip._id,
+          slipNumber: stockInResult.slip.slipNumber,
+          orderId: order._id,
+          orderCode: order.orderCode
+        }
+      });
+
+      await notifyUsersByRole({
+        roles: [ROLES.KHO_MANAGER],
+        excludeUserId: order.createdBy,
+        title: 'Co phieu nhap thanh pham moi',
+        message: `Phieu nhap ${stockInResult.slip.slipNumber} cho don ${order.orderCode} dang cho xu ly.`,
+        type: 'INVENTORY',
+        priority: 'HIGH',
+        metaData: {
+          slipId: stockInResult.slip._id,
+          slipNumber: stockInResult.slip.slipNumber,
+          orderId: order._id
+        }
+      });
+    }
+
     return {
       success: true,
-      message: `Đã cập nhật trạng thái đơn hàng sang ${status}.`,
-      data: { order }
+      message: stockInResult?.slip
+        ? `Da cap nhat trang thai don hang sang ${status} va ${stockInResult.created ? 'tao' : 'xac nhan'} phieu nhap kho thanh pham ${stockInResult.slip.slipNumber}.`
+        : `Da cap nhat trang thai don hang sang ${status}.`,
+      data: {
+        order,
+        stockInSlip: stockInResult?.slip || null,
+        stockInSlipAutoCreated: !!stockInResult?.created
+      }
     };
   } catch (error) {
     if (session.inTransaction()) await session.abortTransaction();
@@ -962,6 +1129,18 @@ export const updateAssignmentStatus = async (assignmentId, status, completedQuan
       throw new Error('You are not authorized to update this assignment.');
     }
 
+    // Check if staff has already reported today
+    if (isStaff && assignment.lastReportedAt) {
+      const lastReportDate = new Date(assignment.lastReportedAt);
+      const today = new Date();
+      const isSameDay = lastReportDate.getFullYear() === today.getFullYear() &&
+                        lastReportDate.getMonth() === today.getMonth() &&
+                        lastReportDate.getDate() === today.getDate();
+      if (isSameDay) {
+        throw new Error('Bạn đã gửi báo cáo cho công việc này hôm nay rồi. Mỗi ngày chỉ được báo cáo tối đa 1 lần.');
+      }
+    }
+
     const oldStatus = assignment.status;
     const oldCompletedQty = assignment.completedQuantity;
 
@@ -973,13 +1152,21 @@ export const updateAssignmentStatus = async (assignmentId, status, completedQuan
         throw new Error(`Completed quantity (${completedQuantity}) cannot exceed assigned quantity (${assignment.assignedQuantity}).`);
       }
       assignment.completedQuantity = completedQuantity;
+      assignment.lastReportedAt = new Date();
+    }
+
+    // Auto-adjust status based on completed quantity
+    if (assignment.completedQuantity === assignment.assignedQuantity) {
+      assignment.status = ORDER_STATUS.COMPLETED;
+    } else if (assignment.completedQuantity > 0 && assignment.status === ORDER_STATUS.ASSIGNED) {
+      assignment.status = ORDER_STATUS.IN_PRODUCTION;
     }
 
     // Set timestamps based on status
-    if (status === ORDER_STATUS.IN_PRODUCTION && !assignment.startedAt) {
+    if (assignment.status === ORDER_STATUS.IN_PRODUCTION && !assignment.startedAt) {
       assignment.startedAt = new Date();
     }
-    if (status === ORDER_STATUS.COMPLETED) {
+    if (assignment.status === ORDER_STATUS.COMPLETED) {
       assignment.finishedAt = new Date();
       try {
         assignment.completedQuantity = assignment.assignedQuantity; // Auto-complete if marked as COMPLETED
@@ -989,11 +1176,11 @@ export const updateAssignmentStatus = async (assignmentId, status, completedQuan
     }
 
     // 3. Update Staff Workload if status changes to COMPLETED
-    if (status === ORDER_STATUS.COMPLETED && oldStatus !== ORDER_STATUS.COMPLETED) {
+    if (assignment.status === ORDER_STATUS.COMPLETED && oldStatus !== ORDER_STATUS.COMPLETED) {
       await User.findByIdAndUpdate(assignment.staff, {
         $inc: { currentAssignedQuantity: -assignment.assignedQuantity }
       }, { session });
-    } else if (oldStatus === ORDER_STATUS.COMPLETED && status !== ORDER_STATUS.COMPLETED) {
+    } else if (oldStatus === ORDER_STATUS.COMPLETED && assignment.status !== ORDER_STATUS.COMPLETED) {
       // If moving back from COMPLETED (e.g. by PM)
       await User.findByIdAndUpdate(assignment.staff, {
         $inc: { currentAssignedQuantity: assignment.assignedQuantity }
@@ -1098,13 +1285,16 @@ export const createStockInSlip = async (orderIdentifier, managerId, slipData = {
     }
 
     // Check if a slip already exists for this order
-    const existingSlip = await InventoryImportExportSlip.findOne({ relatedProductionOrder: orderId }).session(session);
+    const existingSlip = await InventoryImportExportSlip.findOne({
+      type: INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT,
+      relatedProductionOrder: orderId,
+      'items.product': { $exists: true }
+    }).session(session);
     if (existingSlip) {
-      console.error('A stock-in slip already exists for this production order:', existingSlip);
       return {
-        success: false,
-        message: 'A stock-in slip already exists for this production order.',
-        data: null
+        success: true,
+        message: 'Stock-in slip already exists for this production order.',
+        data: { slip: existingSlip, alreadyExists: true }
       };
     }
 
@@ -1137,8 +1327,11 @@ export const createStockInSlip = async (orderIdentifier, managerId, slipData = {
       relatedProductionOrder: orderId,
       items: slipItems,
       totalAmount,
-      createdBy: managerId,
-      personInOut: slipData.personInOut || 'Bộ phận sản xuất',
+      reason: `Nhap kho thanh pham cho don hang ${order.orderCode}`,
+      signatures: {
+        creator: managerId,
+        personInOut: slipData.personInOut || 'Bo phan san xuat'
+      },
       notes: slipData.notes || `Nhập kho thành phẩm cho đơn hàng ${order.orderCode}`,
     });
 

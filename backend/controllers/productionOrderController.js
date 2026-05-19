@@ -1,7 +1,7 @@
 import { StatusCodes } from 'http-status-codes';
 import * as productionOrderService from '../services/productionOrderService.js';
 import { logActivity } from '../utils/logger.js';
-import { ROLES } from '../utils/constants.js';
+import { ORDER_STATUS, ROLES } from '../utils/constants.js';
 import { clearCacheByPattern, getCachedData, setCachedData } from "../utils/redisFetching.js";
 import {
   createOrderValidator,
@@ -13,6 +13,15 @@ import {
   cancelOrderValidator
 } from '../validations/productionValidation.js';
 import { handleServiceResponse } from '../utils/responseHelper.js';
+
+const invalidateProductionCaches = async (orderId = null) => {
+  const tasks = [
+    clearCacheByPattern('production:list:*'),
+    clearCacheByPattern('production:detail:*')
+  ];
+  if (orderId) tasks.push(clearCacheByPattern(`production:detail:${orderId}`));
+  await Promise.all(tasks);
+};
 
 export const getListProductionOrder = async (req, res) => {
   try {
@@ -40,7 +49,7 @@ export const getListProductionOrder = async (req, res) => {
       result = await productionOrderService.getAllProductionOrders(req.query);
     }
 
-    if (result.status === 'error') {
+    if (!result.success) {
       return res.status(StatusCodes.BAD_REQUEST).json(result);
     }
 
@@ -62,7 +71,7 @@ export const getListProductionOrder = async (req, res) => {
 export const getProductionOrderById = async (req, res) => {
   try {
     const { id } = req.params;
-    const cacheKey = `production:detail:${id}`;
+    const cacheKey = `production:detail:${req.userRole}:${req.userId}:${id}`;
 
     // 1. Try cache
     const cachedResult = await getCachedData(cacheKey);
@@ -74,9 +83,11 @@ export const getProductionOrderById = async (req, res) => {
       });
     }
 
-    const result = await productionOrderService.getProductionOrderById(id);
+    const result = req.userRole === ROLES.STAFF
+      ? await productionOrderService.getStaffProductionOrderById(id, req.userId)
+      : await productionOrderService.getProductionOrderById(id);
 
-    if (result.status === 'error') {
+    if (!result.success) {
       return res.status(StatusCodes.NOT_FOUND).json(result);
     }
 
@@ -108,7 +119,7 @@ export const createOrder = async (req, res) => {
 
     const result = await productionOrderService.createProductionOrder(value, req.userId);
 
-    if (result.status === 'error') {
+    if (!result.success) {
       return res.status(StatusCodes.BAD_REQUEST).json({
         status: 'error',
         message: result.message,
@@ -117,7 +128,7 @@ export const createOrder = async (req, res) => {
     }
 
     // Invalidate caches
-    clearCacheByPattern('production:list:*');
+    await invalidateProductionCaches();
 
     await logActivity({
       author: req.userId,
@@ -212,7 +223,7 @@ export const assignOrder = async (req, res) => {
     const { orderId, assignments } = value;
     const result = await productionOrderService.assignProductionOrder(orderId, assignments);
 
-    if (result.status === 'error') {
+    if (!result.success) {
       return res.status(StatusCodes.BAD_REQUEST).json({
         status: 'error',
         message: result.message,
@@ -221,8 +232,7 @@ export const assignOrder = async (req, res) => {
     }
 
     // Invalidate caches
-    clearCacheByPattern('production:list:*');
-    clearCacheByPattern(`production:detail:${orderId}`);
+    await invalidateProductionCaches(orderId);
 
     await logActivity({
       author: userId,
@@ -261,8 +271,7 @@ export const checkMaterials = async (req, res) => {
     }
 
     // Invalidate caches
-    clearCacheByPattern('production:list:*');
-    clearCacheByPattern(`production:detail:${id}`);
+    await invalidateProductionCaches(id);
 
     return res.status(StatusCodes.OK).json({
       success: true,
@@ -302,8 +311,7 @@ export const updateOrderStatus = async (req, res) => {
     }
 
     // Invalidate caches
-    clearCacheByPattern('production:list:*');
-    clearCacheByPattern(`production:detail:${id}`);
+    await invalidateProductionCaches(id);
 
     await logActivity({
       author: req.userId,
@@ -352,10 +360,7 @@ export const reassignTask = async (req, res) => {
     }
 
     // Invalidate caches
-    clearCacheByPattern('production:list:*');
-    if (result.data?.assignment?.productionOrder) {
-      clearCacheByPattern(`production:detail:${result.data.assignment.productionOrder}`);
-    }
+    await invalidateProductionCaches(result.data?.assignment?.productionOrder || null);
 
     await logActivity({
       author: req.userId,
@@ -407,10 +412,7 @@ export const updateAssignmentStatus = async (req, res) => {
     }
 
     // Invalidate caches
-    clearCacheByPattern('production:list:*');
-    if (result.data?.productionOrderId) {
-      clearCacheByPattern(`production:detail:${result.data.productionOrderId}`);
-    }
+    await invalidateProductionCaches(result.data?.productionOrderId || null);
 
     await logActivity({
       author: userId,
@@ -524,7 +526,7 @@ export const updateOrder = async (req, res) => {
 
     const result = await productionOrderService.updateProductionOrder(id, value, req.userId);
 
-    if (result.status === 'error') {
+    if (!result.success) {
       return res.status(StatusCodes.BAD_REQUEST).json({
         status: 'error',
         message: result.message,
@@ -533,8 +535,7 @@ export const updateOrder = async (req, res) => {
     }
 
     // Invalidate caches
-    clearCacheByPattern('production:list:*');
-    clearCacheByPattern(`production:detail:${id}`);
+    await invalidateProductionCaches(id);
 
     await logActivity({
       author: req.userId,
@@ -575,7 +576,7 @@ export const cancelOrder = async (req, res) => {
 
     const result = await productionOrderService.cancelProductionOrder(id, value.reason, req.userId);
 
-    if (result.status === 'error') {
+    if (!result.success) {
       return res.status(StatusCodes.BAD_REQUEST).json({
         status: 'error',
         message: result.message,
@@ -584,8 +585,7 @@ export const cancelOrder = async (req, res) => {
     }
 
     // Invalidate caches
-    clearCacheByPattern('production:list:*');
-    clearCacheByPattern(`production:detail:${id}`);
+    await invalidateProductionCaches(id);
 
     await logActivity({
       author: req.userId,

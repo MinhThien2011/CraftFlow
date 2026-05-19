@@ -141,7 +141,8 @@ export const getAllSlips = async (req, res) => {
             creator,
             materialId,
             productId,
-            category
+            category,
+            relatedProductionOrder
         } = req.query;
 
         const query = {
@@ -157,6 +158,7 @@ export const getAllSlips = async (req, res) => {
             materialId,
             productId,
             category,
+            relatedProductionOrder,
             page: parseInt(page) || 1,
             limit: parseInt(limit) || 10,
             cursor,

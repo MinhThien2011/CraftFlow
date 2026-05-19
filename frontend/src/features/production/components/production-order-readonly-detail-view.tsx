@@ -2,10 +2,10 @@
 
 import { format } from "date-fns"
 import { vi } from "date-fns/locale"
-import { CalendarDays, CheckCircle, ChevronLeft, Clock, Factory, FileText, Loader2, Package, User, XCircle, ClipboardList, UserPlus } from "lucide-react"
+import { CalendarDays, CheckCircle, ChevronLeft, Clock, Eye, Factory, FileText, Loader2, Package, User, XCircle, ClipboardList, UserPlus } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -15,10 +15,12 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
 import { ProductionOrderAssignmentDialog } from "@/features/production/components/production-order-assignment-dialog"
-import { useCancelProductionOrder, useProductionOrder, useUpdateOrderStatus, useUpdateProductionOrder, useOrderBom } from "@/features/production/hooks/use-production"
+import { useCancelProductionOrder, useCreateStockInSlip, useProductionOrder, useUpdateOrderStatus, useUpdateProductionOrder, useOrderBom } from "@/features/production/hooks/use-production"
 import { PRODUCTION_ORDER_STATUS, getProductionOrderStatusConfig, getAssignmentStatusConfig, getPriorityConfig } from "@/features/production/utils/production-status"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { Slip, slipApi } from "@/api/slip.api"
+import { SlipDetailDialog } from "@/components/shared/slip-detail-dialog"
 
 const formatDate = (dateString?: string) => {
   if (!dateString) return "---"
@@ -37,6 +39,7 @@ export function ProductionOrderReadonlyDetailView({ id, backHref, backLabel = "Q
   const { data: orderResponse, isLoading } = useProductionOrder(id)
   const { data: bomResponse, isLoading: isBomLoading } = useOrderBom(id)
   const updateOrderStatusMutation = useUpdateOrderStatus()
+  const createStockInSlipMutation = useCreateStockInSlip()
   const updateOrderMutation = useUpdateProductionOrder()
   const cancelOrderMutation = useCancelProductionOrder()
 
@@ -52,6 +55,9 @@ export function ProductionOrderReadonlyDetailView({ id, backHref, backLabel = "Q
   const [editDeadline, setEditDeadline] = useState("")
   const [editNotes, setEditNotes] = useState("")
   const [editReason, setEditReason] = useState("")
+  const [stockInSlip, setStockInSlip] = useState<Slip | null>(null)
+  const [isLoadingStockInSlip, setIsLoadingStockInSlip] = useState(false)
+  const [isSlipDialogOpen, setIsSlipDialogOpen] = useState(false)
 
   const order = (orderResponse?.data as any)?.order || orderResponse?.data
 
@@ -91,6 +97,58 @@ export function ProductionOrderReadonlyDetailView({ id, backHref, backLabel = "Q
   const totalQuantity = order.products?.reduce((sum: number, p: any) => sum + p.quantity, 0) || 0
   const totalCompleted = order.assignments?.reduce((sum: number, a: any) => sum + (a.completedQuantity || 0), 0) || 0
   const overallProgress = totalQuantity > 0 ? Math.min(100, Math.round((totalCompleted / totalQuantity) * 100)) : 0
+
+  useEffect(() => {
+    const loadStockInSlip = async () => {
+      if (!order?._id || order.status !== PRODUCTION_ORDER_STATUS.COMPLETED) {
+        setStockInSlip(null)
+        return
+      }
+      setIsLoadingStockInSlip(true)
+      try {
+        const response = await slipApi.getSlips({
+          type: "import",
+          category: "product",
+          relatedProductionOrder: order._id,
+          limit: 1,
+          page: 1,
+        })
+        setStockInSlip(response?.data?.slips?.[0] || null)
+      } catch {
+        setStockInSlip(null)
+      } finally {
+        setIsLoadingStockInSlip(false)
+      }
+    }
+    loadStockInSlip()
+  }, [order?._id, order?.status, updateOrderStatusMutation.isSuccess])
+
+  const handleCreateStockInSlip = () => {
+    if (!order?._id) return
+    createStockInSlipMutation.mutate(
+      { id: order._id, data: {} },
+      {
+        onSuccess: async (response: any) => {
+          const slipFromResponse = response?.data?.slip
+          if (!slipFromResponse?._id) return
+          try {
+            const detailRes = await slipApi.getSlipById(slipFromResponse._id)
+            setStockInSlip((detailRes as any)?.data || slipFromResponse)
+          } catch {
+            setStockInSlip(slipFromResponse)
+          }
+        }
+      }
+    )
+  }
+
+  const importStatusConfig = {
+    pending: { label: "Cho xu ly", color: "bg-amber-100 text-amber-700" },
+    received: { label: "Da nhan", color: "bg-blue-100 text-blue-700" },
+    inspected: { label: "Da kiem", color: "bg-cyan-100 text-cyan-700" },
+    in_stock: { label: "Nhap kho", color: "bg-emerald-100 text-emerald-700" },
+    cancelled: { label: "Da huy", color: "bg-rose-100 text-rose-700" },
+  }
 
   const handleOpenEdit = () => {
     if (!order) return
@@ -189,6 +247,19 @@ export function ProductionOrderReadonlyDetailView({ id, backHref, backLabel = "Q
             <ClipboardList className="mr-2 h-4 w-4" />
             Xem BOM
           </Button>
+          {canManage && isCompletedOrder && (
+            stockInSlip ? (
+              <Button variant="outline" onClick={() => setIsSlipDialogOpen(true)}>
+                <Eye className="mr-2 h-4 w-4" />
+                Xem phiếu nhập thành phẩm
+              </Button>
+            ) : (
+              <Button onClick={handleCreateStockInSlip} disabled={isLoadingStockInSlip || createStockInSlipMutation.isPending}>
+                {(isLoadingStockInSlip || createStockInSlipMutation.isPending) ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Tạo phiếu nhập kho
+              </Button>
+            )
+          )}
           {canAssignOrder && (
             <Button onClick={() => setIsAssignOpen(true)} className="bg-primary text-primary-foreground hover:bg-primary/90">
               <UserPlus className="mr-2 h-4 w-4" />
@@ -376,7 +447,7 @@ export function ProductionOrderReadonlyDetailView({ id, backHref, backLabel = "Q
             <DialogTitle className="text-xl font-bold text-[#4A9C6B]">Xác nhận hoàn thành đơn hàng</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <p className="text-sm text-muted-foreground">Sau khi hoàn thành, hệ thống sẽ cho phép tạo phiếu nhập thành phẩm tương ứng.</p>
+            <p className="text-sm text-muted-foreground">Sau khi xác nhận hoàn thành, hệ thống sẽ tự động tạo phiếu nhập kho thành phẩm cho kho.</p>
             <div className="space-y-2">
               <Label htmlFor="complete-note">Ghi chú hoàn thành (tùy chọn)</Label>
               <Textarea id="complete-note" value={completeNote} onChange={(event) => setCompleteNote(event.target.value)} rows={3} />
@@ -528,6 +599,14 @@ export function ProductionOrderReadonlyDetailView({ id, backHref, backLabel = "Q
           </div>
         </DialogContent>
       </Dialog>
+      <SlipDetailDialog
+        open={isSlipDialogOpen}
+        onOpenChange={setIsSlipDialogOpen}
+        slip={stockInSlip}
+        type="import"
+        statusConfig={importStatusConfig as any}
+        readOnly
+      />
     </div>
   )
 }
