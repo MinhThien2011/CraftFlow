@@ -27,8 +27,8 @@ import { useProductionOrders } from "@/features/production/hooks/use-production"
 
 function pctColor(p: number) {
   if (p >= 100) return "bg-emerald-500"
-  if (p >= 75)  return "bg-blue-500"
-  if (p >= 40)  return "bg-amber-500"
+  if (p >= 75) return "bg-blue-500"
+  if (p >= 40) return "bg-amber-500"
   return "bg-red-400"
 }
 
@@ -229,13 +229,13 @@ function OrderRow({ order }: { order: any }) {
   const assignments: any[] = order.assignments || []
   const products: any[] = order.products || []
 
-  const totalAssigned  = assignments.reduce((s, a) => s + (a.assignedQuantity  || 0), 0)
+  const totalAssigned = assignments.reduce((s, a) => s + (a.assignedQuantity || 0), 0)
   const totalCompleted = assignments.reduce((s, a) => s + (a.completedQuantity || 0), 0)
   const orderPct = calcPct(totalCompleted, totalAssigned)
 
   const mainProductName = products[0]?.product?.name || products[0]?.productName || "—"
-  const extraProducts   = products.length - 1
-  const isDeadlinePast  = order.deadline ? isPast(new Date(order.deadline)) : false
+  const extraProducts = products.length - 1
+  const isDeadlinePast = order.deadline ? isPast(new Date(order.deadline)) : false
 
   return (
     <div className={cn(
@@ -402,15 +402,15 @@ export default function TasksPage() {
       orders: orders.length,
       active: allAssignments.filter(a => ["in_production", "partially_complete"].includes(a.status)).length,
       completed: allAssignments.filter(a => a.status === "completed").length,
-      overdue: orders.filter(o => o.deadline && isPast(new Date(o.deadline)) && !["completed","cancelled"].includes(o.status)).length,
+      overdue: orders.filter(o => o.deadline && isPast(new Date(o.deadline)) && !["completed", "cancelled"].includes(o.status)).length,
     }
   }, [orders])
 
   const STAT_CARDS: StatCardProps[] = [
-    { label: "Đơn sản xuất",          value: stats.orders,    icon: ClipboardList, gradient: "bg-gradient-to-br from-violet-600 to-indigo-600", glow: "bg-violet-400",  loading: isLoading },
-    { label: "Công việc đang thực hiện", value: stats.active,  icon: Activity,      gradient: "bg-gradient-to-br from-amber-500 to-orange-500",  glow: "bg-amber-300",  loading: isLoading },
-    { label: "Công việc hoàn thành",   value: stats.completed, icon: CheckCircle,   gradient: "bg-gradient-to-br from-emerald-500 to-teal-600",   glow: "bg-emerald-300",loading: isLoading },
-    { label: "Đơn quá hạn",           value: stats.overdue,   icon: AlertTriangle,  gradient: "bg-gradient-to-br from-rose-500 to-pink-600",      glow: "bg-rose-300",   loading: isLoading },
+    { label: "Lệnh sản xuất", value: stats.orders, icon: ClipboardList, gradient: "bg-gradient-to-br from-violet-600 to-indigo-600", glow: "bg-violet-400", loading: isLoading },
+    { label: "Công việc đang thực hiện", value: stats.active, icon: Activity, gradient: "bg-gradient-to-br from-amber-500 to-orange-500", glow: "bg-amber-300", loading: isLoading },
+    { label: "Công việc hoàn thành", value: stats.completed, icon: CheckCircle, gradient: "bg-gradient-to-br from-emerald-500 to-teal-600", glow: "bg-emerald-300", loading: isLoading },
+    { label: "Đơn quá hạn", value: stats.overdue, icon: AlertTriangle, gradient: "bg-gradient-to-br from-rose-500 to-pink-600", glow: "bg-rose-300", loading: isLoading },
   ]
 
   return (
@@ -465,7 +465,7 @@ export default function TasksPage() {
         ) : filteredOrders.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 rounded-2xl border-2 border-dashed text-center">
             <Package className="w-10 h-10 text-muted-foreground/40 mb-3" />
-            <h3 className="text-base font-semibold mb-1">Không có đơn sản xuất nào</h3>
+            <h3 className="text-base font-semibold mb-1">Không có lệnh sản xuất nào</h3>
             <p className="text-sm text-muted-foreground">Thay đổi bộ lọc hoặc từ khóa tìm kiếm.</p>
           </div>
         ) : (

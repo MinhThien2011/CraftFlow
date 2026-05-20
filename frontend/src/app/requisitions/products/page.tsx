@@ -233,7 +233,7 @@ export default function ProductExportRequestsPage() {
                     <TableHead>Ngày tạo</TableHead>
                     <TableHead className="text-center">Số mặt hàng</TableHead>
                     <TableHead>Trạng thái</TableHead>
-                    <TableHead className="text-right pr-6">Thao tác</TableHead>
+                    <TableHead className="text-center pr-6">Thao tác</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -256,7 +256,7 @@ export default function ProductExportRequestsPage() {
                           {STATUS_CONFIG[req.status]?.label}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-right pr-6">
+                      <TableCell className="text-center pr-6">
                         <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedReq(req); setIsDialogOpen(true); }}>
                           <Eye className="size-4 mr-1" /> Chi tiết
                         </Button>

@@ -6,7 +6,7 @@ import { ProductionOrdersView } from "@/features/production/components/productio
 
 function ProductionManagerOrdersPage() {
   return (
-    <DashboardLayout title="Đơn sản xuất">
+    <DashboardLayout title="Lệnh sản xuất">
       <ProductionOrdersView detailBasePath="/production-management/orders" canCreate />
     </DashboardLayout>
   )

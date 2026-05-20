@@ -19,8 +19,8 @@ const CustomTooltip = ({ active, payload }: any) => {
           <span className="text-sm font-bold text-foreground">{payload[0].name}</span>
         </div>
         <div className="flex justify-between gap-4">
-          <span className="text-xs text-muted-foreground">Số đơn:</span>
-          <span className="text-xs font-extrabold text-foreground">{payload[0].value.toLocaleString()} đơn</span>
+          <span className="text-xs text-muted-foreground">Số lệnh:</span>
+          <span className="text-xs font-extrabold text-foreground">{payload[0].value.toLocaleString()} lệnh</span>
         </div>
       </div>
     )
@@ -48,7 +48,7 @@ export function StatusChart({ data }: StatusChartProps) {
             <h3 className="text-base sm:text-lg font-bold text-foreground">
               Trạng thái sản xuất
             </h3>
-            <p className="text-xs text-muted-foreground">Tỉ lệ phân bổ theo trạng thái đơn hàng</p>
+            <p className="text-xs text-muted-foreground">Tỉ lệ phân bổ theo trạng thái lệnh sản xuất</p>
           </div>
         </div>
 
@@ -63,7 +63,7 @@ export function StatusChart({ data }: StatusChartProps) {
                   {totalOrders}
                 </span>
                 <span className="text-[9px] font-extrabold text-muted-foreground uppercase tracking-widest block">
-                  Đơn lệnh
+                  Lệnh sản xuất
                 </span>
               </div>
 
@@ -112,7 +112,7 @@ export function StatusChart({ data }: StatusChartProps) {
                     </div>
                     <div className="text-right">
                       <span className="text-xs font-extrabold text-foreground block">
-                        {item.value} đơn
+                        {item.value} lệnh
                       </span>
                       <span className="text-[10px] text-muted-foreground block font-medium">
                         {percentage}%

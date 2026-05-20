@@ -61,12 +61,12 @@ export default function NewOrderPage() {
   }
 
   return (
-    <DashboardLayout title="Tạo đơn sản xuất mới">
+    <DashboardLayout title="Tạo lệnh sản xuất mới">
       <div className="flex justify-center">
         <Card className="w-full max-w-[640px] rounded-3xl border border-border bg-card shadow-sm overflow-hidden">
           <div className="p-8">
             <h1 className="text-[40px] font-extrabold leading-tight tracking-[-0.03em] text-card-foreground">
-              Tạo đơn sản xuất mới
+              Tạo lệnh sản xuất mới
             </h1>
           </div>
 
@@ -144,7 +144,7 @@ export default function NewOrderPage() {
                 </Label>
                 <Textarea
                   id="note"
-                  placeholder="Ghi chú cho đơn sản xuất..."
+                  placeholder="Ghi chú cho lệnh sản xuất..."
                   rows={3}
                   value={note}
                   onChange={(e) => setNote(e.target.value)}

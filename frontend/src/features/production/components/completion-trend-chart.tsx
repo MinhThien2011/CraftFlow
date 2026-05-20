@@ -47,7 +47,7 @@ export function CompletionTrendChart({ data }: CompletionTrendChartProps) {
             <h3 className="text-base sm:text-lg font-bold text-foreground">
               Xu hướng hoàn thành (14 ngày)
             </h3>
-            <p className="text-xs text-muted-foreground">Tốc độ hoàn thành đơn và sản lượng sản xuất</p>
+            <p className="text-xs text-muted-foreground">Tốc độ hoàn thành và sản lượng sản xuất</p>
           </div>
         </div>
 
@@ -76,7 +76,7 @@ export function CompletionTrendChart({ data }: CompletionTrendChartProps) {
                   iconSize={8}
                   formatter={(value) => <span className="text-xs font-semibold text-muted-foreground">{value}</span>}
                 />
-                <Area type="monotone" dataKey="completedOrders" name="Đơn hoàn thành" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorOrders)" activeDot={{ r: 5, strokeWidth: 0, fill: '#3b82f6' }} />
+                <Area type="monotone" dataKey="completedOrders" name="Lệnh sản xuất hoàn thành" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorOrders)" activeDot={{ r: 5, strokeWidth: 0, fill: '#3b82f6' }} />
                 <Area type="monotone" dataKey="totalProduced" name="SL hoàn thành" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorQuantity)" activeDot={{ r: 5, strokeWidth: 0, fill: '#10b981' }} />
               </AreaChart>
             </ResponsiveContainer>

@@ -372,7 +372,7 @@ export const updatePurchaseOrderStatusService = async (orderId, data, adminId) =
         purchaseOrder = await PurchaseOrder.findOneAndUpdate(
             { _id: orderId, status: PURCHASE_ORDER_STATUS.PENDING },
             { $set: updatePayload },
-            { new: true, session }
+            { returnDocument: 'after', session }
         );
 
         if (!purchaseOrder) {

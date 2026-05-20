@@ -14,6 +14,12 @@ batchRouter.get('/material/:materialId',
     batchController.getBatchesByMaterial
 );
 
+// Get batches allocated/used in a specific production order
+batchRouter.get('/production-order/:productionOrderId',
+    rolePermission([ROLES.KHO_MANAGER, ROLES.PRODUCTION_MANAGER, ROLES.ADMIN]),
+    batchController.getBatchesByProductionOrder
+);
+
 // Get batches expiring within N days
 batchRouter.get('/expiring',
     rolePermission([ROLES.KHO_MANAGER, ROLES.PRODUCTION_MANAGER, ROLES.ADMIN]),

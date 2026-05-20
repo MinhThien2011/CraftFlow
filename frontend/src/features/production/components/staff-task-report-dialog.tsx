@@ -27,15 +27,11 @@ import {
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { useUpdateAssignmentStatus } from "@/features/production/hooks/use-production"
 
-const VALID_STATUSES = ["in_production", "partially_complete", "completed"] as const
-type ReportStatus = typeof VALID_STATUSES[number]
 
 const reportSchema = z.object({
-  status: z.enum(VALID_STATUSES, { required_error: "Vui lòng chọn trạng thái" }),
   completedQuantity: z.coerce
     .number({ invalid_type_error: "Vui lòng nhập số hợp lệ" })
     .int("Số lượng phải là số nguyên")
@@ -57,7 +53,6 @@ export function StaffTaskReportDialog({ open, onOpenChange, task }: StaffTaskRep
   const form = useForm<ReportFormValues>({
     resolver: zodResolver(reportSchema),
     defaultValues: {
-      status: "in_production",
       completedQuantity: 0,
     },
   })
@@ -65,18 +60,14 @@ export function StaffTaskReportDialog({ open, onOpenChange, task }: StaffTaskRep
   // Sync form values whenever the selected task changes
   useEffect(() => {
     if (!task) return
-    const safeStatus = VALID_STATUSES.includes(task.status as ReportStatus)
-      ? (task.status as ReportStatus)
-      : "in_production"
     form.reset({
-      status: task.status === "assigned" ? "in_production" : safeStatus,
       completedQuantity: task.completedQuantity ?? 0,
     })
   }, [task, form])
 
   // Derived values — safe to compute even when task is null (Dialog won't render body)
   const maxQuantity: number = task?.assignedQuantity ?? 0
-  const product = task?.product ?? {}
+  const product = task?.productDetails ?? task?.product ?? {}
   const isCompleted = task?.status === "completed"
   const reportedToday = task?.lastReportedAt ? isToday(new Date(task.lastReportedAt)) : false
 
@@ -90,17 +81,8 @@ export function StaffTaskReportDialog({ open, onOpenChange, task }: StaffTaskRep
       })
       return
     }
-
-    // Auto-derive final status from quantity — no ambiguity
-    let finalStatus: ReportStatus = values.status
-    if (values.completedQuantity === maxQuantity) {
-      finalStatus = "completed"
-    } else if (values.completedQuantity > 0 && finalStatus === "completed") {
-      finalStatus = "partially_complete"
-    }
-
     updateStatus(
-      { id: task._id, data: { status: finalStatus, completedQuantity: values.completedQuantity } },
+      { id: task._id, data: { completedQuantity: values.completedQuantity } },
       { onSuccess: () => onOpenChange(false) }
     )
   }
@@ -211,29 +193,9 @@ export function StaffTaskReportDialog({ open, onOpenChange, task }: StaffTaskRep
                       </FormItem>
                     )}
                   />
-
-                  <FormField
-                    control={form.control}
-                    name="status"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Trạng thái công việc</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger className="h-12">
-                              <SelectValue placeholder="Chọn trạng thái" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="in_production">Đang thực hiện</SelectItem>
-                            <SelectItem value="partially_complete">Hoàn thành một phần</SelectItem>
-                            <SelectItem value="completed">Đã hoàn thành</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <div className="rounded-xl border bg-muted/30 p-3 text-sm text-muted-foreground">
+                    Trang thai cong viec se duoc he thong tu xac dinh dua tren so luong da hoan thanh.
+                  </div>
                 </form>
               </Form>
             )}
@@ -255,3 +217,5 @@ export function StaffTaskReportDialog({ open, onOpenChange, task }: StaffTaskRep
     </Dialog>
   )
 }
+
+

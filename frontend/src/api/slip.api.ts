@@ -87,6 +87,8 @@ export interface Slip {
 export interface FifoAuditItem {
     itemType: 'material' | 'product';
     itemId: string;
+    itemName?: string;
+    itemCode?: string;
     passed: boolean;
     violations: Array<{
         usedBatchId: string;

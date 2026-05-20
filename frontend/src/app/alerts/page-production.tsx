@@ -77,9 +77,9 @@ const getOrderCode = (item: AlertItem) => {
 
 const getOrderProductName = (item: AlertItem) => {
   const order = item.productionOrder
-  if (!order || typeof order === "string") return "Đơn sản xuất"
+  if (!order || typeof order === "string") return "Lệnh sản xuất"
   const firstProduct = order.products?.[0]?.product
-  return firstProduct?.name || order.product?.name || order.name || "Đơn sản xuất"
+  return firstProduct?.name || order.product?.name || order.name || "Lệnh sản xuất"
 }
 
 function ProductionAlertsPage() {
@@ -354,7 +354,7 @@ function ProductionAlertsPage() {
           <TabsList className="grid w-full grid-cols-3 max-w-[600px]">
             <TabsTrigger value="materials">Vật liệu ({filteredMaterials.length})</TabsTrigger>
             <TabsTrigger value="products">Thành phẩm  ({filteredProducts.length})</TabsTrigger>
-            <TabsTrigger value="orders">Đơn sản xuất ({filteredOrders.length})</TabsTrigger>
+            <TabsTrigger value="orders">Lệnh sản xuất ({filteredOrders.length})</TabsTrigger>
           </TabsList>
 
           <div className="mt-6 space-y-4">
@@ -477,7 +477,7 @@ function ProductionAlertsPage() {
                                   {item.currentStock.toLocaleString()} {item.unit}
                                 </div>
                                 <div className="text-sm font-semibold text-red-600 whitespace-nowrap md:text-right">
-                                    {item.shortageQuantity?.toLocaleString()} {item.unit}
+                                  {item.shortageQuantity?.toLocaleString()} {item.unit}
                                 </div>
 
                                 {!isAdmin && (

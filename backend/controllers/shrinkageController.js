@@ -1,6 +1,10 @@
 import { StatusCodes } from 'http-status-codes';
 import * as shrinkageService from '../services/shrinkageService.js';
-import { createShrinkageReportValidator, updateShrinkageStatusValidator } from '../validations/shrinkageValidation.js';
+import {
+    createShrinkageReportValidator,
+    updateShrinkageStatusValidator,
+    createShrinkageReturnRequestValidator
+} from '../validations/shrinkageValidation.js';
 import { logActivity } from '../utils/logger.js';
 import { clearCacheByPattern } from '../utils/redisFetching.js';
 
@@ -110,6 +114,51 @@ export const getAllShrinkageReports = async (req, res) => {
         return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
             status: 'error',
             message: 'Failed to retrieve shrinkage reports.'
+        });
+    }
+};
+
+export const createShrinkageReturnRequest = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { error, value } = createShrinkageReturnRequestValidator(req.body || {});
+        if (error) {
+            return res.status(StatusCodes.BAD_REQUEST).json({
+                status: 'error',
+                message: error.details.map(d => d.message).join(', ')
+            });
+        }
+
+        const result = await shrinkageService.createReturnRequestFromShrinkage(id, value, req.userId);
+        if (result.status === 'error') {
+            return res.status(StatusCodes.BAD_REQUEST).json(result);
+        }
+
+        clearCacheByPattern('shrinkage:*');
+        clearCacheByPattern('requisition:*');
+
+        return res.status(StatusCodes.OK).json(result);
+    } catch (error) {
+        console.error('[ShrinkageController] createShrinkageReturnRequest error:', error);
+        return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+            status: 'error',
+            message: 'Failed to create return request from shrinkage report.'
+        });
+    }
+};
+
+export const getShrinkageSummary = async (req, res) => {
+    try {
+        const result = await shrinkageService.getShrinkageSummary(req.query || {});
+        if (result.status === 'error') {
+            return res.status(StatusCodes.BAD_REQUEST).json(result);
+        }
+        return res.status(StatusCodes.OK).json(result);
+    } catch (error) {
+        console.error('[ShrinkageController] getShrinkageSummary error:', error);
+        return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+            status: 'error',
+            message: 'Failed to get shrinkage summary.'
         });
     }
 };

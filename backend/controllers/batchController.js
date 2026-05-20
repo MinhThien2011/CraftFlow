@@ -179,3 +179,21 @@ export const getItemFifoHistory = async (req, res) => {
         });
     }
 };
+
+export const getBatchesByProductionOrder = async (req, res) => {
+    try {
+        const { productionOrderId } = req.params;
+        const result = await fifoService.getBatchesByProductionOrder(productionOrderId);
+        if (!result.success) {
+            return res.status(StatusCodes.BAD_REQUEST).json(result);
+        }
+        return res.status(StatusCodes.OK).json(result);
+    } catch (error) {
+        console.error('[BatchController] getBatchesByProductionOrder error:', error);
+        return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+            success: false,
+            message: error.message,
+            data: null
+        });
+    }
+};

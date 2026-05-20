@@ -92,7 +92,7 @@ export function ProductionOrdersView({ detailBasePath, canCreate = false }: Prod
         }
       }
     } catch (error: any) {
-      toast.error(error.message || "Không thể tải danh sách đơn sản xuất")
+      toast.error(error.message || "Không thể tải danh sách lệnh sản xuất")
     } finally {
       setIsLoading(false)
       setIsRefreshing(false)
@@ -185,7 +185,7 @@ export function ProductionOrdersView({ detailBasePath, canCreate = false }: Prod
               className="bg-primary hover:bg-primary/95 text-primary-foreground shadow-sm h-10 px-4 rounded-xl text-sm font-semibold shrink-0"
             >
               <Plus className="mr-1.5 h-4 w-4" />
-              Tạo đơn mới
+              Tạo lệnh sản xuất mới
             </Button>
           )}
           <Button
@@ -230,7 +230,7 @@ export function ProductionOrdersView({ detailBasePath, canCreate = false }: Prod
         ) : orders.length === 0 ? (
           <div className="col-span-full rounded-xl border-2 border-dashed py-12 text-center">
             <Factory className="mx-auto mb-3 h-12 w-12 text-muted-foreground/50" />
-            <h3 className="text-lg font-medium text-foreground">Không có đơn sản xuất nào</h3>
+            <h3 className="text-lg font-medium text-foreground">Không có lệnh sản xuất nào</h3>
             <p className="mt-1 text-sm text-muted-foreground">Thay đổi bộ lọc hoặc từ khóa tìm kiếm để xem thêm</p>
           </div>
         ) : (

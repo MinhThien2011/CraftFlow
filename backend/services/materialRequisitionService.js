@@ -17,9 +17,14 @@ import { generateAtomicCode } from '../utils/codeGenerator.js';
 import { updateShelfLoad } from './shelfService.js';
 import { allocateBatchesForMaterial, createBatch } from './fifoService.js';
 import { createSlipService } from './importExportSlipService.js';
-import { autoUpdateInsufficientOrders } from './productionOrderService.js';
+import {
+  autoUpdateInsufficientOrders,
+  getMaterialIssueReadiness,
+  notifyAssignedStaffProductionStarted
+} from './productionOrderService.js';
 import { createNotification } from './notificationService.js';
 import { emitDataChanged, notifyUsersByRole } from './realtimeService.js';
+import InventoryShrinkageReport from '../models/InventoryShrinkageReport.js';
 import mongoose from 'mongoose';
 import { applyCreatedAtCursor, buildListPagination, normalizePagination } from '../utils/pagination.js';
 import { applyAggregateGuards } from '../utils/queryPerformance.js';
@@ -56,7 +61,7 @@ export const requestMaterials = async (productionOrderId, managerId, items) => {
       await createNotification({
         recipient: wm._id,
         title: 'Yêu cầu cấp vật tư mới',
-        message: `Đơn sản xuất ${order.orderCode} vừa tạo yêu cầu cấp vật tư mới (${requisitionCode}).`,
+        message: `Lệnh sản xuất ${order.orderCode} vừa tạo yêu cầu cấp vật tư mới (${requisitionCode}).`,
         type: 'INVENTORY',
         priority: 'MEDIUM',
         metaData: { requisitionId: newRequisition._id, orderId: order._id }
@@ -111,7 +116,7 @@ export const requestSupplementaryMaterials = async (productionOrderId, managerId
       type: REQUISITION_TYPE.SUPPLEMENTARY,
       parentRequisition: parentRequisitionId,
       status: REQUISITION_STATUS.PENDING,
-      notes: `Yêu cầu bổ sung cho đơn sản xuất ${productionOrder.orderCode}`
+      notes: `Yêu cầu bổ sung cho lệnh sản xuất ${productionOrder.orderCode}`
     });
 
     await newRequisition.save();
@@ -183,7 +188,7 @@ export const requestReturnMaterials = async (productionOrderId, managerId, items
       })),
       type: REQUISITION_TYPE.RETURN,
       status: REQUISITION_STATUS.RETURN_PENDING,
-      notes: `Yêu cầu hoàn trả vật liệu cho đơn sản xuất ${productionOrder.orderCode}`
+      notes: `Yêu cầu hoàn trả vật liệu cho lệnh sản xuất ${productionOrder.orderCode}`
     });
 
     await newRequisition.save();
@@ -260,7 +265,7 @@ export const approveReturnRequisition = async (requisitionId, managerId) => {
 
     const slipData = {
       type: INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT,
-      reason: `Nhập kho hoàn trả từ đơn sản xuất ${productionOrder?.orderCode || ''}`,
+      reason: `Nhập kho hoàn trả từ lệnh sản xuất ${productionOrder?.orderCode || ''}`,
       personName: requisition.createdBy?.fullName || 'Người hoàn trả',
       relatedProductionOrder: requisition.productionOrder,
       relatedRequisition: requisition._id,
@@ -276,6 +281,14 @@ export const approveReturnRequisition = async (requisitionId, managerId) => {
 
     requisition.relatedSlip = slipResult.data._id;
     await requisition.save({ session });
+
+    const linkedShrinkageReport = await InventoryShrinkageReport.findOne({
+      relatedReturnRequisition: requisition._id
+    }).session(session);
+    if (linkedShrinkageReport) {
+      linkedShrinkageReport.relatedReturnSlip = slipResult.data._id;
+      await linkedShrinkageReport.save({ session });
+    }
 
     // Trigger auto-update for orders with insufficient materials (since materials are returned)
     const returnedMaterialIds = requisition.items.map(item => item.material._id);
@@ -530,6 +543,7 @@ export const updateRequisitionByManager = async (requisitionId, updateData, mana
 export const updateRequisitionStatus = async (requisitionId, managerId, status, updateData = {}) => {
   const session = await mongoose.startSession();
   session.startTransaction();
+  let productionStarted = null;
   try {
     const requisition = await MaterialRequisition.findById(requisitionId)
       .populate('items.material')
@@ -661,16 +675,31 @@ export const updateRequisitionStatus = async (requisitionId, managerId, status, 
               productionOrder.materials[bomIndex].issuedQuantity += item.requestedQuantity;
             }
           }
-          if (productionOrder.status === ORDER_STATUS.INSUFFICIENT_MATERIALS || productionOrder.status === ORDER_STATUS.PENDING) {
+          if (productionOrder.status === ORDER_STATUS.ASSIGNED) {
+            await requisition.save({ session });
+            const readiness = await getMaterialIssueReadiness(productionOrder._id, session);
+            if (readiness.ready) {
+              productionOrder.status = ORDER_STATUS.IN_PRODUCTION;
+              productionStarted = {
+                orderId: productionOrder._id,
+                orderCode: productionOrder.orderCode
+              };
+            }
+          } else if (productionOrder.status === ORDER_STATUS.INSUFFICIENT_MATERIALS || productionOrder.status === ORDER_STATUS.PENDING) {
             productionOrder.status = ORDER_STATUS.READY_TO_ASSIGN;
           }
           await productionOrder.save({ session });
+
         }
       }
     }
 
     await requisition.save({ session });
     await session.commitTransaction();
+
+    if (productionStarted) {
+      await notifyAssignedStaffProductionStarted(productionStarted.orderId, productionStarted.orderCode);
+    }
 
     await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.KHO_MANAGER], {
       domains: ["requisitions", "production", "inventory", "materials", "slips"],
@@ -745,7 +774,7 @@ export const updateRequisitionSettings = async (value) => {
     let setting = await SystemSetting.findOneAndUpdate(
       { key: 'auto_accept_requisitions' },
       { $set: { value: !!value } },
-      { new: true, upsert: true }
+      { returnDocument: 'after', upsert: true }
     );
     return { success: true, message: 'Settings updated successfully.', data: { autoAcceptRequisitions: setting.value } };
   } catch (error) {

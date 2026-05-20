@@ -62,6 +62,8 @@ const dialogVariants = cva(
         '5xl': 'max-w-[calc(100%-2rem)] sm:max-w-5xl md:max-w-6xl',
         full: 'max-w-[calc(100%-2rem)] sm:max-w-[95vw] md:max-w-[90vw] lg:max-w-[1200px]',
         screen: 'max-w-full h-full sm:h-auto sm:max-w-[95vw] md:max-w-[90vw]',
+        '6xl': 'max-w-[calc(100%-2rem)] sm:max-w-3xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl',
+        '7xl': 'max-w-[calc(100%-2rem)] w-[90vw] lg:w-[80vw] xl:w-[1100px]',
       },
     },
     defaultVariants: {

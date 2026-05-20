@@ -130,7 +130,7 @@ export const updateMaterialService = async (id, updateData) => {
   try {
     const material = await Material.findByIdAndUpdate(id, updateData, { 
       session, 
-      new: true, 
+      returnDocument: 'after', 
       runValidators: true 
     });
 

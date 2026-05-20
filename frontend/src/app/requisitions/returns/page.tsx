@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { AppShell } from "@/components/app-shell"
@@ -8,17 +9,24 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Search, Eye, Check, X, Loader2, Clock, Undo2 } from "lucide-react"
+import { Search, Eye, Loader2 } from "lucide-react"
 import { requisitionApi } from "@/api/requisition.api"
 import { format } from "date-fns"
 import { vi } from "date-fns/locale"
 import { toast } from "sonner"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs } from "@/components/ui/tabs"
 import { useAuth } from "@/features/auth/hooks/use-auth"
 import {
-  Dialog, DialogContent, DialogDescription,
+  Dialog, DialogContent,
   DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
+
+const statusMap: Record<string, { label: string; className: string }> = {
+  return_pending: { label: "Chờ duyệt hoàn trả", className: "bg-amber-100 text-amber-800 border-amber-200" },
+  return_approved: { label: "Đã duyệt, chờ nhập kho", className: "bg-blue-100 text-blue-800 border-blue-200" },
+  returned: { label: "Đã tái nhập kho", className: "bg-green-100 text-green-800 border-green-200" },
+  cancelled: { label: "Đã hủy", className: "bg-rose-100 text-rose-800 border-rose-200" },
+}
 
 export default function ReturnRequisitionsPage() {
   const queryClient = useQueryClient()
@@ -27,23 +35,22 @@ export default function ReturnRequisitionsPage() {
   const [limit] = useState(10)
   const [searchQuery, setSearchQuery] = useState("")
   const [activeTab, setActiveTab] = useState("all")
-
   const [selectedReq, setSelectedReq] = useState<any>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['requisitions', 'returns', { page, limit, search: searchQuery, status: activeTab }],
-    queryFn: () => requisitionApi.getRequisitions({ 
-        page, 
-        limit, 
-        search: searchQuery, 
-        status: activeTab === 'all' ? undefined : activeTab,
-        type: 'return'
+    queryFn: () => requisitionApi.getRequisitions({
+      page,
+      limit,
+      search: searchQuery,
+      status: activeTab === 'all' ? undefined : activeTab,
+      type: 'return'
     })
   })
 
   const approveReturnMutation = useMutation({
-    mutationFn: (id: string) => requisitionApi.updateStatus(id, { status: 'return_approved' }),
+    mutationFn: (id: string) => requisitionApi.approveReturn(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['requisitions'] })
       toast.success("Đã duyệt yêu cầu hoàn trả")
@@ -59,8 +66,13 @@ export default function ReturnRequisitionsPage() {
   const pagination = responseData?.pagination || {};
   const totalPages = pagination?.totalPages || pagination?.pages || 1;
 
+  const renderStatus = (status: string) => {
+    const mapped = statusMap[status] || { label: status, className: "bg-muted text-muted-foreground border-border" }
+    return <Badge className={mapped.className}>{mapped.label}</Badge>
+  }
+
   return (
-    <AppShell title="Hoàn trả vật liệu" subtitle="Quản lý danh sách các yêu cầu hoàn trả vật tư về kho">
+    <AppShell title="Hoàn trả vật liệu" subtitle="Quản lý các yêu cầu hoàn trả vật tư về kho">
       <div className="space-y-6">
         <Card>
           <CardContent className="p-0">
@@ -88,7 +100,7 @@ export default function ReturnRequisitionsPage() {
                     <TableHead>Ngày tạo</TableHead>
                     <TableHead className="text-center">Số mặt hàng</TableHead>
                     <TableHead>Trạng thái</TableHead>
-                    <TableHead className="text-right pr-6">Thao tác</TableHead>
+                    <TableHead className="text-center pr-6">Thao tác</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -107,9 +119,8 @@ export default function ReturnRequisitionsPage() {
                         {format(new Date(req.createdAt), 'dd/MM/yyyy HH:mm', { locale: vi })}
                       </TableCell>
                       <TableCell className="text-center">{req.items?.length || 0}</TableCell>
-                      <TableCell>
-                      </TableCell>
-                      <TableCell className="text-right pr-6">
+                      <TableCell>{renderStatus(req.status)}</TableCell>
+                      <TableCell className="text-center pr-6">
                         <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedReq(req); setIsDialogOpen(true); }}>
                           <Eye className="size-4 mr-1" /> Chi tiết
                         </Button>
@@ -118,7 +129,7 @@ export default function ReturnRequisitionsPage() {
                   ))}
                 </TableBody>
               </Table>
-              
+
               {pagination && totalPages > 1 && (
                 <div className="flex items-center justify-between px-6 py-4 border-t bg-muted/10">
                   <p className="text-sm text-muted-foreground">
@@ -148,6 +159,10 @@ export default function ReturnRequisitionsPage() {
                   <p className="text-muted-foreground">Lệnh sản xuất:</p>
                   <p className="font-medium">{selectedReq.productionOrder?.orderCode || 'N/A'}</p>
                 </div>
+                <div>
+                  <p className="text-muted-foreground">Trạng thái:</p>
+                  <div className="mt-1">{renderStatus(selectedReq.status)}</div>
+                </div>
               </div>
 
               <div className="border rounded-md">
@@ -176,6 +191,11 @@ export default function ReturnRequisitionsPage() {
 
               <DialogFooter className="gap-2">
                 <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Đóng</Button>
+                {selectedReq.relatedSlip && (
+                  <Button variant="outline" asChild>
+                    <Link href={`/receiving/materials?slipId=${selectedReq.relatedSlip}`}>Xem phiếu nhập liên quan</Link>
+                  </Button>
+                )}
                 {selectedReq.status === 'return_pending' && isKhoManager && (
                   <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => approveReturnMutation.mutate(selectedReq._id)} disabled={approveReturnMutation.isPending}>
                     {approveReturnMutation.isPending && <Loader2 className="size-4 animate-spin mr-2" />}
@@ -190,3 +210,4 @@ export default function ReturnRequisitionsPage() {
     </AppShell>
   )
 }
+

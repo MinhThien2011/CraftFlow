@@ -19,7 +19,7 @@ function AdminProductionOrderDetailPage() {
   })
 
   return (
-    <DashboardLayout title="Chi tiết đơn sản xuất">
+    <DashboardLayout title="Chi tiết lệnh sản xuất">
       <ProductionOrderReadonlyDetailView id={id} backHref={backHref} canManage={false} />
     </DashboardLayout>
   )

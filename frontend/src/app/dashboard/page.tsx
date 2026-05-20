@@ -131,7 +131,7 @@ export default function DashboardPage() {
                         Xin chào, <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-emerald-600 to-teal-600">{user?.fullName || user?.username || 'Quản trị viên'}</span> 👋
                     </h1>
                     <p className="text-muted-foreground text-sm sm:text-base max-w-xl">
-                        Chào mừng đến với Trung tâm điều khiển CRAFTFLOW. Hệ thống đã đồng bộ toàn bộ dữ liệu quản trị sản xuất và kho bãi của nhà máy.
+                        Chào mừng đến với Trung tâm điều khiển CRAFTFLOW. Hệ thống đã đồng bộ toàn bộ dữ liệu quản trị sản xuất và kho.
                     </p>
                 </div>
                 

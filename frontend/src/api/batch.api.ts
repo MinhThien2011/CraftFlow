@@ -145,6 +145,13 @@ export const batchApi = {
     },
 
     /**
+     * Get batches used in a specific production order
+     */
+    getBatchesByProductionOrder: async (productionOrderId: string): Promise<ApiResponse<any[]>> => {
+        return axiosInstance.get(`/batches/production-order/${productionOrderId}`);
+    },
+
+    /**
      * Get batches for a specific material
      */
     getBatchesByMaterial: async (materialId: string, includeExhausted = false): Promise<ApiResponse<Batch[]>> => {

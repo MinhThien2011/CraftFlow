@@ -412,7 +412,7 @@ export const updateAssignmentStatus = async (req, res) => {
     }
 
     // Invalidate caches
-    await invalidateProductionCaches(result.data?.productionOrderId || null);
+    await invalidateProductionCaches(result.data?.assignment?.productionOrder || null);
 
     await logActivity({
       author: userId,

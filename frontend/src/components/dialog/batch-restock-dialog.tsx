@@ -180,7 +180,7 @@ export function BatchRestockDialog({ open, onOpenChange, selectedMaterials, onSu
               </div>
 
               <div className="space-y-2">
-                <Label>Đơn sản xuất</Label>
+                <Label>Lệnh sản xuất</Label>
                 <Select
                   value={order || "none"}
                   onValueChange={(value) => {

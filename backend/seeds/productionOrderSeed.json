@@ -5,7 +5,8 @@
         "quantity": 10,
         "status": "pending",
         "priority": "high",
-        "createdByUsername": "thien.pham"
+        "createdByUsername": "thien.pham",
+        "deadline": "2026-06-30T17:00:00Z"
     },
     {
         "orderCode": "CF-20260418-002",
@@ -13,7 +14,8 @@
         "quantity": 20,
         "status": "in_production",
         "priority": "medium",
-        "createdByUsername": "thien.pham"
+        "createdByUsername": "thien.pham",
+        "deadline": "2026-06-30T17:00:00Z"
     },
     {
         "orderCode": "CF-20260418-003",
@@ -21,6 +23,7 @@
         "quantity": 5,
         "status": "completed",
         "priority": "low",
-        "createdByUsername": "linh.tran"
+        "createdByUsername": "linh.tran",
+        "deadline": "2026-06-30T17:00:00Z"
     }
 ]

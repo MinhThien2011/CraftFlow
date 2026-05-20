@@ -60,7 +60,7 @@ export function PriorityChart({ data }: PriorityChartProps) {
             </div>
             <div>
               <h3 className="text-base sm:text-lg font-bold text-foreground">
-                Phân bổ độ ưu tiên đơn
+                Phân bổ độ ưu tiên lệnh sản xuất
               </h3>
               <p className="text-xs text-muted-foreground">Độ cấp thiết của kế hoạch sản xuất</p>
             </div>
@@ -68,7 +68,7 @@ export function PriorityChart({ data }: PriorityChartProps) {
           
           {urgentCount > 0 && (
             <span className="text-[10px] font-extrabold uppercase bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 px-2.5 py-1 rounded-full animate-bounce shadow-sm">
-              {urgentCount} Đơn khẩn
+              {urgentCount} lệnh khẩn
             </span>
           )}
         </div>
@@ -85,7 +85,7 @@ export function PriorityChart({ data }: PriorityChartProps) {
                     )}>
                       {item.name}
                     </span>
-                    <span className="text-muted-foreground">{item.value} đơn hàng</span>
+                    <span className="text-muted-foreground">{item.value} lệnh sản xuất</span>
                   </div>
                   <span className="font-extrabold text-foreground">{item.percentage}%</span>
                 </div>
@@ -106,15 +106,15 @@ export function PriorityChart({ data }: PriorityChartProps) {
           </div>
         ) : (
           <div className="h-[180px] flex items-center justify-center text-muted-foreground text-sm font-medium">
-            Chưa có dữ liệu ưu tiên đơn
+            Chưa có dữ liệu ưu tiên lệnh
           </div>
         )}
       </div>
 
       <div className="border-t border-border/50 pt-4 mt-4 flex items-center justify-between text-xs text-muted-foreground font-semibold">
-        <span>Tổng đơn hàng phân bổ:</span>
+        <span>Tổng lệnh sản xuất:</span>
         <span className="text-foreground font-extrabold text-sm bg-muted/60 px-2 py-0.5 rounded-md">
-          {totalOrders} đơn
+          {totalOrders} lệnh
         </span>
       </div>
     </div>

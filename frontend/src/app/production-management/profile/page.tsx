@@ -50,7 +50,7 @@ const recentActivities = [
     icon: ClipboardList,
     iconBg: "bg-[#2B8BE8]/10",
     iconColor: "text-[#2B8BE8]",
-    title: "Tạo đơn sản xuất mới",
+    title: "Tạo lệnh sản xuất mới",
     description: "Đơn PO-2024-010 - Giỏ tre đan tay",
     time: "2 giờ trước",
   },
@@ -64,7 +64,7 @@ const recentActivities = [
     description: "Phiếu NKTP-2026-140 cho đơn PO-2024-008",
     time: "5 giờ trước",
   },
-  
+
   {
     id: 3,
     type: "product_updated",
@@ -91,7 +91,7 @@ const recentActivities = [
     icon: CheckCircle,
     iconBg: "bg-[#4A9C6B]/10",
     iconColor: "text-[#4A9C6B]",
-    title: "Hoàn thành đơn sản xuất",
+    title: "Hoàn thành lệnh sản xuất",
     description: "Đơn PO-2024-005 đã hoàn thành đúng tiến độ",
     time: "3 ngày trước",
   },
@@ -322,11 +322,10 @@ export default function ProfilePage() {
               {recentActivities.map((activity, index) => {
                 const IconComponent = activity.icon
                 return (
-                  <div 
+                  <div
                     key={activity.id}
-                    className={`flex items-start gap-4 pb-4 ${
-                      index !== recentActivities.length - 1 ? "border-b border-border" : ""
-                    }`}
+                    className={`flex items-start gap-4 pb-4 ${index !== recentActivities.length - 1 ? "border-b border-border" : ""
+                      }`}
                   >
                     <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${activity.iconBg} flex-shrink-0`}>
                       <IconComponent className={`h-5 w-5 ${activity.iconColor}`} />

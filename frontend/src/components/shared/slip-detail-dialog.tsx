@@ -143,6 +143,10 @@ export function SlipDetailDialog({
     useEffect(() => {
         if (slip) {
             const items = JSON.parse(JSON.stringify(slip.items || []))
+            const defaultDepartment = isImport ? 'Bộ phận kho' : 'Bộ phận sản xuất'
+            const defaultReferenceDescription = isImport ? 'Phiếu nhập kho' : 'Yêu cầu cấp vật tư'
+            const defaultWarehouseName = isImport ? 'Kho nhập' : 'Kho xuất vật tư'
+            const referenceDate = slip.referenceDoc?.date ? format(new Date(slip.referenceDoc.date), 'yyyy-MM-dd') : format(new Date(slip.date), 'yyyy-MM-dd')
 
             // Tự động điền số lượng tạm nhập = yêu cầu nếu đang ở bước pending và chưa có số liệu
             if (isImport && currentStatus === 'pending') {
@@ -171,6 +175,14 @@ export function SlipDetailDialog({
                     }
                 })
             }
+            // Phiếu xuất: khi vào bước kiểm hàng, mặc định lấy thực tế = yêu cầu nếu chưa có số liệu
+            else if (!isImport && currentStatus === 'inspecting') {
+                items.forEach((item: any) => {
+                    if (!item.quantity.actual || item.quantity.actual === 0) {
+                        item.quantity.actual = item.quantity.requested || 0
+                    }
+                })
+            }
 
             // Cập nhật lại amount cho tất cả các item dựa trên số lượng mới nhất
             items.forEach((item: any) => {
@@ -180,24 +192,24 @@ export function SlipDetailDialog({
 
             setEditableItems(items)
             setEditableSlipInfo({
-                personName: slip.personName || '',
-                unit: slip.unit || '',
-                department: slip.department || '',
+                personName: slip.personName || slip.signatures?.personInOut || '',
+                unit: slip.unit || 'CraftFlow',
+                department: slip.department || defaultDepartment,
                 accounting: {
                     debit: slip.accounting?.debit || '',
                     credit: slip.accounting?.credit || ''
                 },
                 referenceDoc: {
-                    description: slip.referenceDoc?.description || '',
-                    number: slip.referenceDoc?.number || '',
-                    date: slip.referenceDoc?.date ? format(new Date(slip.referenceDoc.date), 'yyyy-MM-dd') : '',
-                    issuer: slip.referenceDoc?.issuer || ''
+                    description: slip.referenceDoc?.description || defaultReferenceDescription,
+                    number: slip.referenceDoc?.number || slip.slipNumber || '',
+                    date: referenceDate,
+                    issuer: slip.referenceDoc?.issuer || 'CraftFlow'
                 },
                 warehouse: {
-                    name: slip.warehouse?.name || '',
-                    location: slip.warehouse?.location || ''
+                    name: slip.warehouse?.name || defaultWarehouseName,
+                    location: slip.warehouse?.location || 'Kho trung tâm'
                 },
-                originalDocsCount: slip.originalDocsCount || ''
+                originalDocsCount: slip.originalDocsCount || '01'
             })
         } else {
             setEditableItems([])
@@ -883,7 +895,7 @@ export function SlipDetailDialog({
                                         <Badge className="bg-gray-100 text-gray-700 border-gray-200">Đang kiểm tra...</Badge>
                                     ) : fifoAudit ? (
                                         <Badge className={fifoAudit.passed ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-red-100 text-red-700 border-red-200"}>
-                                            {fifoAudit.passed ? "Đạt FIFO" : "Lệch FIFO"}
+                                            {fifoAudit.passed ? <CheckCircle2 className="size-3.5" aria-label="Đạt FIFO" /> : "Lệch FIFO"}
                                         </Badge>
                                     ) : (
                                         <Badge className="bg-amber-100 text-amber-700 border-amber-200">Chưa có dữ liệu</Badge>
@@ -907,10 +919,10 @@ export function SlipDetailDialog({
                                                         <div key={`alloc-${item.itemType}-${item.itemId}`} className="rounded-md border border-gray-100 bg-gray-50/60 p-2">
                                                             <div className="mb-1 flex items-center justify-between gap-2">
                                                                 <span className="text-[11px] font-medium text-foreground">
-                                                                    {item.itemType === "material" ? "Nguyên liệu" : "Thành phẩm"} · {item.itemId}
+                                                                    {item.itemType === "material" ? "Nguyên liệu" : "Thành phẩm"} · {item.itemName || item.itemId}
                                                                 </span>
                                                                 <Badge className={item.passed ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-red-100 text-red-700 border-red-200"}>
-                                                                    {item.passed ? "Đúng FIFO" : "Lệch FIFO"}
+                                                                    {item.passed ? <CheckCircle2 className="size-3.5" aria-label="Đạt FIFO" /> : "Lệch FIFO"}
                                                                 </Badge>
                                                             </div>
                                                             {item.allocations?.length ? (

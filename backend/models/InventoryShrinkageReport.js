@@ -22,9 +22,38 @@ const InventoryShrinkageReportSchema = new mongoose.Schema({
         ref: 'Material',
         required: true,
     },
+    productionOrder: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'ProductionOrder',
+    },
     shrinkageAmount: {
         type: Number,
         required: true,
+        min: 0,
+    },
+    totalReceivedQuantity: {
+        type: Number,
+        default: 0,
+        min: 0,
+    },
+    totalUsedQuantity: {
+        type: Number,
+        default: 0,
+        min: 0,
+    },
+    remainingQuantity: {
+        type: Number,
+        default: 0,
+        min: 0,
+    },
+    notableMetrics: {
+        type: String,
+        trim: true,
+        default: '',
+    },
+    returnableQuantity: {
+        type: Number,
+        default: 0,
         min: 0,
     },
     shrinkageReason: {
@@ -59,6 +88,14 @@ const InventoryShrinkageReportSchema = new mongoose.Schema({
     adminNotes: {
         type: String,
     },
+    relatedReturnRequisition: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'MaterialRequisition',
+    },
+    relatedReturnSlip: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'InventoryImportExportSlip',
+    },
     resolvedAt: {
         type: Date,
     },
@@ -68,12 +105,14 @@ const InventoryShrinkageReportSchema = new mongoose.Schema({
 }, {
     timestamps: true,
     toJSON: { versionKey: false },
-    toObject: { versionKey: false }
+    toObject: { versionKey: false },
+    collection: 'inventory_material_losses'
 });
 
 InventoryShrinkageReportSchema.index({ status: 1 });
 InventoryShrinkageReportSchema.index({ material: 1 });
 InventoryShrinkageReportSchema.index({ batch: 1 });
+InventoryShrinkageReportSchema.index({ productionOrder: 1 });
 InventoryShrinkageReportSchema.index({ createdBy: 1 });
 InventoryShrinkageReportSchema.index({ checkedBy: 1 });
 

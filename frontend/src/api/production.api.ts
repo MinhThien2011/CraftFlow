@@ -101,7 +101,7 @@ export const productionApi = {
     /**
      * Update task/assignment status (used by staff)
      */
-    updateAssignmentStatus: async (id: string, data: { status: string; completedQuantity: number }): Promise<ApiResponse<any>> => {
+    updateAssignmentStatus: async (id: string, data: { status?: string; completedQuantity: number }): Promise<ApiResponse<any>> => {
         return axiosInstance.patch(`/production/assignments/${id}/status`, data);
     },
 

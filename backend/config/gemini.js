@@ -1,16 +1,15 @@
-import { GoogleGenAI } from "@google/genai";
+﻿import { GoogleGenAI } from "@google/genai";
 
-// Khởi tạo instance với API Key
 const ai = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY
+  apiKey: process.env.GEMINI_API_KEY,
 });
 
 export const modelConfig = {
-    model: "gemini-3-flash-preview", // Sử dụng model như tài liệu bạn đưa
-    generationConfig: {
-        temperature: 0.1,
-        maxOutputTokens: 8192,
-    }
+  model: process.env.AI_MODEL_PRIMARY || "gemini-3-flash-preview",
+  generationConfig: {
+    temperature: 0.1,
+    maxOutputTokens: 8192,
+  },
 };
 
 export default ai;

@@ -77,6 +77,7 @@ export function StaffTasksView() {
           return {
             ...a,
             orderCode: order.orderCode,
+            orderStatus: order.status,
             orderPriority: order.priority,
             orderDeadline: order.deadline,
             productDetails: { name, code, unit }
@@ -181,7 +182,8 @@ export function StaffTasksView() {
 
             // ─── Daily report check ──────────────────────────────────────
             const reportedToday = task.lastReportedAt ? isToday(new Date(task.lastReportedAt)) : false
-            const canReport = !isCompleted && !reportedToday
+            const isOrderStarted = ["in_production", "partially_complete"].includes(task.orderStatus)
+            const canReport = !isCompleted && !reportedToday && isOrderStarted
 
             return (
               <div
@@ -252,11 +254,13 @@ export function StaffTasksView() {
                   <Button
                     className="w-full mt-2"
                     variant={canReport ? "default" : "outline"}
-                    disabled={reportedToday && !isCompleted}
+                    disabled={!canReport && !isCompleted}
                     onClick={() => setSelectedTask(task)}
                   >
                     {isCompleted
                       ? "Xem chi tiết"
+                      : !isOrderStarted
+                      ? "Cho kho xuat vat lieu"
                       : reportedToday
                       ? "Đã báo cáo hôm nay"
                       : "Báo cáo tiến độ"}

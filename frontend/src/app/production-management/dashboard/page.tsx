@@ -95,7 +95,7 @@ export default function DashboardPage() {
       urgent: false
     },
     {
-      title: "Đơn sản xuất",
+      title: "Lệnh sản xuất",
       value: overview?.totalOrders || 0,
       icon: ClipboardList,
       href: "/production-management/orders",
@@ -146,50 +146,50 @@ export default function DashboardPage() {
       <div className="flex flex-col space-y-6 pb-12">
         {/* HERO BANNER */}
         <div className="relative overflow-hidden rounded-[2rem] bg-card/60 backdrop-blur-2xl border border-white/20 dark:border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.2)] p-8 sm:p-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            {/* Ambient glows */}
-            <div className="absolute -top-24 -right-24 w-96 h-96 bg-primary/20 rounded-full blur-3xl opacity-50 pointer-events-none"></div>
-            <div className="absolute bottom-0 left-10 w-64 h-32 bg-amber-500/10 rounded-full blur-3xl opacity-50 pointer-events-none"></div>
-            
-            <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-                <div>
-                    <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground mb-2">
-                        Xin chào, <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-amber-600 to-yellow-600">{user?.fullName || user?.username || 'Quản lý'}</span> 👋
-                    </h1>
-                    <p className="text-muted-foreground text-sm sm:text-base max-w-xl">
-                        Chào mừng bạn trở lại Trung tâm Điều hành Sản xuất. Các chỉ số hiệu suất dây chuyền và vật tư đã được cập nhật thời gian thực.
-                    </p>
-                </div>
-                
-                <div className="flex-shrink-0">
-                    {!isLoading && (
-                        <div className={cn(
-                          "inline-flex items-center gap-3 px-5 py-3 rounded-2xl border transition-all duration-300",
-                          (overview?.pendingMaterialAlerts || 0) > 0
-                            ? "bg-red-500/10 border-red-500/30 text-red-700 dark:text-red-400 shadow-[0_0_20px_rgba(239,68,68,0.15)]"
-                            : "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-400"
-                        )}>
-                            {(overview?.pendingMaterialAlerts || 0) > 0 ? (
-                                <>
-                                    <div className="relative flex h-3 w-3">
-                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                                      <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-                                    </div>
-                                    <span className="text-sm font-semibold">
-                                        Nhà máy có <span className="text-lg font-bold">{overview?.pendingMaterialAlerts}</span> đơn thiếu vật tư
-                                    </span>
-                                </>
-                            ) : (
-                                <>
-                                    <CheckCircle2 className="size-5 text-emerald-500" />
-                                    <span className="text-sm font-semibold">
-                                        Dây chuyền đang vận hành trơn tru
-                                    </span>
-                                </>
-                            )}
-                        </div>
-                    )}
-                </div>
+          {/* Ambient glows */}
+          <div className="absolute -top-24 -right-24 w-96 h-96 bg-primary/20 rounded-full blur-3xl opacity-50 pointer-events-none"></div>
+          <div className="absolute bottom-0 left-10 w-64 h-32 bg-amber-500/10 rounded-full blur-3xl opacity-50 pointer-events-none"></div>
+
+          <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+            <div>
+              <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground mb-2">
+                Xin chào, <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-amber-600 to-yellow-600">{user?.fullName || user?.username || 'Quản lý'}</span> 👋
+              </h1>
+              <p className="text-muted-foreground text-sm sm:text-base max-w-xl">
+                Chào mừng bạn trở lại Trung tâm Điều hành Sản xuất. Các chỉ số hiệu suất sản xuất và vật tư đã được cập nhật thời gian thực.
+              </p>
             </div>
+
+            <div className="flex-shrink-0">
+              {!isLoading && (
+                <div className={cn(
+                  "inline-flex items-center gap-3 px-5 py-3 rounded-2xl border transition-all duration-300",
+                  (overview?.pendingMaterialAlerts || 0) > 0
+                    ? "bg-red-500/10 border-red-500/30 text-red-700 dark:text-red-400 shadow-[0_0_20px_rgba(239,68,68,0.15)]"
+                    : "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-400"
+                )}>
+                  {(overview?.pendingMaterialAlerts || 0) > 0 ? (
+                    <>
+                      <div className="relative flex h-3 w-3">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                      </div>
+                      <span className="text-sm font-semibold">
+                        Nhà máy có <span className="text-lg font-bold">{overview?.pendingMaterialAlerts}</span> đơn thiếu vật tư
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="size-5 text-emerald-500" />
+                      <span className="text-sm font-semibold">
+                        Dây chuyền đang vận hành trơn tru
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* BENTO GRID: STATS ROW */}
@@ -204,12 +204,12 @@ export default function DashboardPage() {
                   "absolute inset-0 rounded-[2rem] opacity-0 group-hover:opacity-100 transition-opacity duration-700 blur-2xl -z-10",
                   stat.glowAccent
                 )} />
-                
+
                 <div className={cn(
                   "relative h-full flex flex-col justify-between overflow-hidden rounded-[2rem] border border-white/40 dark:border-white/10 bg-gradient-to-br from-card/85 to-card/35 backdrop-blur-3xl p-6 sm:p-7 transition-all duration-500 group-hover:-translate-y-1.5 shadow-sm hover:shadow-xl",
                   stat.urgent ? "ring-1 ring-red-500/30 shadow-[0_10px_30px_rgba(239,68,68,0.05)]" : "hover:shadow-black/5"
                 )}>
-                  
+
                   {/* Card Header */}
                   <div className="flex justify-between items-start gap-4">
                     <div className="space-y-1.5">
@@ -226,17 +226,17 @@ export default function DashboardPage() {
                       <stat.icon className={cn("size-5 sm:size-6", stat.iconColor)} />
                     </div>
                   </div>
-                  
+
                   {/* Card Value */}
                   <div className="mt-6 flex items-end justify-between z-10">
                     <span className="text-4xl sm:text-5xl font-extrabold tracking-tighter text-foreground drop-shadow-sm transition-all duration-300 group-hover:text-primary">
                       {stat.value}
                     </span>
                   </div>
-                  
+
                   {/* Subtle watermark background icon */}
                   <stat.icon className="absolute -bottom-6 -right-6 size-28 text-foreground/[0.02] rotate-[-15deg] pointer-events-none transition-transform duration-700 group-hover:rotate-0 group-hover:scale-110" />
-                  
+
                 </div>
               </Link>
             ))

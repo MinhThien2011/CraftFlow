@@ -18,7 +18,7 @@ const notificationSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        enum: ['SYSTEM', 'ORDER', 'INVENTORY', 'APPROVAL', 'ALERT'],
+        enum: ['SYSTEM', 'ORDER', 'INVENTORY', 'APPROVAL', 'ALERT', 'TASK', 'PURCHASE_ORDER', 'PRODUCTION'],
         default: 'SYSTEM'
     },
     priority: {

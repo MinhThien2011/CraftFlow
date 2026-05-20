@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { AppShell } from "@/components/app-shell"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
@@ -47,6 +48,7 @@ const EXPORT_STATUS_CONFIG: Record<string, { label: string, color: string }> = {
 
 export default function MaterialRequisitionsPage() {
   const queryClient = useQueryClient()
+  const router = useRouter()
   const { isAdmin, isKhoManager, loading: authLoading } = useAuth()
   const canOperateWarehouseSlip = isKhoManager
   const [page, setPage] = useState(1)
@@ -133,10 +135,14 @@ export default function MaterialRequisitionsPage() {
   const updateSlipStatusMutation = useMutation({
     mutationFn: ({ id, status, items }: { id: string, status: string, items: any[] }) =>
       slipApi.updateSlipStatus(id, { status, items }),
-    onSuccess: () => {
+    onSuccess: (_res, variables) => {
       queryClient.invalidateQueries({ queryKey: ['requisitions'] })
       queryClient.invalidateQueries({ queryKey: ['slips'] })
       toast.success("Đã cập nhật trạng thái phiếu xuất")
+      if (variables.status === 'received') {
+        router.push(`/issuing/pick-list?slipId=${variables.id}`)
+        return
+      }
       if (currentSlip) handleViewSlip(currentSlip._id)
     },
     onError: (error: any) => {
@@ -248,7 +254,7 @@ export default function MaterialRequisitionsPage() {
                     <TableHead>Ngày tạo</TableHead>
                     <TableHead className="text-center">Số mặt hàng</TableHead>
                     <TableHead>Trạng thái</TableHead>
-                    <TableHead className="text-right pr-6">Thao tác</TableHead>
+                    <TableHead className="text-center pr-6">Thao tác</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -281,7 +287,7 @@ export default function MaterialRequisitionsPage() {
                           {REQUISITION_STATUS_CONFIG[req.status]?.label}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-right pr-6">
+                      <TableCell className="text-center pr-6">
                         <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedReq(req); setIsDialogOpen(true); }}>
                           <Eye className="size-4 mr-1" /> Chi tiết
                         </Button>

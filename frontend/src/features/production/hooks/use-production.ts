@@ -67,7 +67,7 @@ export function useUpdateAssignmentStatus() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ id, data }: { id: string; data: { status: string; completedQuantity: number } }) =>
+        mutationFn: ({ id, data }: { id: string; data: { status?: string; completedQuantity: number } }) =>
             productionApi.updateAssignmentStatus(id, data),
         onSuccess: (response, variables) => {
             queryClient.invalidateQueries({ queryKey: productionKeys.all });
@@ -163,7 +163,7 @@ export function useUpdateProductionOrder() {
             productionApi.updateOrder(id, data),
         onSuccess: (response, variables) => {
             queryClient.invalidateQueries({ queryKey: productionKeys.all });
-            toast.success("Cập nhật đơn sản xuất thành công");
+            toast.success("Cập nhật lệnh sản xuất thành công");
         },
         onError: (error: any) => {
             toast.error(error.response?.data?.message || error.message || "Cập nhật thất bại");
@@ -179,7 +179,7 @@ export function useCancelProductionOrder() {
             productionApi.cancelOrder(id, reason),
         onSuccess: (response, variables) => {
             queryClient.invalidateQueries({ queryKey: productionKeys.all });
-            toast.success("Đã hủy đơn sản xuất thành công");
+            toast.success("Đã hủy lệnh sản xuất thành công");
         },
         onError: (error: any) => {
             toast.error(error.response?.data?.message || error.message || "Hủy đơn thất bại");

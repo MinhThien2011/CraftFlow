@@ -69,7 +69,7 @@ const ACTION_OPTIONS = [
   { value: "CREATE_IMPORT", label: "Tạo phiếu nhập" },
   { value: "APPROVE_IMPORT", label: "Duyệt nhập kho" },
   { value: "STOCK_ADJUSTMENT", label: "Điều chỉnh tồn kho" },
-  { value: "CREATE_PRODUCTION", label: "Tạo đơn sản xuất" },
+  { value: "CREATE_PRODUCTION", label: "Tạo lệnh sản xuất" },
   { value: "UPDATE_SETTINGS", label: "Cập nhật cài đặt" },
   { value: "VIEW_REPORT", label: "Xem báo cáo" },
 ]
@@ -149,7 +149,7 @@ function getActionLabel(action: string) {
     CREATE_IMPORT: "Tạo phiếu nhập",
     APPROVE_IMPORT: "Duyệt nhập kho",
     STOCK_ADJUSTMENT: "Điều chỉnh tồn kho",
-    CREATE_PRODUCTION: "Tạo đơn sản xuất",
+    CREATE_PRODUCTION: "Tạo lệnh sản xuất",
     UPDATE_SETTINGS: "Cập nhật cài đặt",
     VIEW_REPORT: "Xem báo cáo",
   }

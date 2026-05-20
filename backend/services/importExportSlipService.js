@@ -134,9 +134,30 @@ async function processMaterialUpdate(item, slip, userId, session, transactionDoc
                 performedBy: userId,
                 note: `FIFO via ${slip.slipNumber}. Batch: ${allocation.batchNumber}`,
                 orderRef: slip.slipNumber,
-                batch: allocation.batch
+                batch: allocation.batch,
+                requisition: slip.relatedRequisition || undefined,
+                productionOrder: slip.relatedProductionOrder || undefined
             });
             beforeStock -= allocation.quantityAllocated;
+        }
+
+        // Update MaterialRequisition batchAllocations if linked
+        if (slip.relatedRequisition) {
+            const requisition = await MaterialRequisition.findById(slip.relatedRequisition).session(session);
+            if (requisition) {
+                const reqItemIndex = requisition.items.findIndex(
+                    (ri) => ri.material.toString() === item.material.toString()
+                );
+                if (reqItemIndex > -1) {
+                    requisition.items[reqItemIndex].batchAllocations = fifoResult.data.map(allocation => ({
+                        batch: allocation.batch,
+                        batchNumber: allocation.batchNumber,
+                        quantityAllocated: allocation.quantityAllocated,
+                        expirationDate: allocation.expirationDate
+                    }));
+                    await requisition.save({ session });
+                }
+            }
         }
         const updatedMaterial = await Material.findOneAndUpdate(
             { _id: item.material, currentStock: { $gte: quantity } },
@@ -198,7 +219,7 @@ async function processProductUpdate(item, slip, userId, session, transactionDocs
         const updatedProduct = await Product.findByIdAndUpdate(
             item.product,
             update,
-            { new: true, session }
+            { returnDocument: 'after', session }
         );
         if (!updatedProduct) {
             throw new Error(`Product ${item.product} not found.`);
@@ -973,6 +994,24 @@ export const getSlipFifoAuditService = async (slipId) => {
             .lean();
 
         const grouped = new Map(); // key: m:<id> or p:<id>
+        const itemMetaByKey = new Map();
+
+        for (const item of slip.items || []) {
+            const materialId = item.material?.toString?.() || item.material;
+            const productId = item.product?.toString?.() || item.product;
+            if (materialId) {
+                itemMetaByKey.set(`m:${materialId}`, {
+                    itemName: item.itemName || '',
+                    itemCode: item.itemCode || ''
+                });
+            } else if (productId) {
+                itemMetaByKey.set(`p:${productId}`, {
+                    itemName: item.itemName || '',
+                    itemCode: item.itemCode || ''
+                });
+            }
+        }
+
         for (const tx of txs) {
             const key = tx.material ? `m:${tx.material.toString()}` : tx.product ? `p:${tx.product.toString()}` : null;
             if (!key || !tx.batch) continue;
@@ -1027,6 +1066,8 @@ export const getSlipFifoAuditService = async (slipId) => {
             itemAudits.push({
                 itemType: kind === 'm' ? 'material' : 'product',
                 itemId,
+                itemName: itemMetaByKey.get(key)?.itemName || '',
+                itemCode: itemMetaByKey.get(key)?.itemCode || '',
                 passed: violations.length === 0,
                 violations,
                 allocations: allocs.map((tx) => ({

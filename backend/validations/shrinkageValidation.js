@@ -16,6 +16,7 @@ export const createShrinkageReportValidator = (data) => {
             'any.required': 'Material ID is required.',
             'string.length': 'Invalid Material ID format.'
         }),
+        productionOrderId: objectId.optional().allow(null),
         shrinkageAmount: Joi.number().positive().required().messages({
             'number.base': 'Shrinkage amount must be a number.',
             'number.positive': 'Shrinkage amount must be greater than zero.',
@@ -25,7 +26,8 @@ export const createShrinkageReportValidator = (data) => {
             'string.empty': 'Shrinkage reason is required.',
             'string.min': 'Reason must be at least 5 characters long.'
         }),
-        shrinkageImage: Joi.string().uri().optional().allow('', null)
+        shrinkageImage: Joi.string().uri().optional().allow('', null),
+        notableMetrics: Joi.string().trim().max(1000).optional().allow('', null)
     });
     return schema.validate(data, { abortEarly: false });
 };
@@ -40,6 +42,13 @@ export const updateShrinkageStatusValidator = (data) => {
             'any.required': 'Status is required.'
         }),
         adminNotes: Joi.string().trim().max(500).optional().allow('', null)
+    });
+    return schema.validate(data, { abortEarly: false });
+};
+
+export const createShrinkageReturnRequestValidator = (data) => {
+    const schema = Joi.object({
+        requestedQuantity: Joi.number().positive().optional()
     });
     return schema.validate(data, { abortEarly: false });
 };

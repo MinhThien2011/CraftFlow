@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { Suspense, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ArrowRight, CheckCircle2, Clock3, Loader2, Package, PackageCheck, Search, Truck } from "lucide-react"
@@ -46,7 +46,7 @@ function getSlipCategoryPath(slip: Slip) {
   return slip.items.some((item) => !!item.product) ? "/issuing/products" : "/issuing/materials"
 }
 
-export default function PickListPage() {
+function PickListPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const queryClient = useQueryClient()
@@ -363,5 +363,13 @@ export default function PickListPage() {
         </div>
       </div>
     </AppShell>
+  )
+}
+
+export default function PickListPage() {
+  return (
+    <Suspense fallback={null}>
+      <PickListPageContent />
+    </Suspense>
   )
 }

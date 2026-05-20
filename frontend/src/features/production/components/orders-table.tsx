@@ -39,7 +39,7 @@ export function OrdersTable({ orders, isLoading, onOrderClick }: OrdersTableProp
           ) : orders.length === 0 ? (
             <tr>
               <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground">
-                Không tìm thấy đơn sản xuất nào
+                Không tìm thấy lệnh sản xuất nào
               </td>
             </tr>
           ) : (

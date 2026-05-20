@@ -16,6 +16,116 @@ import { emitDataChanged, notifyUsersByRole } from './realtimeService.js';
 import { applyCreatedAtCursor, buildListPagination, normalizePagination } from '../utils/pagination.js';
 
 
+const STAFF_VISIBLE_ORDER_STATUSES = [
+  ORDER_STATUS.IN_PRODUCTION,
+  ORDER_STATUS.PARTIALLY_COMPLETE,
+  ORDER_STATUS.COMPLETED
+];
+
+const getMaterialRequirementMap = async (order, session = null) => {
+  const requirements = new Map();
+
+  for (const item of order.materials || []) {
+    const materialId = item.material?._id || item.material;
+    const plannedQuantity = Number(item.plannedQuantity || 0);
+    if (materialId && plannedQuantity > 0) {
+      requirements.set(materialId.toString(), (requirements.get(materialId.toString()) || 0) + plannedQuantity);
+    }
+  }
+
+  if (requirements.size > 0) return requirements;
+
+  const bom = await Bom.findOne({ productionOrder: order._id, isActive: true }).session(session).lean();
+  for (const item of bom?.items || []) {
+    const materialId = item.material?._id || item.material;
+    const plannedQuantity = Number(item.qtyPerUnit || 0);
+    if (materialId && plannedQuantity > 0) {
+      requirements.set(materialId.toString(), (requirements.get(materialId.toString()) || 0) + plannedQuantity);
+    }
+  }
+
+  return requirements;
+};
+
+export const getMaterialIssueReadiness = async (orderId, session = null) => {
+  const order = await ProductionOrder.findById(orderId).session(session).lean();
+  if (!order) {
+    return { ready: false, message: 'Production order not found.', issuedByMaterial: new Map(), requirements: new Map() };
+  }
+
+  const requirements = await getMaterialRequirementMap(order, session);
+  if (requirements.size === 0) {
+    return { ready: true, message: 'No material requirement found.', issuedByMaterial: new Map(), requirements };
+  }
+
+  const issueRequisitions = await MaterialRequisition.find({
+    productionOrder: order._id,
+    type: { $in: [REQUISITION_TYPE.ISSUE, REQUISITION_TYPE.SUPPLEMENTARY] },
+    status: { $ne: REQUISITION_STATUS.CANCELLED }
+  }).session(session).lean();
+
+  if (!issueRequisitions.length) {
+    return { ready: false, message: 'No material issue requisition exists for this order.', issuedByMaterial: new Map(), requirements };
+  }
+
+  const blockingRequisition = issueRequisitions.find((req) => req.status !== REQUISITION_STATUS.COMPLETED);
+  if (blockingRequisition) {
+    return {
+      ready: false,
+      message: `Material requisition ${blockingRequisition.requisitionCode || blockingRequisition._id} is not completed yet.`,
+      issuedByMaterial: new Map(),
+      requirements
+    };
+  }
+
+  const issuedByMaterial = new Map();
+  for (const req of issueRequisitions) {
+    for (const item of req.items || []) {
+      const materialId = item.material?._id || item.material;
+      if (!materialId) continue;
+      const issuedQuantity = Number(item.actualQuantity || item.requestedQuantity || 0);
+      issuedByMaterial.set(materialId.toString(), (issuedByMaterial.get(materialId.toString()) || 0) + issuedQuantity);
+    }
+  }
+
+  const missing = [];
+  for (const [materialId, neededQuantity] of requirements.entries()) {
+    const issuedQuantity = issuedByMaterial.get(materialId) || 0;
+    if (issuedQuantity + 0.0001 < neededQuantity) {
+      missing.push({ materialId, neededQuantity, issuedQuantity });
+    }
+  }
+
+  if (missing.length > 0) {
+    return {
+      ready: false,
+      message: 'Material issue is not complete for all required materials.',
+      missing,
+      issuedByMaterial,
+      requirements
+    };
+  }
+
+  return { ready: true, message: 'Material issue is completed.', issuedByMaterial, requirements };
+};
+
+export const notifyAssignedStaffProductionStarted = async (orderId, orderCode = null) => {
+  const assignments = await ProductionOrderAssignment.find({ productionOrder: orderId })
+    .populate('product', 'name code unit')
+    .lean();
+
+  for (const assignment of assignments) {
+    await createNotification({
+      recipient: assignment.staff,
+      title: 'Nhiem vu san xuat da san sang',
+      message: `Don ${orderCode || orderId} da duoc xuat vat lieu va bat dau san xuat. Ban co the bao cao tien do.`,
+      type: 'TASK',
+      priority: 'HIGH',
+      metaData: { assignmentId: assignment._id, orderId }
+    });
+  }
+};
+
 /**
  * Get all production orders with pagination and filters (Admin/Production Manager).
  */
@@ -95,8 +205,18 @@ export const getStaffProductionOrders = async (staffId, queryParams) => {
 
     const orderIds = assignments.map(a => a.productionOrder);
 
-    let filter = { _id: { $in: orderIds } };
-    if (status) filter.status = status;
+    if (status && !STAFF_VISIBLE_ORDER_STATUSES.includes(status)) {
+      return {
+        success: true,
+        message: 'Staff production orders retrieved successfully.',
+        data: {
+          orders: [],
+          pagination: buildListPagination({ items: [], total: 0, pageNum, limitNum, cursor: cursorId, withTotal: shouldCount })
+        }
+      };
+    }
+
+    let filter = { _id: { $in: orderIds }, status: status || { $in: STAFF_VISIBLE_ORDER_STATUSES } };
     filter = applyCreatedAtCursor(filter, cursorId);
 
     const totalPromise = shouldCount ? ProductionOrder.countDocuments(filter) : Promise.resolve(undefined);
@@ -146,15 +266,17 @@ export const getStaffProductionOrders = async (staffId, queryParams) => {
 export const getProductionOrderById = async (orderIdentifier) => {
   try {
     const isObjectId = mongoose.Types.ObjectId.isValid(orderIdentifier);
-    const order = isObjectId
-      ? await ProductionOrder.findById(orderIdentifier)
-        .populate('products.product')
-        .populate('createdBy', 'fullName username')
-        .lean()
-      : await ProductionOrder.findOne({ orderCode: orderIdentifier })
-        .populate('products.product')
-        .populate('createdBy', 'fullName username')
-        .lean();
+      const order = isObjectId
+        ? await ProductionOrder.findById(orderIdentifier)
+          .populate('products.product')
+          .populate('materials.material', 'name code unit')
+          .populate('createdBy', 'fullName username')
+          .lean()
+        : await ProductionOrder.findOne({ orderCode: orderIdentifier })
+          .populate('products.product')
+          .populate('materials.material', 'name code unit')
+          .populate('createdBy', 'fullName username')
+          .lean();
 
     if (!order) return { success: false, message: 'Production order not found.', data: null };
 
@@ -183,17 +305,23 @@ export const getProductionOrderById = async (orderIdentifier) => {
 export const getStaffProductionOrderById = async (orderIdentifier, staffId) => {
   try {
     const isObjectId = mongoose.Types.ObjectId.isValid(orderIdentifier);
-    const order = isObjectId
-      ? await ProductionOrder.findById(orderIdentifier)
-        .populate('products.product')
-        .populate('createdBy', 'fullName username')
-        .lean()
-      : await ProductionOrder.findOne({ orderCode: orderIdentifier })
-        .populate('products.product')
-        .populate('createdBy', 'fullName username')
-        .lean();
+      const order = isObjectId
+        ? await ProductionOrder.findById(orderIdentifier)
+          .populate('products.product')
+          .populate('materials.material', 'name code unit')
+          .populate('createdBy', 'fullName username')
+          .lean()
+        : await ProductionOrder.findOne({ orderCode: orderIdentifier })
+          .populate('products.product')
+          .populate('materials.material', 'name code unit')
+          .populate('createdBy', 'fullName username')
+          .lean();
 
     if (!order) return { success: false, message: 'Production order not found.', data: null };
+
+    if (!STAFF_VISIBLE_ORDER_STATUSES.includes(order.status)) {
+      return { success: false, message: 'Production order is waiting for warehouse material issue.', data: null };
+    }
 
     const assignments = await ProductionOrderAssignment.find({
       productionOrder: order._id,
@@ -316,9 +444,21 @@ export const createProductionOrder = async (orderData, creatorId) => {
     const orderCode = `CF-${dateStr}-${(count + 1).toString().padStart(3, '0')}`;
 
     // 4. Create Production Order
+    const plannedMaterials = Array.from(materialRequirements.entries()).map(([matId, needed]) => {
+      const material = materialMap.get(matId);
+      return {
+        material: matId,
+        plannedQuantity: needed,
+        issuedQuantity: 0,
+        returnedQuantity: 0,
+        unit: material?.unit || ''
+      };
+    });
+
     const newOrder = new ProductionOrder({
       orderCode,
       products: validatedProducts,
+      materials: plannedMaterials,
       priority,
       deadline,
       autoDeadline,
@@ -396,7 +536,7 @@ export const createProductionOrder = async (orderData, creatorId) => {
     // For now, we notify the creator and log the notification intent.
     await createNotification({
       recipient: creatorId,
-      title: 'Đơn sản xuất mới',
+      title: 'Lệnh sản xuất mới',
       message: notificationMessage,
       type: 'ORDER',
       priority: hasInsufficientStock ? 'HIGH' : 'MEDIUM',
@@ -819,24 +959,12 @@ export const assignProductionOrder = async (orderId, assignments) => {
 
     await session.commitTransaction();
 
-    // Notify staff about new assignments
-    for (const assign of newAssignments) {
-      await createNotification({
-        recipient: assign.staff,
-        title: 'Nhiệm vụ sản xuất mới',
-        message: `Bạn được phân công nhiệm vụ mới cho đơn hàng ${order.orderCode}.`,
-        type: 'TASK',
-        priority: 'MEDIUM',
-        metaData: { assignmentId: assign._id, orderId: order._id }
-      });
-    }
-
-    await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.STAFF], {
+    await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.KHO_MANAGER], {
       domains: ["production"],
       action: "assigned",
       entity: "production_order",
       id: order._id,
-      message: `Order ${order.orderCode} was assigned to staff.`,
+      message: `Order ${order.orderCode} was assigned and is waiting for material issue.`,
       metaData: { orderId: order._id, orderCode: order.orderCode, assignmentIds: newAssignments.map(a => a._id) }
     });
 
@@ -944,6 +1072,16 @@ export const updateProductionOrderStatus = async (orderId, status, notes = '') =
 
     const oldStatus = order.status;
     let stockInResult = null;
+    let shouldNotifyProductionStart = false;
+
+    if (status === ORDER_STATUS.IN_PRODUCTION && oldStatus !== ORDER_STATUS.IN_PRODUCTION) {
+      const readiness = await getMaterialIssueReadiness(orderId, session);
+      if (!readiness.ready) {
+        throw new Error(`Cannot start production before warehouse completes material issue. ${readiness.message}`);
+      }
+      shouldNotifyProductionStart = true;
+    }
+
     order.status = status;
     if (notes) order.holdReason = notes; // Using holdReason as a general note field for status changes
 
@@ -960,10 +1098,14 @@ export const updateProductionOrderStatus = async (orderId, status, notes = '') =
     await order.save({ session });
     await session.commitTransaction();
 
+    if (shouldNotifyProductionStart) {
+      await notifyAssignedStaffProductionStarted(order._id, order.orderCode);
+    }
+
     // Notify about status change
     await createNotification({
       recipient: order.createdBy,
-      title: 'Cập nhật đơn sản xuất',
+      title: 'Cập nhật lệnh sản xuất',
       message: `Đơn hàng ${order.orderCode} đã chuyển sang trạng thái: ${status}.`,
       type: 'ORDER',
       priority: 'MEDIUM',
@@ -1046,6 +1188,9 @@ export const reassignProductionOrder = async (assignmentId, newStaffId, reason =
     const assignment = await ProductionOrderAssignment.findById(assignmentId).session(session);
     if (!assignment) return { success: false, message: 'Assignment not found.', data: null };
 
+    const order = await ProductionOrder.findById(assignment.productionOrder).session(session).lean();
+    if (!order) return { success: false, message: 'Parent production order not found.', data: null };
+
     if (assignment.status === ORDER_STATUS.COMPLETED) {
       return { success: false, message: 'Cannot reassign a completed assignment.', data: null };
     }
@@ -1071,17 +1216,18 @@ export const reassignProductionOrder = async (assignmentId, newStaffId, reason =
 
     await assignment.save({ session });
 
-    // Notify new staff
-    await createNotification({
-      recipient: newStaffId,
-      title: 'Nhiệm vụ sản xuất mới',
-      message: `Bạn được phân công nhiệm vụ mới cho đơn hàng ${assignment.productionOrder}. Số lượng: ${assignment.assignedQuantity}.`,
-      type: 'TASK',
-      priority: 'HIGH',
-      metaData: { assignmentId: assignment._id, orderId: assignment.productionOrder }
-    });
-
     await session.commitTransaction();
+
+    if (STAFF_VISIBLE_ORDER_STATUSES.includes(order.status)) {
+      await createNotification({
+        recipient: newStaffId,
+        title: 'Nhiem vu san xuat moi',
+        message: `Ban duoc phan cong nhiem vu moi cho don ${order.orderCode}. So luong: ${assignment.assignedQuantity}.`,
+        type: 'TASK',
+        priority: 'HIGH',
+        metaData: { assignmentId: assignment._id, orderId: assignment.productionOrder }
+      });
+    }
 
     await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.STAFF], {
       domains: ["production"],
@@ -1129,6 +1275,10 @@ export const updateAssignmentStatus = async (assignmentId, status, completedQuan
       throw new Error('You are not authorized to update this assignment.');
     }
 
+    if (isStaff && ![ORDER_STATUS.IN_PRODUCTION, ORDER_STATUS.PARTIALLY_COMPLETE].includes(order.status)) {
+      throw new Error('Cannot report progress before warehouse completes material issue and production starts.');
+    }
+
     // Check if staff has already reported today
     if (isStaff && assignment.lastReportedAt) {
       const lastReportDate = new Date(assignment.lastReportedAt);
@@ -1142,10 +1292,7 @@ export const updateAssignmentStatus = async (assignmentId, status, completedQuan
     }
 
     const oldStatus = assignment.status;
-    const oldCompletedQty = assignment.completedQuantity;
-
-    // 2. Update Assignment Fields
-    assignment.status = status;
+    // 2. Update Assignment Fields. Status is derived from completed quantity; client status is ignored for staff safety.
 
     if (completedQuantity !== undefined) {
       if (completedQuantity > assignment.assignedQuantity) {
@@ -1155,15 +1302,17 @@ export const updateAssignmentStatus = async (assignmentId, status, completedQuan
       assignment.lastReportedAt = new Date();
     }
 
-    // Auto-adjust status based on completed quantity
-    if (assignment.completedQuantity === assignment.assignedQuantity) {
+    // Auto-adjust status based only on completed quantity
+    if (assignment.completedQuantity >= assignment.assignedQuantity) {
       assignment.status = ORDER_STATUS.COMPLETED;
-    } else if (assignment.completedQuantity > 0 && assignment.status === ORDER_STATUS.ASSIGNED) {
-      assignment.status = ORDER_STATUS.IN_PRODUCTION;
+    } else if (assignment.completedQuantity > 0) {
+      assignment.status = ORDER_STATUS.PARTIALLY_COMPLETE;
+    } else {
+      assignment.status = ORDER_STATUS.ASSIGNED;
     }
 
     // Set timestamps based on status
-    if (assignment.status === ORDER_STATUS.IN_PRODUCTION && !assignment.startedAt) {
+    if ([ORDER_STATUS.IN_PRODUCTION, ORDER_STATUS.PARTIALLY_COMPLETE].includes(assignment.status) && !assignment.startedAt) {
       assignment.startedAt = new Date();
     }
     if (assignment.status === ORDER_STATUS.COMPLETED) {
@@ -1204,6 +1353,7 @@ export const updateAssignmentStatus = async (assignmentId, status, completedQuan
 
     const allCompleted = allAssignments.every(a => a.status === ORDER_STATUS.COMPLETED);
     const anyInProduction = allAssignments.some(a => a.status === ORDER_STATUS.IN_PRODUCTION);
+    const anyPartiallyComplete = allAssignments.some(a => a.status === ORDER_STATUS.PARTIALLY_COMPLETE);
     const anyCompleted = allAssignments.some(a => a.status === ORDER_STATUS.COMPLETED);
 
     let newOrderStatus = order.status;
@@ -1211,8 +1361,8 @@ export const updateAssignmentStatus = async (assignmentId, status, completedQuan
     if (allCompleted) {
       newOrderStatus = ORDER_STATUS.COMPLETED;
       order.completedAt = new Date();
-    } else if (anyInProduction || anyCompleted) {
-      newOrderStatus = anyCompleted ? ORDER_STATUS.PARTIALLY_COMPLETE : ORDER_STATUS.IN_PRODUCTION;
+    } else if ([ORDER_STATUS.IN_PRODUCTION, ORDER_STATUS.PARTIALLY_COMPLETE].includes(order.status) && (anyInProduction || anyPartiallyComplete || anyCompleted)) {
+      newOrderStatus = (anyCompleted || anyPartiallyComplete) ? ORDER_STATUS.PARTIALLY_COMPLETE : ORDER_STATUS.IN_PRODUCTION;
     }
 
     if (newOrderStatus !== order.status) {
@@ -1629,7 +1779,7 @@ export const updateProductionOrder = async (orderId, updateData, userId) => {
 
     return {
       success: true,
-      message: 'Cập nhật đơn sản xuất thành công.',
+      message: 'Cập nhật lệnh sản xuất thành công.',
       data: { order }
     };
   } catch (error) {
@@ -1780,3 +1930,5 @@ export const getMaterialAlerts = async (queryParams) => {
     return { success: false, message: error.message, data: null };
   }
 };
+
+

@@ -50,13 +50,13 @@ interface AppSidebarProps {
 const navigation = [
   // --- Dashboards ---
   { name: "Tổng quan", href: "/dashboard", icon: LayoutDashboard, roles: ["admin"] },
-  { name: "Tổng quan sản xuất", href: "/production-management/dashboard", icon: LayoutDashboard, roles: ["production_manager"] },
+  { name: "Tổng quan sản xuất", href: "/production-management/dashboard", icon: LayoutDashboard, roles: ["production_manager", ] },
   { name: "Tổng quan kho (WMS)", href: "/dashboard_warehouse", icon: PackageOpen, roles: ["kho_manager"] },
 
   // --- Products & Production ---
   { name: "Sản phẩm & BOM", href: "/products", icon: Boxes, roles: ["admin", "production_manager"] },
   { name: "Sản xuất", href: "/production", icon: Factory, roles: ["admin"] },
-  { name: "Đơn sản xuất", href: "/production-management/orders", icon: ClipboardList, roles: ["production_manager"] },
+  { name: "Lệnh sản xuất", href: "/production-management/orders", icon: ClipboardList, roles: ["production_manager"] },
   { name: "Công việc", href: "/production-management/tasks", icon: ListTodo, roles: ["production_manager"] },
   { name: "Công việc của tôi", href: "/staff/tasks", icon: ListTodo, roles: ["staff"] },
 
@@ -88,6 +88,7 @@ const navigation = [
 
   // --- System & Users ---
   { name: "Người dùng", href: "/users", icon: Users, roles: ["admin"] },
+  { name: "Cấu hình hệ thống", href: "/admin/settings", icon: Settings, roles: ["admin"] },
   { name: "Nhật ký hệ thống", href: "/system-log", icon: FileSearch, roles: ["admin"] },
 ]
 
@@ -449,7 +450,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
       {/* Footer */}
       <div className="border-t border-sidebar-border/50 p-3 bg-sidebar/50 backdrop-blur-sm">
         <Link
-          href="/settings"
+          href={isAdmin ? "/admin/settings" : "/settings"}
           prefetch={false}
           className={cn(
             "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-muted-foreground transition-all duration-200 hover:bg-sidebar-accent hover:text-sidebar-foreground",

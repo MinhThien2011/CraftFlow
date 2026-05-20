@@ -774,3 +774,117 @@ export const backfillInitialBatches = async () => {
         return { success: false, message: error.message };
     }
 };
+
+export const getBatchesByProductionOrder = async (productionOrderId) => {
+    try {
+        const MaterialRequisition = mongoose.model('MaterialRequisition');
+        const InventoryTransaction = mongoose.model('InventoryTransaction');
+        const InventoryImportExportSlip = mongoose.model('InventoryImportExportSlip');
+
+        // Find all requisitions related to the production order
+        const requisitions = await MaterialRequisition.find({ productionOrder: productionOrderId }).lean();
+        const requisitionIds = requisitions.map(r => r._id);
+        
+        // Find all slips related to these requisitions or the production order
+        const slips = await InventoryImportExportSlip.find({
+            $or: [
+                { relatedProductionOrder: productionOrderId },
+                { relatedRequisition: { $in: requisitionIds } }
+            ]
+        }).select('slipNumber').lean();
+        
+        const slipNumbers = slips.map(s => s.slipNumber);
+
+        // Fetch all transactions related to this production order/requisitions/slips that issued stock
+        const transactions = await InventoryTransaction.find({
+            type: { $in: ['sales_out', 'issue'] },
+            $or: [
+                { productionOrder: productionOrderId },
+                { requisition: { $in: requisitionIds } },
+                { orderRef: { $in: slipNumbers } }
+            ]
+        })
+        .populate('batch')
+        .populate('material', 'name code unit')
+        .lean();
+
+        // Also check if any batch allocations are saved in the requisitions directly
+        const directAllocations = [];
+        for (const req of requisitions) {
+            for (const item of req.items || []) {
+                for (const allocation of item.batchAllocations || []) {
+                    if (allocation.batch) {
+                        directAllocations.push({
+                            material: item.material,
+                            batch: allocation.batch,
+                            quantityAllocated: allocation.quantityAllocated
+                        });
+                    }
+                }
+            }
+        }
+
+        const batchMap = new Map();
+
+        // Process transactions
+        for (const tx of transactions) {
+            if (!tx.batch) continue;
+            const batchIdStr = tx.batch._id.toString();
+            const matIdStr = tx.material ? tx.material._id.toString() : (tx.batch.material ? tx.batch.material.toString() : '');
+            if (!matIdStr) continue;
+
+            const quantityAllocated = Math.abs(tx.quantity);
+            const key = `${matIdStr}:${batchIdStr}`;
+
+            if (!batchMap.has(key)) {
+                batchMap.set(key, {
+                    batch: tx.batch,
+                    materialId: matIdStr,
+                    quantityAllocated: 0
+                });
+            }
+            batchMap.get(key).quantityAllocated += quantityAllocated;
+        }
+
+        // Process direct allocations
+        for (const alloc of directAllocations) {
+            const batchIdStr = alloc.batch.toString();
+            const matIdStr = alloc.material.toString();
+            const key = `${matIdStr}:${batchIdStr}`;
+
+            if (!batchMap.has(key)) {
+                const InventoryBatch = mongoose.model('InventoryBatch');
+                const batch = await InventoryBatch.findById(alloc.batch).lean();
+                if (batch) {
+                    batchMap.set(key, {
+                        batch,
+                        materialId: matIdStr,
+                        quantityAllocated: 0
+                    });
+                }
+            }
+            const existing = batchMap.get(key);
+            if (existing) {
+                existing.quantityAllocated += alloc.quantityAllocated;
+            }
+        }
+
+        // Convert the map to the final structure
+        const result = Array.from(batchMap.values()).map(item => {
+            return {
+                _id: item.batch._id,
+                batchNumber: item.batch.batchNumber,
+                quantityRemaining: item.batch.quantityRemaining,
+                quantityReceived: item.batch.quantityReceived,
+                expirationDate: item.batch.expirationDate,
+                material: item.materialId,
+                quantityUsed: item.quantityAllocated
+            };
+        });
+
+        return { success: true, data: result, message: 'Production order batches retrieved successfully' };
+    } catch (error) {
+        console.error('[FIFOService] getBatchesByProductionOrder error:', error);
+        return { success: false, message: error.message, data: null };
+    }
+};

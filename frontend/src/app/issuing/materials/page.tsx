@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { AppShell } from "@/components/app-shell"
@@ -32,13 +32,13 @@ function EvidenceStatusBadge({ status }: { status: Slip["status"] }) {
   if (status !== "completed") return null
 
   return (
-    <Badge className="w-fit border-0 bg-amber-100 text-amber-700 hover:bg-amber-200">
+        <Badge className="w-fit border-0 bg-amber-100 text-amber-700 hover:bg-amber-200">
       Chưa cập nhật chứng từ
-    </Badge>
+        </Badge>
   )
 }
 
-export default function MaterialIssuingPage() {
+function MaterialIssuingPageContent() {
   const queryClient = useQueryClient()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -186,7 +186,7 @@ export default function MaterialIssuingPage() {
                     <TableHead>Vật tư chính</TableHead>
                     <TableHead>Ngày lập</TableHead>
                     <TableHead>Trạng thái</TableHead>
-                    <TableHead className="text-right pr-6">Thao tác</TableHead>
+                    <TableHead className="text-center pr-6">Thao tác</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -222,7 +222,7 @@ export default function MaterialIssuingPage() {
                           <EvidenceStatusBadge status={slip.status} />
                         </div>
                       </TableCell>
-                      <TableCell className="text-right pr-6">
+                      <TableCell className="text-center pr-6">
                         <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedSlip(slip); setIsDialogOpen(true); }}>
                           <Eye className="size-4 mr-1" /> Chi tiết
                         </Button>
@@ -261,3 +261,12 @@ export default function MaterialIssuingPage() {
     </AppShell>
   )
 }
+
+export default function MaterialIssuingPage() {
+  return (
+    <Suspense fallback={null}>
+      <MaterialIssuingPageContent />
+    </Suspense>
+  )
+}
+

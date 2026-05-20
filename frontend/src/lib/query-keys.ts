@@ -23,4 +23,7 @@ export const queryKeys = {
   slips: {
     all: ["slips"] as const,
   },
+  requisitions: {
+    all: ["requisitions"] as const,
+  },
 } as const

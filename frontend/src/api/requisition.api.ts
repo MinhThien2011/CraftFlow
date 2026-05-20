@@ -3,6 +3,7 @@ import axiosInstance from "@/lib/axios";
 export const requisitionApi = {
     getRequisitions: (params?: any) => axiosInstance.get('/requisitions', { params }),
     getRequisitionById: (id: string) => axiosInstance.get(`/requisitions/${id}`),
+    approveReturn: (id: string) => axiosInstance.post(`/requisitions/${id}/approve-return`),
     updateStatus: (id: string, payload: { status: string, notes?: string, evidenceImage?: string }) => 
         axiosInstance.patch(`/requisitions/${id}/status`, payload),
     getSettings: () => axiosInstance.get('/requisitions/settings/auto-accept'),

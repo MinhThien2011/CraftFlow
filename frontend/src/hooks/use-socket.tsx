@@ -63,6 +63,9 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (invalidateAll || domainSet.has("slips")) {
             queryClient.invalidateQueries({ queryKey: queryKeys.slips.all });
         }
+        if (invalidateAll || domainSet.has("requisitions")) {
+            queryClient.invalidateQueries({ queryKey: queryKeys.requisitions.all });
+        }
 
         queryClient.invalidateQueries({
             predicate: (query) => {

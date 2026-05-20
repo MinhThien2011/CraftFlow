@@ -1,4 +1,5 @@
 const SLOW_REQUEST_MS = Number(process.env.SLOW_REQUEST_MS || 500);
+const SLOW_REQUEST_SAMPLE_RATE = Math.min(1, Math.max(0, Number(process.env.SLOW_REQUEST_SAMPLE_RATE || 1)));
 
 export const performanceMonitor = (req, res, next) => {
   const startedAt = process.hrtime.bigint();
@@ -14,7 +15,7 @@ export const performanceMonitor = (req, res, next) => {
 
   res.on('finish', () => {
     const durationMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
-    if (durationMs >= SLOW_REQUEST_MS) {
+    if (durationMs >= SLOW_REQUEST_MS && Math.random() <= SLOW_REQUEST_SAMPLE_RATE) {
       console.warn(`[SlowRequest] ${req.method} ${req.originalUrl} ${res.statusCode} ${durationMs.toFixed(1)}ms`);
     }
   });

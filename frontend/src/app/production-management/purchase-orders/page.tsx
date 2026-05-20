@@ -230,7 +230,7 @@ function PurchaseOrdersContent() {
 
       const orderData = insufficientOrders.find(o => o._id === newVal);
       if (orderData && !createReason) {
-        setCreateReason(`Nhập vật tư cho đơn sản xuất ${orderData.orderCode || orderData._id}`);
+        setCreateReason(`Nhập vật tư cho lệnh sản xuất ${orderData.orderCode || orderData._id}`);
       }
     } else {
       setCreateItems(prev => prev.filter(i => i.isManual));
@@ -655,7 +655,7 @@ function PurchaseOrdersContent() {
           <DialogHeader className="mb-8">
             <DialogTitle className="text-3xl font-extrabold tracking-tight text-primary">Tạo Yêu Cầu Mua Hàng</DialogTitle>
             <DialogDescription className="text-lg text-muted-foreground mt-2">
-              Tạo yêu cầu nhập vật tư mới hoặc nhập cho đơn sản xuất bị thiếu vật liệu.
+              Tạo yêu cầu nhập vật tư mới hoặc nhập cho lệnh sản xuất bị thiếu vật liệu.
             </DialogDescription>
           </DialogHeader>
 
@@ -687,7 +687,7 @@ function PurchaseOrdersContent() {
                 <Label className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Đơn Sản Xuất (Thiếu vật tư)</Label>
                 <Select value={createOrder || "none"} onValueChange={handleCreateOrderChange}>
                   <SelectTrigger className="h-12 text-base rounded-xl border-2 bg-background">
-                    <SelectValue placeholder="Chọn đơn sản xuất..." />
+                    <SelectValue placeholder="Chọn lệnh sản xuất..." />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl">
                     <SelectItem value="none" className="rounded-lg">-- Không chọn --</SelectItem>

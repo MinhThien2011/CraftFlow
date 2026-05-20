@@ -351,10 +351,10 @@ export function WarehouseInventoryPage({ mode, title, subtitle, enableMaterialMa
                   <TableHead>{activeTab === 'materials' ? 'Nhà cung cấp' : activeTab === 'products' ? 'Danh mục' : activeTab === 'history-import' ? 'Nguồn nhập' : 'Nơi xuất'}</TableHead>
                   <TableHead className="text-right">{activeTab.startsWith('history') ? 'Số lượng' : 'Tồn'}</TableHead>
                   {!activeTab.startsWith('history') && <TableHead className="text-right">Ngưỡng</TableHead>}
-                  <TableHead className="text-right">Giá trị</TableHead>
+                  <TableHead className="text-center">Giá trị</TableHead>
                   <TableHead>{activeTab.startsWith('history') ? 'Ngày giao dịch' : 'Cập nhật'}</TableHead>
                   {!activeTab.startsWith('history') && <TableHead className="text-center">Trạng thái</TableHead>}
-                  {(canOpenDialogs && canShowFilters) || canManageMaterial ? <TableHead className="text-right">Thao tác</TableHead> : null}
+                  {(canOpenDialogs && canShowFilters) || canManageMaterial ? <TableHead className="text-center">Thao tác</TableHead> : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -366,13 +366,13 @@ export function WarehouseInventoryPage({ mode, title, subtitle, enableMaterialMa
                       <TableRow key={m._id}>
                         <TableCell><div className="font-bold text-[15px] text-foreground">{m.name}<div className="text-xs text-muted-foreground font-medium mt-0.5">{m.code} • {getLocation(m)}</div></div></TableCell>
                         <TableCell>{m.supplier?.name || 'N/A'}</TableCell>
-                        <TableCell className="text-right font-medium">{m.currentStock}</TableCell>
-                        <TableCell className="text-right font-medium">{m.threshold}</TableCell>
-                        <TableCell className="text-right font-medium"><CurrencyDisplay value={(m.currentStock || 0) * (m.price || 0)} /></TableCell>
+                        <TableCell className="text-center font-medium">{m.currentStock}</TableCell>
+                        <TableCell className="text-center font-medium">{m.threshold}</TableCell>
+                        <TableCell className="text-center font-medium"><CurrencyDisplay value={(m.currentStock || 0) * (m.price || 0)} /></TableCell>
                         <TableCell>{m.updatedAt ? new Date(m.updatedAt).toLocaleDateString('vi-VN') : 'N/A'}</TableCell>
                         <TableCell className="text-center">{getLevelBadge(m)}</TableCell>
                         {(canOpenDialogs || canManageMaterial) && (
-                          <TableCell className="text-right">
+                          <TableCell className="text-center">
                             {canManageMaterial ? (
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
@@ -396,7 +396,7 @@ export function WarehouseInventoryPage({ mode, title, subtitle, enableMaterialMa
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             ) : (
-                              <div className="flex justify-end gap-1">
+                              <div className="flex justify-center gap-1">
                                 <Button size="icon" variant="ghost" onClick={() => setDetailItem(m)}><Eye className="h-4 w-4" /></Button>
                                 <Button size="icon" variant="ghost" onClick={() => setHistoryItem(m)}><History className="h-4 w-4" /></Button>
                               </div>

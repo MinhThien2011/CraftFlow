@@ -90,7 +90,7 @@ export function ProductionOrderReadonlyDetailView({ id, backHref, backLabel = "Q
     return (
       <div className="flex h-[60vh] flex-col items-center justify-center gap-4 text-muted-foreground">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p>Đang lấy thông tin đơn sản xuất...</p>
+        <p>Đang lấy thông tin lệnh sản xuất...</p>
       </div>
     )
   }
@@ -102,7 +102,7 @@ export function ProductionOrderReadonlyDetailView({ id, backHref, backLabel = "Q
           <Package className="h-8 w-8 text-muted-foreground" />
         </div>
         <div className="space-y-1">
-          <h2 className="text-lg font-semibold">Không tìm thấy đơn sản xuất</h2>
+          <h2 className="text-lg font-semibold">Không tìm thấy lệnh sản xuất</h2>
           <p className="text-sm text-muted-foreground">Đơn có thể đã bị xóa, hoặc bạn không còn quyền truy cập.</p>
         </div>
         <Button variant="outline" onClick={() => router.push(backHref)}>
@@ -303,7 +303,7 @@ export function ProductionOrderReadonlyDetailView({ id, backHref, backLabel = "Q
           <CardContent className="space-y-6 pt-6">
             <div className="space-y-4">
               <div>
-                <p className="mb-1 flex items-center gap-2 text-sm text-muted-foreground"><FileText className="h-4 w-4" /> Mã đơn sản xuất</p>
+                <p className="mb-1 flex items-center gap-2 text-sm text-muted-foreground"><FileText className="h-4 w-4" /> Mã lệnh sản xuất</p>
                 <p className="font-mono text-base font-medium">{order.orderCode}</p>
               </div>
               <div>
@@ -473,7 +473,7 @@ export function ProductionOrderReadonlyDetailView({ id, backHref, backLabel = "Q
       <Dialog open={canManage && isCancelOpen} onOpenChange={setIsCancelOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-xl font-bold text-destructive">Hủy đơn sản xuất</DialogTitle>
+            <DialogTitle className="text-xl font-bold text-destructive">Hủy lệnh sản xuất</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -493,7 +493,7 @@ export function ProductionOrderReadonlyDetailView({ id, backHref, backLabel = "Q
       <Dialog open={canManage && isEditOpen} onOpenChange={setIsEditOpen}>
         <DialogContent size="lg" className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-bold text-primary">Chỉnh sửa đơn sản xuất</DialogTitle>
+            <DialogTitle className="text-2xl font-bold text-primary">Chỉnh sửa lệnh sản xuất</DialogTitle>
           </DialogHeader>
           <div className="space-y-6 py-4">
             <div className="space-y-4">
@@ -590,7 +590,7 @@ export function ProductionOrderReadonlyDetailView({ id, backHref, backLabel = "Q
             ) : (
               <div className="flex h-40 flex-col items-center justify-center text-muted-foreground">
                 <ClipboardList className="mb-2 h-10 w-10 opacity-20" />
-                <p>Không tìm thấy thông tin BOM cho đơn sản xuất này.</p>
+                <p>Không tìm thấy thông tin BOM cho lệnh sản xuất này.</p>
               </div>
             )}
           </div>

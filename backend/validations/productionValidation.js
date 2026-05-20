@@ -36,9 +36,8 @@ const reassignTaskSchema = Joi.object({
 });
 
 const updateAssignmentStatusSchema = Joi.object({
-  status: Joi.string().valid(...Object.values(ORDER_STATUS)).required().messages({
+  status: Joi.string().valid(...Object.values(ORDER_STATUS)).optional().messages({
     'any.only': 'Trạng thái đơn hàng không hợp lệ.',
-    'any.required': 'Trạng thái là bắt buộc.'
   }),
   completedQuantity: Joi.number().integer().min(0).optional().messages({
     'number.min': 'Số lượng hoàn thành không được âm.',

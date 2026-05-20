@@ -7,6 +7,7 @@ const LIST_EXPIRY = 300; // 5 minutes
 const CACHE_TIMEOUT_MS = Number(process.env.REDIS_CACHE_TIMEOUT_MS || 50);
 const GOOD_LATENCY_MS = Number(process.env.REDIS_GOOD_LATENCY_MS || 40);
 const WARN_LATENCY_MS = Number(process.env.REDIS_WARN_LATENCY_MS || 120);
+const LOG_GOOD_LATENCY = process.env.REDIS_LOG_GOOD_LATENCY === 'true';
 const LOG_COOLDOWN_MS = Number(process.env.REDIS_LOG_COOLDOWN_MS || 15_000);
 const MIN_EFFECTIVE_TIMEOUT_MS = Number(process.env.REDIS_MIN_EFFECTIVE_TIMEOUT_MS || 120);
 const MAX_EFFECTIVE_TIMEOUT_MS = Number(process.env.REDIS_MAX_EFFECTIVE_TIMEOUT_MS || 800);
@@ -91,7 +92,7 @@ const safeRedisOp = async (operation, opName, key, timeoutMs = CACHE_TIMEOUT_MS)
                 'warn',
                 `[Redis][latency:bad] ${opName} latency=${opLatency}ms key=${key}`
             );
-        } else if (opLatency <= GOOD_LATENCY_MS) {
+        } else if (LOG_GOOD_LATENCY && opLatency <= GOOD_LATENCY_MS) {
             logWithCooldown(
                 `redis-latency-good:${opName}`,
                 'log',

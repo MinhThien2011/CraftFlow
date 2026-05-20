@@ -51,7 +51,7 @@ export function CreateOrderModal({
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent size="3xl" className="max-h-[88vh] p-0">
         <DialogHeader className="border-b px-6 py-5">
-          <DialogTitle className="text-2xl font-bold tracking-tight text-primary">Tạo đơn sản xuất mới</DialogTitle>
+          <DialogTitle className="text-2xl font-bold tracking-tight text-primary">Tạo lệnh sản xuất mới</DialogTitle>
           <DialogDescription className="text-sm">
             Chọn sản phẩm, số lượng cần sản xuất và hạn hoàn thành.
           </DialogDescription>
@@ -137,7 +137,7 @@ export function CreateOrderModal({
                 className="min-h-[88px] resize-none"
                 value={note}
                 onChange={(e) => onNoteChange(e.target.value)}
-                placeholder="Thêm ghi chú chi tiết cho đơn sản xuất này..."
+                placeholder="Thêm ghi chú chi tiết cho lệnh sản xuất này..."
               />
             </div>
           </div>
