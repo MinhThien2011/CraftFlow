@@ -1,4 +1,4 @@
-import ProductionOrder from '../models/ProductionOrder.js';
+﻿import ProductionOrder from '../models/ProductionOrder.js';
 import Product from '../models/Product.js';
 import Material from '../models/Material.js';
 import MaterialAlert from '../models/MaterialAlert.js';
@@ -117,8 +117,8 @@ export const notifyAssignedStaffProductionStarted = async (orderId, orderCode = 
   for (const assignment of assignments) {
     await createNotification({
       recipient: assignment.staff,
-      title: 'Nhiem vu san xuat da san sang',
-      message: `Don ${orderCode || orderId} da duoc xuat vat lieu va bat dau san xuat. Ban co the bao cao tien do.`,
+      title: 'Nhiá»‡m vá»¥ sáº£n xuáº¥t Ä‘Ã£ sáºµn sÃ ng',
+      message: `ÄÆ¡n ${orderCode || orderId} Ä‘Ã£ Ä‘Æ°á»£c xuáº¥t váº­t liá»‡u vÃ  báº¯t Ä‘áº§u sáº£n xuáº¥t. Báº¡n cÃ³ thá»ƒ bÃ¡o cÃ¡o tiáº¿n Ä‘á»™.`,
       type: 'TASK',
       priority: 'HIGH',
       metaData: { assignmentId: assignment._id, orderId }
@@ -562,11 +562,26 @@ export const createProductionOrder = async (orderData, creatorId) => {
       metaData: { orderId: newOrder._id, orderCode, hasInsufficientStock }
     });
 
+    await notifyUsersByRole({
+      roles: [ROLES.KHO_MANAGER],
+      excludeUserId: creatorId,
+      title: 'Yêu cầu cấp vật tư mới',
+      message: `Đơn ${orderCode} vừa tạo yêu cầu cấp vật tư (${requisitionCode}).`,
+      type: 'INVENTORY',
+      priority: 'HIGH',
+      metaData: {
+        orderId: newOrder._id,
+        orderCode,
+        requisitionId: newRequisition._id,
+        requisitionCode
+      }
+    });
+
     if (hasInsufficientStock) {
       await notifyUsersByRole({
         roles: [ROLES.ADMIN, ROLES.PRODUCTION_MANAGER],
         excludeUserId: creatorId,
-        title: 'Canh bao thieu vat tu',
+        title: 'Cảnh báo thiếu vật tư',
         message: notificationMessage,
         type: 'ORDER',
         priority: 'HIGH',
@@ -890,6 +905,7 @@ export const autoUpdateInsufficientOrders = async (materialIds = [], session = n
 export const assignProductionOrder = async (orderId, assignments) => {
   const session = await mongoose.startSession();
   session.startTransaction();
+  let productionStarted = null;
   try {
     const order = await ProductionOrder.findById(orderId).session(session);
     if (!order) return { status: 'error', message: 'Order not found.' };
@@ -955,17 +971,42 @@ export const assignProductionOrder = async (orderId, assignments) => {
     }
 
     order.status = ORDER_STATUS.ASSIGNED;
+    const readiness = await getMaterialIssueReadiness(order._id, session);
+    if (readiness.ready) {
+      order.status = ORDER_STATUS.IN_PRODUCTION;
+      productionStarted = {
+        orderId: order._id,
+        orderCode: order.orderCode
+      };
+    }
     await order.save({ session });
 
     await session.commitTransaction();
 
-    await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.KHO_MANAGER], {
+    if (productionStarted) {
+      await notifyAssignedStaffProductionStarted(productionStarted.orderId, productionStarted.orderCode);
+      await emitToRoles([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.STAFF], 'production_order_status_updated', {
+        orderId: productionStarted.orderId,
+        orderCode: productionStarted.orderCode,
+        status: ORDER_STATUS.IN_PRODUCTION,
+        message: `Production order ${productionStarted.orderCode} changed to in_production after assignment because material issue was already completed.`
+      });
+    }
+
+    await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.KHO_MANAGER, ROLES.STAFF], {
       domains: ["production"],
       action: "assigned",
       entity: "production_order",
       id: order._id,
-      message: `Order ${order.orderCode} was assigned and is waiting for material issue.`,
-      metaData: { orderId: order._id, orderCode: order.orderCode, assignmentIds: newAssignments.map(a => a._id) }
+      message: productionStarted
+        ? `Order ${order.orderCode} was assigned and started production immediately because material issue was completed.`
+        : `Order ${order.orderCode} was assigned and is waiting for material issue.`,
+      metaData: {
+        orderId: order._id,
+        orderCode: order.orderCode,
+        status: productionStarted ? ORDER_STATUS.IN_PRODUCTION : ORDER_STATUS.ASSIGNED,
+        assignmentIds: newAssignments.map(a => a._id)
+      }
     });
 
     // Log final results for debugging
@@ -974,7 +1015,7 @@ export const assignProductionOrder = async (orderId, assignments) => {
 
     return {
       success: true,
-      message: 'Phân công nhân sự thành công.',
+      message: 'PhÃ¢n cÃ´ng nhÃ¢n sá»± thÃ nh cÃ´ng.',
       data: { assignments: newAssignments }
     };
   } catch (error) {
@@ -1105,12 +1146,23 @@ export const updateProductionOrderStatus = async (orderId, status, notes = '') =
     // Notify about status change
     await createNotification({
       recipient: order.createdBy,
-      title: 'Cập nhật lệnh sản xuất',
-      message: `Đơn hàng ${order.orderCode} đã chuyển sang trạng thái: ${status}.`,
+      title: 'Cáº­p nháº­t lá»‡nh sáº£n xuáº¥t',
+      message: `ÄÆ¡n hÃ ng ${order.orderCode} Ä‘Ã£ chuyá»ƒn sang tráº¡ng thÃ¡i: ${status}.`,
       type: 'ORDER',
       priority: 'MEDIUM',
       metaData: { orderId: order._id, status }
     });
+
+    if (status === ORDER_STATUS.COMPLETED && oldStatus !== ORDER_STATUS.COMPLETED) {
+      await notifyUsersByRole({
+        roles: [ROLES.ADMIN, ROLES.PRODUCTION_MANAGER],
+        title: 'Đơn sản xuất đã hoàn thành',
+        message: `Đơn ${order.orderCode} đã hoàn thành sản xuất.`,
+        type: 'ORDER',
+        priority: 'HIGH',
+        metaData: { orderId: order._id, orderCode: order.orderCode, status }
+      });
+    }
 
     await emitToRoles([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.STAFF], 'production_order_status_updated', {
       orderId: order._id,
@@ -1197,6 +1249,7 @@ export const reassignProductionOrder = async (assignmentId, newStaffId, reason =
 
     const oldStaffId = assignment.staff;
     const quantity = assignment.assignedQuantity;
+    const previousStatus = assignment.status;
 
     // 1. Update old staff workload
     await User.findByIdAndUpdate(oldStaffId, {
@@ -1218,16 +1271,48 @@ export const reassignProductionOrder = async (assignmentId, newStaffId, reason =
 
     await session.commitTransaction();
 
-    if (STAFF_VISIBLE_ORDER_STATUSES.includes(order.status)) {
-      await createNotification({
-        recipient: newStaffId,
-        title: 'Nhiem vu san xuat moi',
-        message: `Ban duoc phan cong nhiem vu moi cho don ${order.orderCode}. So luong: ${assignment.assignedQuantity}.`,
-        type: 'TASK',
-        priority: 'HIGH',
-        metaData: { assignmentId: assignment._id, orderId: assignment.productionOrder }
-      });
-    }
+    await createNotification({
+      recipient: oldStaffId,
+      title: 'Nhiem vu da duoc phan cong lai',
+      message: `Nhiem vu cua don ${order.orderCode} da duoc chuyen sang nhan su khac.${reason ? ` Ly do: ${reason}` : ''}`,
+      type: 'TASK',
+      priority: 'HIGH',
+      metaData: {
+        assignmentId: assignment._id,
+        orderId: assignment.productionOrder,
+        reassignedTo: newStaffId
+      }
+    });
+
+    await createNotification({
+      recipient: newStaffId,
+      title: 'Nhiem vu san xuat moi',
+      message: STAFF_VISIBLE_ORDER_STATUSES.includes(order.status)
+        ? `Ban duoc phan cong nhiem vu moi cho don ${order.orderCode}. So luong: ${assignment.assignedQuantity}.`
+        : `Ban duoc phan cong nhiem vu cho don ${order.orderCode}. Nhiem vu se hien thi khi don bat dau san xuat.`,
+      type: 'TASK',
+      priority: 'HIGH',
+      metaData: {
+        assignmentId: assignment._id,
+        orderId: assignment.productionOrder,
+        previousStaffId: oldStaffId,
+        assignmentStatus: previousStatus
+      }
+    });
+
+    await notifyUsersByRole({
+      roles: [ROLES.PRODUCTION_MANAGER],
+      title: 'Da phan cong lai nhiem vu',
+      message: `Nhiem vu cua don ${order.orderCode} da duoc chuyen nhan su.${reason ? ` Ly do: ${reason}` : ''}`,
+      type: 'ORDER',
+      priority: 'MEDIUM',
+      metaData: {
+        assignmentId: assignment._id,
+        orderId: assignment.productionOrder,
+        oldStaffId,
+        newStaffId
+      }
+    });
 
     await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.STAFF], {
       domains: ["production"],
@@ -1238,9 +1323,13 @@ export const reassignProductionOrder = async (assignmentId, newStaffId, reason =
       metaData: { assignmentId: assignment._id, orderId: assignment.productionOrder, newStaffId }
     });
 
+    console.log(
+      `[Production] Reassigned assignment ${assignment._id} of order ${order.orderCode} from ${oldStaffId} to ${newStaffId}. Reason: ${reason || 'N/A'}`
+    );
+
     return {
       success: true,
-      message: 'Đã thay đổi nhân sự thành công.',
+      message: 'ÄÃ£ thay Ä‘á»•i nhÃ¢n sá»± thÃ nh cÃ´ng.',
       data: { assignment }
     };
   } catch (error) {
@@ -1287,7 +1376,7 @@ export const updateAssignmentStatus = async (assignmentId, status, completedQuan
                         lastReportDate.getMonth() === today.getMonth() &&
                         lastReportDate.getDate() === today.getDate();
       if (isSameDay) {
-        throw new Error('Bạn đã gửi báo cáo cho công việc này hôm nay rồi. Mỗi ngày chỉ được báo cáo tối đa 1 lần.');
+        throw new Error('Báº¡n Ä‘Ã£ gá»­i bÃ¡o cÃ¡o cho cÃ´ng viá»‡c nÃ y hÃ´m nay rá»“i. Má»—i ngÃ y chá»‰ Ä‘Æ°á»£c bÃ¡o cÃ¡o tá»‘i Ä‘a 1 láº§n.');
       }
     }
 
@@ -1458,7 +1547,7 @@ export const createStockInSlip = async (orderIdentifier, managerId, slipData = {
         product: pItem.product._id,
         itemName: pItem.product.name,
         itemCode: pItem.product.code,
-        unit: pItem.product.unit || 'cái',
+        unit: pItem.product.unit || 'cÃ¡i',
         quantity: {
           requested: quantity,
           actual: 0 // Default actual to 0 until warehouse manager confirms
@@ -1482,7 +1571,7 @@ export const createStockInSlip = async (orderIdentifier, managerId, slipData = {
         creator: managerId,
         personInOut: slipData.personInOut || 'Bo phan san xuat'
       },
-      notes: slipData.notes || `Nhập kho thành phẩm cho đơn hàng ${order.orderCode}`,
+      notes: slipData.notes || `Nháº­p kho thÃ nh pháº©m cho Ä‘Æ¡n hÃ ng ${order.orderCode}`,
     });
 
     await newSlip.save({ session });
@@ -1538,7 +1627,7 @@ export const updateProductionOrder = async (orderId, updateData, userId) => {
     if (!order) throw new Error('Order not found.');
 
     if ([ORDER_STATUS.COMPLETED, ORDER_STATUS.CANCELLED].includes(order.status)) {
-      throw new Error(`Không thể chỉnh sửa đơn hàng đang ở trạng thái ${order.status}.`);
+      throw new Error(`KhÃ´ng thá»ƒ chá»‰nh sá»­a Ä‘Æ¡n hÃ ng Ä‘ang á»Ÿ tráº¡ng thÃ¡i ${order.status}.`);
     }
 
     const { products: orderProducts, priority, deadline, notes, reason } = updateData;
@@ -1551,7 +1640,7 @@ export const updateProductionOrder = async (orderId, updateData, userId) => {
     ].includes(order.status);
 
     if (orderProducts && isProductionStarted) {
-      throw new Error('Đơn hàng đã bắt đầu sản xuất, không thể thay đổi số lượng sản phẩm. Chỉ có thể cập nhật hạn hoàn thành và ghi chú.');
+      throw new Error('ÄÆ¡n hÃ ng Ä‘Ã£ báº¯t Ä‘áº§u sáº£n xuáº¥t, khÃ´ng thá»ƒ thay Ä‘á»•i sá»‘ lÆ°á»£ng sáº£n pháº©m. Chá»‰ cÃ³ thá»ƒ cáº­p nháº­t háº¡n hoÃ n thÃ nh vÃ  ghi chÃº.');
     }
 
     // 2. Update basic fields
@@ -1560,7 +1649,7 @@ export const updateProductionOrder = async (orderId, updateData, userId) => {
     if (notes !== undefined) order.notes = notes;
 
     // Log the update reason
-    const logEntry = `\n[${new Date().toLocaleString()}] Chỉnh sửa bởi ${userId}. Lý do: ${reason}`;
+    const logEntry = `\n[${new Date().toLocaleString()}] Chá»‰nh sá»­a bá»Ÿi ${userId}. LÃ½ do: ${reason}`;
     order.notes = (order.notes || '') + logEntry;
 
     // 3. Handle product and material updates
@@ -1585,7 +1674,7 @@ export const updateProductionOrder = async (orderId, updateData, userId) => {
 
       for (const item of orderProducts) {
         const product = productMap.get(item.productId || item.productCode);
-        if (!product) throw new Error(`Sản phẩm ${item.productId || item.productCode} không tồn tại.`);
+        if (!product) throw new Error(`Sáº£n pháº©m ${item.productId || item.productCode} khÃ´ng tá»“n táº¡i.`);
 
         validatedProducts.push({
           product: product._id,
@@ -1625,7 +1714,7 @@ export const updateProductionOrder = async (orderId, updateData, userId) => {
 
       for (const [matId, neededQuantity] of newMaterialRequirements.entries()) {
         const material = materialMap.get(matId);
-        if (!material) throw new Error(`Vật tư ${matId} không tồn tại.`);
+        if (!material) throw new Error(`Váº­t tÆ° ${matId} khÃ´ng tá»“n táº¡i.`);
 
         if (material.currentStock < neededQuantity) {
           hasInsufficientStock = true;
@@ -1708,7 +1797,7 @@ export const updateProductionOrder = async (orderId, updateData, userId) => {
             };
           }),
           status: REQUISITION_STATUS.PENDING,
-          notes: `Tạo lại yêu cầu sau khi chỉnh sửa đơn hàng. Lý do: ${reason}`
+          notes: `Táº¡o láº¡i yÃªu cáº§u sau khi chá»‰nh sá»­a Ä‘Æ¡n hÃ ng. LÃ½ do: ${reason}`
         });
         await newRequisition.save({ session });
       } else if (processedReqs.length > 0) {
@@ -1738,7 +1827,7 @@ export const updateProductionOrder = async (orderId, updateData, userId) => {
             items: supplementaryItems,
             type: REQUISITION_TYPE.SUPPLEMENTARY,
             status: REQUISITION_STATUS.PENDING,
-            notes: `Yêu cầu bổ sung vật tư do tăng số lượng đơn hàng. Lý do: ${reason}`
+            notes: `YÃªu cáº§u bá»• sung váº­t tÆ° do tÄƒng sá»‘ lÆ°á»£ng Ä‘Æ¡n hÃ ng. LÃ½ do: ${reason}`
           });
           await supRequisition.save({ session });
         }
@@ -1779,7 +1868,7 @@ export const updateProductionOrder = async (orderId, updateData, userId) => {
 
     return {
       success: true,
-      message: 'Cập nhật lệnh sản xuất thành công.',
+      message: 'Cáº­p nháº­t lá»‡nh sáº£n xuáº¥t thÃ nh cÃ´ng.',
       data: { order }
     };
   } catch (error) {
@@ -1827,8 +1916,8 @@ export const cancelProductionOrder = async (orderId, reason, userId) => {
         // Notify staff
         await createNotification({
           recipient: assignment.staff,
-          title: 'Nhiệm vụ bị hủy',
-          message: `Nhiệm vụ sản xuất cho đơn ${order.orderCode} đã bị hủy. Lý do: ${reason}`,
+          title: 'Nhiá»‡m vá»¥ bá»‹ há»§y',
+          message: `Nhiá»‡m vá»¥ sáº£n xuáº¥t cho Ä‘Æ¡n ${order.orderCode} Ä‘Ã£ bá»‹ há»§y. LÃ½ do: ${reason}`,
           type: 'TASK',
           priority: 'MEDIUM',
           metaData: { orderId, assignmentId: assignment._id }
@@ -1930,5 +2019,7 @@ export const getMaterialAlerts = async (queryParams) => {
     return { success: false, message: error.message, data: null };
   }
 };
+
+
 
 

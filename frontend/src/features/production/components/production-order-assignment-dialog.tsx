@@ -261,7 +261,7 @@ export function ProductionOrderAssignmentDialog({ open, onOpenChange, order }: P
                 Lệnh sản xuất: <span className="font-mono">{order?.orderCode}</span>
               </p>
               <p className="text-sm leading-relaxed text-blue-800/80 dark:text-blue-200/70">
-                Chỉ có thể phân công khi đơn đang ở trạng thái sẵn sàng phân công hoặc đã phân công. Đơn thiếu vật liệu cần nhập đủ vật liệu trước.
+                Chỉ có thể phân công khi đơn đang ở trạng thái sẵn sàng phân công hoặc có thể phân công lại. Đơn thiếu vật liệu cần nhập đủ vật liệu trước.
               </p>
             </div>
           </div>

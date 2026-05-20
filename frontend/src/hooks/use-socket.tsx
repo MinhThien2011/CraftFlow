@@ -123,7 +123,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             }
 
             if (shouldReport && (err.message === "Authentication required" || err.message === "Invalid token")) {
-                toast.error("Phien socket het han, dang reconnect...");
+                toast.error("Phiên socket hết hạn, đang kết nối lại...");
             }
         });
 
@@ -162,7 +162,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         newSocket.on("material_shortage_created", (data: any) => {
             console.log("[Socket] Material shortage created:", data);
             invalidateRealtimeDomains(["production", "materials", "inventory", "alerts"]);
-            toast.warning("Canh bao thieu vat tu", {
+            toast.warning("Cảnh báo thiếu vật tư", {
                 description: data.message,
                 duration: 8000,
                 action: {
@@ -175,7 +175,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         newSocket.on("purchase_order_created", (data: any) => {
             console.log("[Socket] Purchase order created:", data);
             invalidateRealtimeDomains(["purchaseOrders", "alerts", "production"]);
-            toast.info("Yeu cau mua hang moi", {
+            toast.info("Yêu cầu mua hàng mới", {
                 description: data.message,
                 duration: 8000,
                 action: {
@@ -188,7 +188,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         newSocket.on("production_order_created", (data: any) => {
             console.log("[Socket] Production order created:", data);
             invalidateRealtimeDomains(["production", "materials", "inventory", "alerts", "requisitions"]);
-            toast.success("Don san xuat moi", {
+            toast.success("Đơn sản xuất mới", {
                 description: data.message,
                 duration: 8000,
                 action: {
@@ -201,7 +201,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         newSocket.on("production_order_status_updated", (data: any) => {
             console.log("[Socket] Production order status updated:", data);
             invalidateRealtimeDomains(["production", "inventory", "products"]);
-            toast.info("Cap nhat don san xuat", {
+            toast.info("Cập nhật đơn sản xuất", {
                 description: data.message,
                 duration: 8000,
             });
@@ -210,7 +210,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         newSocket.on("purchase_order_status_updated", (data: any) => {
             console.log("[Socket] Purchase order status updated:", data);
             invalidateRealtimeDomains(["purchaseOrders", "slips", "inventory", "materials", "alerts"]);
-            toast.info("Cap nhat don mua hang", {
+            toast.info("Cập nhật đơn mua hàng", {
                 description: data.message,
                 duration: 8000,
             });
@@ -219,7 +219,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         newSocket.on("inventory_slip_updated", (data: any) => {
             console.log("[Socket] Inventory slip updated:", data);
             invalidateRealtimeDomains(["slips", "inventory", "materials", "products", "production", "requisitions", "alerts"]);
-            toast.info("Cap nhat kho", {
+            toast.info("Cập nhật kho", {
                 description: data.message,
                 duration: 6000,
             });

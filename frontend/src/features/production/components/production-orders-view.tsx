@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { useCreateProductionOrder } from "@/features/production/hooks/use-production"
 import { useProducts } from "@/features/production/hooks/use-products"
-import { PRODUCTION_STATUS_FILTERS, getProductionOrderStatusConfig } from "@/features/production/utils/production-status"
+import { PRODUCTION_STATUS_FILTERS, WAITING_MATERIAL_ISSUE_CONFIG, getProductionOrderStatusConfig, isWaitingMaterialIssueStatus } from "@/features/production/utils/production-status"
 
 const CreateOrderModal = dynamic(
   () => import("@/features/production/components/create-order-modal").then((m) => m.CreateOrderModal),
@@ -282,9 +282,16 @@ export function ProductionOrdersView({ detailBasePath, canCreate = false }: Prod
                         </div>
                       )}
                     </div>
-                    <Badge variant="outline" className={cn("border font-medium shadow-sm", config.color)}>
-                      {config.label}
-                    </Badge>
+                    <div className="flex flex-col items-end gap-1.5">
+                      <Badge variant="outline" className={cn("border font-medium shadow-sm", config.color)}>
+                        {config.label}
+                      </Badge>
+                      {isWaitingMaterialIssueStatus(order.status) && (
+                        <Badge variant="outline" className={cn("border text-[11px] font-medium shadow-sm", WAITING_MATERIAL_ISSUE_CONFIG.color)}>
+                          {WAITING_MATERIAL_ISSUE_CONFIG.label}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
 
                   <div className="mt-1 flex min-w-0 flex-col">

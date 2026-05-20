@@ -173,6 +173,22 @@ export function getAssignmentStatusConfig(status?: string): Pick<StatusConfig, "
   }
 }
 
+const WAITING_MATERIAL_ISSUE_STATUSES = new Set<ProductionOrderStatus>([
+  PRODUCTION_ORDER_STATUS.READY_TO_ASSIGN,
+  PRODUCTION_ORDER_STATUS.ASSIGNED,
+])
+
+export const WAITING_MATERIAL_ISSUE_CONFIG = {
+  label: "Đang chờ cấp vật tư",
+  color: "text-amber-700 border-amber-300 bg-amber-100/70",
+}
+
+export function isWaitingMaterialIssueStatus(status?: string): boolean {
+  if (!status) return false
+  const normalized = status.toLowerCase() as ProductionOrderStatus
+  return WAITING_MATERIAL_ISSUE_STATUSES.has(normalized)
+}
+
 // ─── Priority config ────────────────────────────────────────────────────────
 
 export type Priority = "urgent" | "high" | "medium" | "normal" | "low"

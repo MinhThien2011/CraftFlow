@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { 
   ClipboardList, 
@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useWarehouseDashboard } from '../api/get-warehouse-dashboard'
 import { cn } from '@/lib/utils'
+import Link from 'next/link'
 
 export function WarehouseStats() {
   const { data, isLoading, isError } = useWarehouseDashboard()
@@ -38,7 +39,8 @@ export function WarehouseStats() {
       iconBg: 'bg-gradient-to-br from-amber-100/80 to-amber-200/50 dark:from-amber-900/40 dark:to-amber-900/20 border border-amber-500/20',
       iconColor: 'text-amber-600 dark:text-amber-400',
       urgent: dashboardStats.pendingRequisitions > 0,
-      glowAccent: 'bg-amber-500/20'
+      glowAccent: 'bg-amber-500/20',
+      href: '/requisitions/materials'
     },
     {
       title: 'Phiếu Nhập/Xuất chờ duyệt',
@@ -47,32 +49,35 @@ export function WarehouseStats() {
       iconBg: 'bg-gradient-to-br from-emerald-100/80 to-emerald-200/50 dark:from-emerald-900/40 dark:to-emerald-900/20 border border-emerald-500/20',
       iconColor: 'text-emerald-600 dark:text-emerald-400',
       urgent: dashboardStats.pendingSlips > 0,
-      glowAccent: 'bg-emerald-500/20'
+      glowAccent: 'bg-emerald-500/20',
+      href: '/issuing/pending'
     },
     {
-      title: 'Hàng hoá sắp hết',
+      title: 'Hàng hóa sắp hết',
       value: dashboardStats.lowStockItems,
       icon: PackageX,
       iconBg: 'bg-gradient-to-br from-orange-100/80 to-orange-200/50 dark:from-orange-900/40 dark:to-orange-900/20 border border-orange-500/20',
       iconColor: 'text-orange-600 dark:text-orange-400',
       urgent: dashboardStats.lowStockItems > 5,
-      glowAccent: 'bg-orange-500/20'
+      glowAccent: 'bg-orange-500/20',
+      href: '/alerts'
     },
     {
-      title: 'Quá hạn xử lý',
+      title: 'Lịch sử FIFO',
       value: dashboardStats.timeoutRequisitions,
       icon: Clock,
       iconBg: 'bg-gradient-to-br from-rose-100/80 to-rose-200/50 dark:from-rose-900/40 dark:to-rose-900/20 border border-rose-500/20',
       iconColor: 'text-rose-600 dark:text-rose-400',
       urgent: dashboardStats.timeoutRequisitions > 0,
-      glowAccent: 'bg-rose-500/20'
+      glowAccent: 'bg-rose-500/20',
+      href: '/inventory/fifo-history'
     }
   ]
 
   return (
     <div className="grid gap-6 grid-cols-2 lg:grid-cols-4">
       {stats.map((stat) => (
-        <div key={stat.title} className="relative group">
+        <Link href={stat.href} key={stat.title} className="relative group block">
           {/* Lớp màu phát sáng (Glow) ở dưới đáy khi Hover */}
           <div className={cn(
             "absolute inset-0 rounded-[2rem] opacity-0 group-hover:opacity-100 transition-opacity duration-700 blur-2xl -z-10",
@@ -114,8 +119,9 @@ export function WarehouseStats() {
             <stat.icon className="absolute -bottom-6 -right-6 size-32 text-foreground/[0.03] rotate-[-15deg] pointer-events-none transition-transform duration-700 group-hover:rotate-0 group-hover:scale-110" />
             
           </div>
-        </div>
+        </Link>
       ))}
     </div>
   )
 }
+

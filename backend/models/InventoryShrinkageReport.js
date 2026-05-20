@@ -106,7 +106,6 @@ const InventoryShrinkageReportSchema = new mongoose.Schema({
     timestamps: true,
     toJSON: { versionKey: false },
     toObject: { versionKey: false },
-    collection: 'inventory_material_losses'
 });
 
 InventoryShrinkageReportSchema.index({ status: 1 });

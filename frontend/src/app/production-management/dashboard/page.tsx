@@ -175,7 +175,7 @@ export default function DashboardPage() {
                         <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
                       </div>
                       <span className="text-sm font-semibold">
-                        Nhà máy có <span className="text-lg font-bold">{overview?.pendingMaterialAlerts}</span> đơn thiếu vật tư
+                        Có <span className="text-lg font-bold">{overview?.pendingMaterialAlerts}</span> lệnh sản xuất thiếu vật tư
                       </span>
                     </>
                   ) : (

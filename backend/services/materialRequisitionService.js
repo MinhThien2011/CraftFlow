@@ -71,8 +71,8 @@ export const requestMaterials = async (productionOrderId, managerId, items) => {
     await notifyUsersByRole({
       roles: [ROLES.KHO_MANAGER],
       excludeUserId: managerId,
-      title: 'Yeu cau cap vat tu moi',
-      message: `Don san xuat ${order.orderCode} vua tao yeu cau cap vat tu moi (${requisitionCode}).`,
+      title: 'Yêu cầu cấp vật tư mới',
+      message: `Đơn sản xuất ${order.orderCode} vừa tạo yêu cầu cấp vật tư mới (${requisitionCode}).`,
       type: 'INVENTORY',
       priority: 'MEDIUM',
       metaData: { requisitionId: newRequisition._id, orderId: order._id }
@@ -144,8 +144,8 @@ export const requestSupplementaryMaterials = async (productionOrderId, managerId
     await notifyUsersByRole({
       roles: [ROLES.KHO_MANAGER],
       excludeUserId: managerId,
-      title: 'Yeu cau vat tu bo sung',
-      message: `Don ${productionOrder.orderCode} co yeu cau vat tu bo sung moi.`,
+      title: 'Yêu cầu vật tư bổ sung',
+      message: `Đơn ${productionOrder.orderCode} có yêu cầu vật tư bổ sung mới.`,
       type: 'INVENTORY',
       priority: 'HIGH',
       metaData: { requisitionId: newRequisition._id, orderId: productionOrder._id }
@@ -196,8 +196,8 @@ export const requestReturnMaterials = async (productionOrderId, managerId, items
     await notifyUsersByRole({
       roles: [ROLES.KHO_MANAGER],
       excludeUserId: managerId,
-      title: 'Yeu cau hoan tra vat tu',
-      message: `Don ${productionOrder.orderCode} co yeu cau hoan tra vat tu.`,
+      title: 'Yêu cầu hoàn trả vật tư',
+      message: `Đơn ${productionOrder.orderCode} có yêu cầu hoàn trả vật tư.`,
       type: 'INVENTORY',
       priority: 'MEDIUM',
       metaData: { requisitionId: newRequisition._id, orderId: productionOrder._id }

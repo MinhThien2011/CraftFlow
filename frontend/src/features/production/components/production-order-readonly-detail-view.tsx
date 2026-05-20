@@ -6,6 +6,7 @@ import { CalendarDays, CheckCircle, ChevronLeft, Clock, Eye, Factory, FileText, 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
+import { useQuery } from "@tanstack/react-query"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -15,12 +16,13 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
 import { ProductionOrderAssignmentDialog } from "@/features/production/components/production-order-assignment-dialog"
-import { useCancelProductionOrder, useCreateStockInSlip, useProductionOrder, useUpdateOrderStatus, useUpdateProductionOrder, useOrderBom } from "@/features/production/hooks/use-production"
-import { PRODUCTION_ORDER_STATUS, getProductionOrderStatusConfig, getAssignmentStatusConfig, getPriorityConfig } from "@/features/production/utils/production-status"
+import { useCancelProductionOrder, useCreateStockInSlip, useProductionOrder, useReassignTask, useUpdateOrderStatus, useUpdateProductionOrder, useOrderBom } from "@/features/production/hooks/use-production"
+import { PRODUCTION_ORDER_STATUS, WAITING_MATERIAL_ISSUE_CONFIG, getProductionOrderStatusConfig, getAssignmentStatusConfig, getPriorityConfig, isWaitingMaterialIssueStatus } from "@/features/production/utils/production-status"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { Slip, slipApi } from "@/api/slip.api"
 import { SlipDetailDialog } from "@/components/shared/slip-detail-dialog"
+import { productionApi } from "@/api/production.api"
 
 const formatDate = (dateString?: string) => {
   if (!dateString) return "---"
@@ -40,6 +42,7 @@ export function ProductionOrderReadonlyDetailView({ id, backHref, backLabel = "Q
   const { data: bomResponse, isLoading: isBomLoading } = useOrderBom(id)
   const updateOrderStatusMutation = useUpdateOrderStatus()
   const createStockInSlipMutation = useCreateStockInSlip()
+  const reassignTaskMutation = useReassignTask()
   const updateOrderMutation = useUpdateProductionOrder()
   const cancelOrderMutation = useCancelProductionOrder()
 
@@ -58,8 +61,20 @@ export function ProductionOrderReadonlyDetailView({ id, backHref, backLabel = "Q
   const [stockInSlip, setStockInSlip] = useState<Slip | null>(null)
   const [isLoadingStockInSlip, setIsLoadingStockInSlip] = useState(false)
   const [isSlipDialogOpen, setIsSlipDialogOpen] = useState(false)
+  const [isReassignOpen, setIsReassignOpen] = useState(false)
+  const [selectedAssignment, setSelectedAssignment] = useState<any>(null)
+  const [newStaffId, setNewStaffId] = useState("")
+  const [reassignReason, setReassignReason] = useState("")
+
+  const { data: staffResponse } = useQuery({
+    queryKey: ["production", "staff-suggestions", "reassign"],
+    queryFn: () => productionApi.getStaffSuggestions(),
+    enabled: !!canManage && isReassignOpen,
+    staleTime: 1000 * 60 * 5,
+  })
 
   const order = (orderResponse?.data as any)?.order || orderResponse?.data
+  const allStaff: any[] = (staffResponse as any)?.data?.suggestions || (staffResponse as any)?.suggestions || []
 
   useEffect(() => {
     const loadStockInSlip = async () => {
@@ -231,6 +246,45 @@ export function ProductionOrderReadonlyDetailView({ id, backHref, backLabel = "Q
     )
   }
 
+  const openReassignDialog = (assignment: any) => {
+    setSelectedAssignment(assignment)
+    setNewStaffId("")
+    setReassignReason("")
+    setIsReassignOpen(true)
+  }
+
+  const handleConfirmReassign = () => {
+    if (!selectedAssignment?._id) return
+    if (!newStaffId) {
+      toast.error("Vui lòng chọn nhân sự thay thế")
+      return
+    }
+    if (!reassignReason.trim()) {
+      toast.error("Vui lòng nhập lý do phân công lại")
+      return
+    }
+    if (newStaffId === (selectedAssignment.staff?._id || selectedAssignment.staff)) {
+      toast.error("Nhân sự mới phải khác nhân sự hiện tại")
+      return
+    }
+
+    reassignTaskMutation.mutate(
+      {
+        assignmentId: selectedAssignment._id,
+        newStaffId,
+        reason: reassignReason.trim(),
+      },
+      {
+        onSuccess: () => {
+          setIsReassignOpen(false)
+          setSelectedAssignment(null)
+          setNewStaffId("")
+          setReassignReason("")
+        }
+      }
+    )
+  }
+
   return (
     <div className="mx-auto max-w-7xl space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -243,6 +297,11 @@ export function ProductionOrderReadonlyDetailView({ id, backHref, backLabel = "Q
           <Badge variant="outline" className={cn("border px-3 py-1 text-sm font-medium", statusConfig.color)}>
             Trạng thái: {statusConfig.label}
           </Badge>
+          {isWaitingMaterialIssueStatus(order.status) && (
+            <Badge variant="outline" className={cn("border px-3 py-1 text-sm font-medium", WAITING_MATERIAL_ISSUE_CONFIG.color)}>
+              {WAITING_MATERIAL_ISSUE_CONFIG.label}
+            </Badge>
+          )}
           <Button variant="outline" onClick={() => setIsBomOpen(true)} className="border-primary text-primary hover:bg-primary/10">
             <ClipboardList className="mr-2 h-4 w-4" />
             Xem BOM
@@ -412,7 +471,16 @@ export function ProductionOrderReadonlyDetailView({ id, backHref, backLabel = "Q
                                 <p className="text-xs text-muted-foreground">Sản phẩm: {assign.product?.name || order.products?.find((p: any) => (p.product?._id || p.product) === (assign.product?._id || assign.product))?.productName || "Sản phẩm"}</p>
                               </div>
                             </div>
-                            <Badge variant="outline" className={cn("capitalize bg-card", getAssignmentStatusConfig(assign.status).color)}>
+                            <Badge
+                              variant="outline"
+                              onClick={() => canManage && openReassignDialog(assign)}
+                              className={cn(
+                                "capitalize bg-card",
+                                getAssignmentStatusConfig(assign.status).color,
+                                canManage && "cursor-pointer hover:opacity-80"
+                              )}
+                              title={canManage ? "Nhấn để phân công lại nhân sự" : undefined}
+                            >
                               {getAssignmentStatusConfig(assign.status).label}
                             </Badge>
                           </div>
@@ -607,6 +675,53 @@ export function ProductionOrderReadonlyDetailView({ id, backHref, backLabel = "Q
         statusConfig={importStatusConfig as any}
         readOnly
       />
+
+      <Dialog open={canManage && isReassignOpen} onOpenChange={setIsReassignOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Phân công lại nhiệm vụ</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1 text-sm">
+              <p className="text-muted-foreground">Nhân sự hiện tại</p>
+              <p className="font-medium">{selectedAssignment?.staff?.fullName || selectedAssignment?.staff?.username || "---"}</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-staff-id">Nhân sự thay thế</Label>
+              <select
+                id="new-staff-id"
+                value={newStaffId}
+                onChange={(e) => setNewStaffId(e.target.value)}
+                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+              >
+                <option value="">Chọn nhân sự</option>
+                {allStaff
+                  .filter((staff) => staff._id !== (selectedAssignment?.staff?._id || selectedAssignment?.staff))
+                  .map((staff) => (
+                    <option key={staff._id} value={staff._id}>
+                      {staff.fullName || staff.username}
+                    </option>
+                  ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="reassign-reason">Lý do phân công lại</Label>
+              <Textarea
+                id="reassign-reason"
+                value={reassignReason}
+                onChange={(e) => setReassignReason(e.target.value)}
+                rows={3}
+              />
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <Button variant="outline" onClick={() => setIsReassignOpen(false)}>Đóng</Button>
+              <Button onClick={handleConfirmReassign} disabled={reassignTaskMutation.isPending}>
+                {reassignTaskMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Xác nhận"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

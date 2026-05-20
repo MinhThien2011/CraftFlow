@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import dynamic from "next/dynamic"
 import { useMemo } from "react"
@@ -54,7 +54,8 @@ export default function DashboardPage() {
       iconBg: "bg-gradient-to-br from-blue-100/80 to-blue-200/50 dark:from-blue-900/40 dark:to-blue-900/20 border border-blue-500/20",
       iconColor: "text-blue-600 dark:text-blue-400",
       glowAccent: "bg-blue-500/10",
-      isPercent: true
+      isPercent: true,
+      href: "/inventory/materials"
     },
     {
       title: "Đang sản xuất",
@@ -65,7 +66,8 @@ export default function DashboardPage() {
       iconBg: "bg-gradient-to-br from-emerald-100/80 to-emerald-200/50 dark:from-emerald-900/40 dark:to-emerald-900/20 border border-emerald-500/20",
       iconColor: "text-emerald-600 dark:text-emerald-400",
       glowAccent: "bg-emerald-500/10",
-      isPercent: false
+      isPercent: false,
+      href: "/production-management/orders"
     },
     {
       title: "Đã hoàn thành",
@@ -76,7 +78,8 @@ export default function DashboardPage() {
       iconBg: "bg-gradient-to-br from-amber-100/80 to-amber-200/50 dark:from-amber-900/40 dark:to-amber-900/20 border border-amber-500/20",
       iconColor: "text-amber-600 dark:text-amber-400",
       glowAccent: "bg-amber-500/10",
-      isPercent: false
+      isPercent: false,
+      href: "/production-management/purchase-orders"
     },
     {
       title: "Cảnh báo tồn kho",
@@ -87,7 +90,8 @@ export default function DashboardPage() {
       iconBg: "bg-gradient-to-br from-red-100/80 to-red-200/50 dark:from-red-900/40 dark:to-red-900/20 border border-red-500/20",
       iconColor: "text-red-600 dark:text-red-400",
       glowAccent: "bg-red-500/10",
-      isPercent: false
+      isPercent: false,
+      href: "/alerts"
     },
   ], [stats]);
 
@@ -117,7 +121,7 @@ export default function DashboardPage() {
   })) || [], [charts]);
 
   return (
-    <AppShell title="Tổng quan" subtitle="Chào mừng đến với CRAFTFLOW">
+      <AppShell title="Tổng quan" subtitle="Chào mừng đến với CRAFTFLOW">
       <div className="flex flex-col space-y-6 pb-12">
         {/* HERO BANNER */}
         <div className="relative overflow-hidden rounded-[2rem] bg-card/60 backdrop-blur-2xl border border-white/20 dark:border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.2)] p-8 sm:p-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -131,7 +135,7 @@ export default function DashboardPage() {
                         Xin chào, <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-emerald-600 to-teal-600">{user?.fullName || user?.username || 'Quản trị viên'}</span> 👋
                     </h1>
                     <p className="text-muted-foreground text-sm sm:text-base max-w-xl">
-                        Chào mừng đến với Trung tâm điều khiển CRAFTFLOW. Hệ thống đã đồng bộ toàn bộ dữ liệu quản trị sản xuất và kho.
+                        Chào mừng đến với Trung tâm Điều khiển CRAFTFLOW. Hệ thống đã đồng bộ toàn bộ dữ liệu quản trị sản xuất và kho.
                     </p>
                 </div>
                 
@@ -154,7 +158,7 @@ export default function DashboardPage() {
             [1, 2, 3, 4].map(i => <Skeleton key={i} className="h-[160px] w-full rounded-[2rem]" />)
           ) : (
             statCards.map((stat) => (
-              <div key={stat.title} className="relative group">
+              <Link href={stat.href || "/dashboard"} key={stat.title} className="relative group block">
                 {/* Glow background behind card */}
                 <div className={cn(
                   "absolute inset-0 rounded-[2rem] opacity-0 group-hover:opacity-100 transition-opacity duration-700 blur-2xl -z-10",
@@ -199,7 +203,7 @@ export default function DashboardPage() {
                   <stat.icon className="absolute -bottom-6 -right-6 size-28 text-foreground/[0.02] rotate-[-15deg] pointer-events-none transition-transform duration-700 group-hover:rotate-0 group-hover:scale-110" />
                   
                 </div>
-              </div>
+              </Link>
             ))
           )}
         </div>
@@ -288,7 +292,7 @@ export default function DashboardPage() {
                       <div className="flex items-center gap-3">
                         <div className={cn(
                           "p-2 rounded-full shadow-inner",
-                          alert.status === "Nguy cấp" ? "bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-400" : "bg-amber-100 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400"
+                          alert.status === "Nguy cáº¥p" ? "bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-400" : "bg-amber-100 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400"
                         )}>
                           <AlertTriangle className="size-4" />
                         </div>
@@ -301,7 +305,7 @@ export default function DashboardPage() {
                       </div>
                       <span className={cn(
                         "text-[10px] sm:text-xs font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider",
-                        alert.status === "Nguy cấp" ? "bg-red-500/10 text-red-600 dark:text-red-400" : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                        alert.status === "Nguy cáº¥p" ? "bg-red-500/10 text-red-600 dark:text-red-400" : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
                       )}>
                         {alert.status}
                       </span>
@@ -366,7 +370,7 @@ export default function DashboardPage() {
               <Link href="/reports" className="w-full">
                 <Button className="w-full justify-between h-13 rounded-2xl border border-white/20 dark:border-white/10 bg-card/60 backdrop-blur-sm text-foreground hover:bg-primary hover:text-primary-foreground group transition-all duration-300 px-5 shadow-sm" variant="outline">
                   <span className="flex items-center font-semibold text-sm">
-                    <BarChart3 className="mr-3 size-5 text-muted-foreground group-hover:text-primary-foreground transition-colors" /> Xem Báo cáo Tổng hợp
+                    <BarChart3 className="mr-3 size-5 text-muted-foreground group-hover:text-primary-foreground transition-colors" /> Xem Báo cáo tổng hợp
                   </span>
                   <MoveRight className="size-4 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
                 </Button>

@@ -194,7 +194,7 @@ export function StaffTaskReportDialog({ open, onOpenChange, task }: StaffTaskRep
                     )}
                   />
                   <div className="rounded-xl border bg-muted/30 p-3 text-sm text-muted-foreground">
-                    Trang thai cong viec se duoc he thong tu xac dinh dua tren so luong da hoan thanh.
+                    Lưu ý: Báo cáo trung thực để giúp theo dõi tiến độ chính xác và điều phối công việc hiệu quả. Nếu bạn chưa hoàn thành đủ số lượng được giao, hãy nhập số lượng bạn đã hoàn thành vào hôm nay. Cảm ơn bạn!
                   </div>
                 </form>
               </Form>
