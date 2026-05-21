@@ -11,13 +11,14 @@ import { REQUISITION_STATUS, REQUISITION_TYPE, ORDER_STATUS, ROLES } from '../ut
 import mongoose from 'mongoose';
 import { emitToRoles } from '../config/socket.js';
 import { emitDataChanged, notifyUsersByRole } from '../services/realtimeService.js';
+import { clearCacheByPattern } from '../utils/redisFetching.js';
 
 const inventoryEvents = new EventEmitter();
 
 /**
  * Handle post-inventory update logic for Production and Requisitions.
  */
-inventoryEvents.on('inventory_finalized', async ({ slip, userId }) => {
+inventoryEvents.on('inventory_finalized', async ({ slip, userId, skipRequisitionFinalization = false }) => {
     let session = null;
     let productionStarted = null;
     try {
@@ -34,7 +35,7 @@ inventoryEvents.on('inventory_finalized', async ({ slip, userId }) => {
         }
 
         // 2. Handle Requisitions and Production Orders
-        if (slip.relatedRequisition) {
+        if (slip.relatedRequisition && !skipRequisitionFinalization) {
             const requisition = await MaterialRequisition.findById(slip.relatedRequisition).session(session);
             if (requisition) {
                 const productionOrder = await ProductionOrder.findById(requisition.productionOrder).session(session);
@@ -133,6 +134,22 @@ inventoryEvents.on('inventory_finalized', async ({ slip, userId }) => {
         }
 
         await session.commitTransaction();
+
+        // Invalidate Redis caches after transaction commits
+        try {
+            await Promise.all([
+                clearCacheByPattern('production:list:*'),
+                clearCacheByPattern('production:detail:*'),
+                clearCacheByPattern('material:list:*'),
+                clearCacheByPattern('material:detail:*'),
+                clearCacheByPattern('product:list:*'),
+                clearCacheByPattern('product:detail:*'),
+                clearCacheByPattern('dashboard:*')
+            ]);
+            console.log('[Event] Caches invalidated on inventory_finalized.');
+        } catch (cacheError) {
+            console.error('⚠️ [Event] Failed to clear caches on inventory_finalized:', cacheError.message);
+        }
 
         if (productionStarted) {
             await emitToRoles([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.STAFF], 'production_order_status_updated', {

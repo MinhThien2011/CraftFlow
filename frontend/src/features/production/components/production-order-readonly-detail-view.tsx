@@ -17,7 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { ProductionOrderAssignmentDialog } from "@/features/production/components/production-order-assignment-dialog"
 import { useCancelProductionOrder, useCreateStockInSlip, useProductionOrder, useReassignTask, useUpdateOrderStatus, useUpdateProductionOrder, useOrderBom } from "@/features/production/hooks/use-production"
-import { PRODUCTION_ORDER_STATUS, WAITING_MATERIAL_ISSUE_CONFIG, getProductionOrderStatusConfig, getAssignmentStatusConfig, getPriorityConfig, isWaitingMaterialIssueStatus } from "@/features/production/utils/production-status"
+import { PRODUCTION_ORDER_STATUS, getMaterialIssueStatusConfig, getProductionOrderStatusConfig, getAssignmentStatusConfig, getPriorityConfig, isMaterialIssueCompleted } from "@/features/production/utils/production-status"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { Slip, slipApi } from "@/api/slip.api"
@@ -132,11 +132,17 @@ export function ProductionOrderReadonlyDetailView({ id, backHref, backLabel = "Q
   const canAssignOrder = canManage && [PRODUCTION_ORDER_STATUS.READY_TO_ASSIGN, PRODUCTION_ORDER_STATUS.ASSIGNED].includes(order.status)
   // Use shared utility — removes the need for local getStatusConfig
   const statusConfig = getProductionOrderStatusConfig(order.status)
+  const materialIssueConfig = getMaterialIssueStatusConfig(order.materialIssue)
+  const canShowTasks = isMaterialIssueCompleted(order.materialIssue)
   const priorityConfig = getPriorityConfig(order.priority)
   const creatorName = order.createdBy?.fullName || order.createdBy?.username || "Hệ thống"
   const totalQuantity = order.products?.reduce((sum: number, p: any) => sum + p.quantity, 0) || 0
   const totalCompleted = order.assignments?.reduce((sum: number, a: any) => sum + (a.completedQuantity || 0), 0) || 0
   const overallProgress = totalQuantity > 0 ? Math.min(100, Math.round((totalCompleted / totalQuantity) * 100)) : 0
+
+  const hasAssignments = Array.isArray(order.assignments) && order.assignments.length > 0
+  const allAssignmentsCompleted = hasAssignments && order.assignments.every((a: any) => a.status === "completed")
+  const canCompleteOrder = hasAssignments && allAssignmentsCompleted
 
   const handleCreateStockInSlip = () => {
     if (!order?._id) return
@@ -297,9 +303,9 @@ export function ProductionOrderReadonlyDetailView({ id, backHref, backLabel = "Q
           <Badge variant="outline" className={cn("border px-3 py-1 text-sm font-medium", statusConfig.color)}>
             Trạng thái: {statusConfig.label}
           </Badge>
-          {isWaitingMaterialIssueStatus(order.status) && (
-            <Badge variant="outline" className={cn("border px-3 py-1 text-sm font-medium", WAITING_MATERIAL_ISSUE_CONFIG.color)}>
-              {WAITING_MATERIAL_ISSUE_CONFIG.label}
+          {order.materialIssue?.hasRequisition && (
+            <Badge variant="outline" className={cn("border px-3 py-1 text-sm font-medium", materialIssueConfig.color)}>
+              Vật tư: {materialIssueConfig.label}
             </Badge>
           )}
           <Button variant="outline" onClick={() => setIsBomOpen(true)} className="border-primary text-primary hover:bg-primary/10">
@@ -336,8 +342,16 @@ export function ProductionOrderReadonlyDetailView({ id, backHref, backLabel = "Q
               Hủy đơn
             </Button>
           )}
-          {canManage && order.status === PRODUCTION_ORDER_STATUS.IN_PRODUCTION && (
-            <Button className="bg-[#4A9C6B] text-white hover:bg-[#4A9C6B]/90" onClick={() => setIsCompleteOpen(true)}>
+          {canManage && (order.status === PRODUCTION_ORDER_STATUS.IN_PRODUCTION || order.status === "partially_complete") && (
+            <Button
+              className={cn(
+                "bg-[#4A9C6B] text-white hover:bg-[#4A9C6B]/90",
+                !canCompleteOrder && "opacity-50 cursor-not-allowed hover:bg-[#4A9C6B]"
+              )}
+              disabled={!canCompleteOrder}
+              onClick={() => setIsCompleteOpen(true)}
+              title={!canCompleteOrder ? "Tất cả công việc phân công cho nhân sự phải ở trạng thái đã hoàn thành trước khi xác nhận" : undefined}
+            >
               <CheckCircle className="mr-2 h-4 w-4" />
               Xác nhận hoàn thành
             </Button>
@@ -455,7 +469,13 @@ export function ProductionOrderReadonlyDetailView({ id, backHref, backLabel = "Q
 
               <div className="space-y-4">
                 <p className="text-sm font-semibold text-muted-foreground">Chi tiết nhân sự</p>
-                {order.assignments && order.assignments.length > 0 ? (
+                {!canShowTasks && order.materialIssue?.hasRequisition ? (
+                  <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-amber-200 bg-amber-50/60 py-8 text-center">
+                    <Package className="mb-2 h-10 w-10 text-amber-500" />
+                    <p className="text-sm font-semibold text-amber-800">Đang chờ kho hoàn tất xuất vật tư</p>
+                    <p className="mt-1 max-w-md text-xs text-amber-700">Task và tiến độ nhân sự sẽ được mở sau khi yêu cầu vật tư chuyển sang đã xuất kho.</p>
+                  </div>
+                ) : order.assignments && order.assignments.length > 0 ? (
                   <div className="space-y-3">
                     {order.assignments.map((assign: any, idx: number) => {
                       const assignProgress = assign.assignedQuantity > 0 ? Math.round((assign.completedQuantity / assign.assignedQuantity) * 100) : 0

@@ -21,7 +21,7 @@ const getChunkParts = (chunk) => chunk?.candidates?.[0]?.content?.parts || [];
 
 const getModelChain = () => {
   const primary = process.env.AI_GUARD_MODEL_PRIMARY || process.env.AI_MODEL_PRIMARY || modelConfig.model;
-  const fallbackStr = process.env.AI_GUARD_MODEL_FALLBACKS || process.env.AI_MODEL_FALLBACKS || 'gemini-2.0-flash';
+  const fallbackStr = process.env.AI_GUARD_MODEL_FALLBACKS || process.env.AI_MODEL_FALLBACKS || 'gemini-3.1-flash-lite';
   const fallbacks = String(fallbackStr)
     .split(',')
     .map((s) => s.trim())

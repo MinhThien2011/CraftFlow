@@ -15,7 +15,7 @@ import {
 import { ServiceResponse } from '../utils/serviceHelper.js';
 import { generateAtomicCode } from '../utils/codeGenerator.js';
 import { updateShelfLoad } from './shelfService.js';
-import { allocateBatchesForMaterial, createBatch } from './fifoService.js';
+import { allocateBatchesForMaterial, createBatch, getAllocatableBatchStockForItem } from './fifoService.js';
 import { createSlipService } from './importExportSlipService.js';
 import {
   autoUpdateInsufficientOrders,
@@ -28,6 +28,24 @@ import InventoryShrinkageReport from '../models/InventoryShrinkageReport.js';
 import mongoose from 'mongoose';
 import { applyCreatedAtCursor, buildListPagination, normalizePagination } from '../utils/pagination.js';
 import { applyAggregateGuards } from '../utils/queryPerformance.js';
+import { clearCacheByPattern } from '../utils/redisFetching.js';
+
+const invalidateCaches = async () => {
+  try {
+    await Promise.all([
+      clearCacheByPattern('production:list:*'),
+      clearCacheByPattern('production:detail:*'),
+      clearCacheByPattern('material:list:*'),
+      clearCacheByPattern('material:detail:*'),
+      clearCacheByPattern('product:list:*'),
+      clearCacheByPattern('product:detail:*'),
+      clearCacheByPattern('dashboard:*')
+    ]);
+    console.log('[Cache] Invalidation triggered from Requisition flow.');
+  } catch (err) {
+    console.error('⚠️ Failed to invalidate caches in Requisition flow:', err.message);
+  }
+};
 
 /**
  * Production Manager requests materials for a production order.
@@ -86,6 +104,10 @@ export const requestMaterials = async (productionOrderId, managerId, items) => {
       message: `Material requisition ${requisitionCode} was created.`,
       metaData: { requisitionId: newRequisition._id, requisitionCode, orderId: order._id }
     });
+
+    await session.commitTransaction();
+
+    invalidateCaches().catch(() => {});
 
     return ServiceResponse(true, 'Đã gửi yêu cầu cấp vật tư thành công.', newRequisition, 201);
   } catch (error) {
@@ -151,6 +173,7 @@ export const requestSupplementaryMaterials = async (productionOrderId, managerId
       metaData: { requisitionId: newRequisition._id, orderId: productionOrder._id }
     });
 
+    invalidateCaches().catch(() => {});
     await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.KHO_MANAGER], {
       domains: ["requisitions", "production", "inventory", "materials", "alerts"],
       action: "created",
@@ -203,6 +226,7 @@ export const requestReturnMaterials = async (productionOrderId, managerId, items
       metaData: { requisitionId: newRequisition._id, orderId: productionOrder._id }
     });
 
+    invalidateCaches().catch(() => {});
     await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.KHO_MANAGER], {
       domains: ["requisitions", "production", "inventory", "materials"],
       action: "created",
@@ -295,6 +319,8 @@ export const approveReturnRequisition = async (requisitionId, managerId) => {
     await autoUpdateInsufficientOrders(returnedMaterialIds, session);
 
     await session.commitTransaction();
+
+    invalidateCaches().catch(() => {});
 
     await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.KHO_MANAGER], {
       domains: ["requisitions", "production", "inventory", "materials", "slips"],
@@ -652,14 +678,15 @@ export const updateRequisitionStatus = async (requisitionId, managerId, status, 
             }], { session });
           }
 
-          const updatedMaterial = await Material.findOneAndUpdate(
-            { _id: material._id, currentStock: { $gte: item.requestedQuantity } },
-            { $inc: { currentStock: -item.requestedQuantity } },
+          const syncedStock = await getAllocatableBatchStockForItem({ materialId: material._id, session });
+          const updatedMaterial = await Material.findByIdAndUpdate(
+            material._id,
+            { $set: { currentStock: syncedStock } },
             { returnDocument: 'after', session }
           );
 
           if (!updatedMaterial) {
-            throw new Error(`Insufficient stock for material ${material.name}.`);
+            throw new Error(`Material ${material.name} not found while syncing FIFO stock.`);
           }
 
           if (material.shelf) await updateShelfLoad(material.shelf, session);
@@ -696,6 +723,8 @@ export const updateRequisitionStatus = async (requisitionId, managerId, status, 
 
     await requisition.save({ session });
     await session.commitTransaction();
+
+    invalidateCaches().catch(() => {});
 
     if (productionStarted) {
       await notifyAssignedStaffProductionStarted(productionStarted.orderId, productionStarted.orderCode);
@@ -868,6 +897,10 @@ export const autoAcceptRequisitionsIfSufficient = async (materialIds = [], manag
           metaData: { requisitionId: requisition._id, requisitionCode: requisition.requisitionCode, status: REQUISITION_STATUS.ACCEPTED }
         });
       }
+    }
+
+    if (processedCount > 0) {
+      invalidateCaches().catch(() => {});
     }
 
     return { success: true, processedCount };

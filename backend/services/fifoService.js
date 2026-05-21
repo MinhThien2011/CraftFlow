@@ -11,6 +11,34 @@ const MAX_RETRY_ATTEMPTS = 10;
 
 const toObjectId = (id) => id instanceof mongoose.Types.ObjectId ? id : new mongoose.Types.ObjectId(id);
 
+const buildAllocatableBatchQuery = ({ materialId, productId }) => {
+    const query = {
+        quantityRemaining: { $gt: 0 },
+        $or: [
+            { expirationDate: null },
+            { expirationDate: { $gt: new Date() } }
+        ]
+    };
+
+    if (materialId) query.material = toObjectId(materialId);
+    else if (productId) query.product = toObjectId(productId);
+    else throw new Error('Either materialId or productId must be provided for batch allocation.');
+
+    return query;
+};
+
+export const getAllocatableBatchStockForItem = async ({ materialId, productId, session }) => {
+    const aggregate = InventoryBatch.aggregate([
+        { $match: buildAllocatableBatchQuery({ materialId, productId }) },
+        { $group: { _id: null, total: { $sum: '$quantityRemaining' } } }
+    ]);
+
+    if (session) aggregate.session(session);
+
+    const [result] = await aggregate;
+    return Number(result?.total || 0);
+};
+
 export const generateBatchNumber = async (materialCode = 'MAT') => {
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const basePattern = `${BATCH_PREFIX}-${materialCode.toUpperCase()}-${dateStr}-`;
@@ -60,66 +88,69 @@ export const allocateBatchesForItem = async ({ materialId, productId, quantityNe
     try {
         const requestedQuantity = Number(quantityNeeded);
         if (!Number.isFinite(requestedQuantity) || requestedQuantity <= 0) {
-            throw new Error('quantityNeeded must be a positive number.');
+            throw new Error('quantityNeeded phải là số dương hợp lệ.');
         }
 
-        const query = {
-            isExhausted: false,
-            quantityRemaining: { $gt: 0 },
-            $or: [
-                { expirationDate: null },
-                { expirationDate: { $gt: new Date() } }
-            ]
-        };
+        const baseQuery = buildAllocatableBatchQuery({ materialId, productId });
 
-        if (materialId) query.material = toObjectId(materialId);
-        else if (productId) query.product = toObjectId(productId);
-        else throw new Error('Either materialId or productId must be provided for batch allocation.');
 
-        const totalAvailableResult = await InventoryBatch.aggregate([
-            { $match: query },
-            { $group: { _id: null, total: { $sum: '$quantityRemaining' } } }
-        ]).session(session);
-
-        const totalAvailable = totalAvailableResult[0]?.total || 0;
+        // Kiểm tra tổng tồn kho FIFO trước khi bắt đầu phân bổ
+        const totalAvailable = await getAllocatableBatchStockForItem({ materialId, productId, session });
         if (totalAvailable < requestedQuantity) {
             return {
                 success: false,
-                message: `Not enough stock. Still need ${requestedQuantity - totalAvailable} more units.`,
-                data: { allocations: [], shortfall: requestedQuantity - totalAvailable }
+                message: `Không đủ tồn kho FIFO. Tồn hiện tại: ${totalAvailable}, cần xuất: ${requestedQuantity}, thiếu: ${requestedQuantity - totalAvailable} đơn vị.`,
+                data: { totalAvailable, requestedQuantity, shortfall: requestedQuantity - totalAvailable }
             };
         }
 
         const allocations = [];
         let remainingQuantity = requestedQuantity;
+        // Giới hạn vòng lặp để tránh vòng lặp vô hạn do lỗi dữ liệu
+        const MAX_ITERATIONS = 100;
+        // Giới hạn số lần thất bại liên tiếp do tranh cướp concurrent
+        const MAX_CONSECUTIVE_FAILURES = 10;
+        let iterations = 0;
+        let consecutiveFailures = 0;
 
         while (remainingQuantity > 0) {
-            const batch = await InventoryBatch.findOne(query)
+            if (++iterations > MAX_ITERATIONS) {
+                throw new Error(`Vòng lặp phân bổ vượt ${MAX_ITERATIONS} lần. Có thể dữ liệu batch không nhất quán.`);
+            }
+
+            const batch = await InventoryBatch.findOne(baseQuery)
                 .sort({ receivedDate: 1, expirationDate: 1, _id: 1 })
                 .session(session);
 
             if (!batch) {
-                throw new Error(`Stock changed during allocation. Still need ${remainingQuantity} more units.`);
+                // Không còn batch nào — stock bị tiêu thụ bởi transaction đồng thời
+                throw new Error(`Hết tồn kho trong quá trình phân bổ. Vẫn còn thiếu ${remainingQuantity} đơn vị.`);
             }
 
-            const availableInBatch = batch.quantityRemaining;
-            const quantityToAllocate = Math.min(availableInBatch, remainingQuantity);
+            const quantityToAllocate = Math.min(batch.quantityRemaining, remainingQuantity);
 
+            // Atomic update — ngăn race condition: chỉ update nếu batch vẫn còn đủ số lượng
             const updatedBatch = await InventoryBatch.findOneAndUpdate(
                 {
                     _id: batch._id,
-                    isExhausted: false,
+                    ...baseQuery,
                     quantityRemaining: { $gte: quantityToAllocate }
                 },
-                { $inc: { quantityRemaining: -quantityToAllocate } },
-                { returnDocument: "after", session }
+                { $inc: { quantityRemaining: -quantityToAllocate }, $set: { isExhausted: false } },
+                { returnDocument: 'after', session }
             );
 
             if (!updatedBatch) {
+                // Batch bị thay đổi bởi transaction khác — thử batch tiếp theo
+                if (++consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+                    throw new Error(`Xung đột dữ liệu liên tục khi phân bổ tồn kho (${MAX_CONSECUTIVE_FAILURES} lần liên tiếp). Vui lòng thử lại.`);
+                }
                 continue;
             }
 
-            if (updatedBatch.quantityRemaining <= 0 && !updatedBatch.isExhausted) {
+            consecutiveFailures = 0;
+
+            if (updatedBatch.quantityRemaining <= 0) {
                 await InventoryBatch.updateOne(
                     { _id: updatedBatch._id },
                     { $set: { isExhausted: true } },
@@ -137,7 +168,7 @@ export const allocateBatchesForItem = async ({ materialId, productId, quantityNe
             remainingQuantity -= quantityToAllocate;
         }
 
-        return { success: true, data: allocations, message: 'Batches allocated successfully' };
+        return { success: true, data: allocations, message: 'Phân bổ batch FIFO thành công.' };
     } catch (error) {
         console.error('[FIFOService] allocateBatchesForItem error:', error);
         return { success: false, message: error.message, data: null };
@@ -244,7 +275,7 @@ export const getBatchesByMaterial = async (materialId, includeExhausted = false)
     try {
         const query = { material: materialId };
         if (!includeExhausted) {
-            query.isExhausted = false;
+            query.quantityRemaining = { $gt: 0 };
         }
 
         const batches = await InventoryBatch.find(query)
@@ -351,7 +382,7 @@ export const assignBatchLocation = async (batchId, shelfId, userId, note = '') =
 export const getActiveBatches = async (params = {}) => {
     try {
         const { search, unassignedOnly, type } = params;
-        const query = { isExhausted: false };
+        const query = { quantityRemaining: { $gt: 0 } };
 
         if (unassignedOnly === 'true') {
             query.shelf = null;
@@ -384,7 +415,7 @@ export const getExpiringBatches = async (daysAhead = 30) => {
         futureDate.setDate(futureDate.getDate() + daysAhead);
 
         const batches = await InventoryBatch.find({
-            isExhausted: false,
+            quantityRemaining: { $gt: 0 },
             expirationDate: {
                 $ne: null,
                 $lte: futureDate
@@ -668,7 +699,7 @@ export const traceBatchByNumber = async (batchNumber) => {
 export const getMaterialStockFromBatches = async (materialId) => {
     try {
         const result = await InventoryBatch.aggregate([
-            { $match: { material: new mongoose.Types.ObjectId(materialId), isExhausted: false } },
+            { $match: buildAllocatableBatchQuery({ materialId }) },
             {
                 $group: {
                     _id: '$material',
@@ -728,7 +759,7 @@ export const backfillInitialBatches = async () => {
         let matCount = 0;
 
         for (const mat of materials) {
-            const batchCount = await InventoryBatch.countDocuments({ material: mat._id, isExhausted: false });
+            const batchCount = await InventoryBatch.countDocuments({ material: mat._id, quantityRemaining: { $gt: 0 } });
             if (batchCount === 0) {
                 await InventoryBatch.create({
                     batchNumber: `BATCH-${mat.code}-BACKFILL-${Date.now()}`,
@@ -748,7 +779,7 @@ export const backfillInitialBatches = async () => {
         let prodCount = 0;
 
         for (const prod of products) {
-            const batchCount = await InventoryBatch.countDocuments({ product: prod._id, isExhausted: false });
+            const batchCount = await InventoryBatch.countDocuments({ product: prod._id, quantityRemaining: { $gt: 0 } });
             if (batchCount === 0) {
                 await InventoryBatch.create({
                     batchNumber: `BATCH-${prod.code}-BACKFILL-${Date.now()}`,
@@ -784,7 +815,7 @@ export const getBatchesByProductionOrder = async (productionOrderId) => {
         // Find all requisitions related to the production order
         const requisitions = await MaterialRequisition.find({ productionOrder: productionOrderId }).lean();
         const requisitionIds = requisitions.map(r => r._id);
-        
+
         // Find all slips related to these requisitions or the production order
         const slips = await InventoryImportExportSlip.find({
             $or: [
@@ -792,7 +823,7 @@ export const getBatchesByProductionOrder = async (productionOrderId) => {
                 { relatedRequisition: { $in: requisitionIds } }
             ]
         }).select('slipNumber').lean();
-        
+
         const slipNumbers = slips.map(s => s.slipNumber);
 
         // Fetch all transactions related to this production order/requisitions/slips that issued stock
@@ -804,9 +835,9 @@ export const getBatchesByProductionOrder = async (productionOrderId) => {
                 { orderRef: { $in: slipNumbers } }
             ]
         })
-        .populate('batch')
-        .populate('material', 'name code unit')
-        .lean();
+            .populate('batch')
+            .populate('material', 'name code unit')
+            .lean();
 
         // Also check if any batch allocations are saved in the requisitions directly
         const directAllocations = [];

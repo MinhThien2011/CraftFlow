@@ -1,4 +1,4 @@
-﻿import ProductionOrder from '../models/ProductionOrder.js';
+import ProductionOrder from '../models/ProductionOrder.js';
 import Product from '../models/Product.js';
 import Material from '../models/Material.js';
 import MaterialAlert from '../models/MaterialAlert.js';
@@ -109,6 +109,49 @@ export const getMaterialIssueReadiness = async (orderId, session = null) => {
   return { ready: true, message: 'Material issue is completed.', issuedByMaterial, requirements };
 };
 
+const buildMaterialIssueSummary = async (orderIds, session = null) => {
+  const ids = orderIds.filter(Boolean);
+  if (ids.length === 0) return new Map();
+
+  const requisitions = await MaterialRequisition.find({
+    productionOrder: { $in: ids },
+    type: { $in: [REQUISITION_TYPE.ISSUE, REQUISITION_TYPE.SUPPLEMENTARY] },
+    status: { $ne: REQUISITION_STATUS.CANCELLED }
+  }).session(session).lean();
+
+  const byOrder = new Map();
+  for (const req of requisitions) {
+    const key = req.productionOrder.toString();
+    if (!byOrder.has(key)) byOrder.set(key, []);
+    byOrder.get(key).push(req);
+  }
+
+  const result = new Map();
+  for (const orderId of ids) {
+    const key = orderId.toString();
+    const rows = byOrder.get(key) || [];
+    const isCompleted = rows.length > 0 && rows.every((req) => req.status === REQUISITION_STATUS.COMPLETED);
+    const blocking = rows.find((req) => req.status !== REQUISITION_STATUS.COMPLETED);
+
+    result.set(key, {
+      hasRequisition: rows.length > 0,
+      isCompleted,
+      status: isCompleted ? 'completed' : (blocking?.status || 'pending'),
+      requisitionCount: rows.length,
+      completedCount: rows.filter((req) => req.status === REQUISITION_STATUS.COMPLETED).length,
+      requisitions: rows.map((req) => ({
+        _id: req._id,
+        requisitionCode: req.requisitionCode,
+        status: req.status,
+        type: req.type,
+        relatedSlip: req.relatedSlip || null
+      }))
+    });
+  }
+
+  return result;
+};
+
 export const notifyAssignedStaffProductionStarted = async (orderId, orderCode = null) => {
   const assignments = await ProductionOrderAssignment.find({ productionOrder: orderId })
     .populate('product', 'name code unit')
@@ -117,8 +160,8 @@ export const notifyAssignedStaffProductionStarted = async (orderId, orderCode = 
   for (const assignment of assignments) {
     await createNotification({
       recipient: assignment.staff,
-      title: 'Nhiá»‡m vá»¥ sáº£n xuáº¥t Ä‘Ã£ sáºµn sÃ ng',
-      message: `ÄÆ¡n ${orderCode || orderId} Ä‘Ã£ Ä‘Æ°á»£c xuáº¥t váº­t liá»‡u vÃ  báº¯t Ä‘áº§u sáº£n xuáº¥t. Báº¡n cÃ³ thá»ƒ bÃ¡o cÃ¡o tiáº¿n Ä‘á»™.`,
+      title: 'Nhiệm vụ sản xuất đã sẵn sàng',
+      message: `Đơn ${orderCode || orderId} đã được xuất vật liệu và bắt đầu sản xuất. Bạn có thể báo cáo tiến độ.`,
       type: 'TASK',
       priority: 'HIGH',
       metaData: { assignmentId: assignment._id, orderId }
@@ -163,17 +206,28 @@ export const getAllProductionOrders = async (queryParams) => {
       totalPromise
     ]);
 
-    // Fetch assignments for these orders
+    // Fetch assignments and material issue status for these orders
     const orderIds = orders.map(o => o._id);
-    const assignments = await ProductionOrderAssignment.find({ productionOrder: { $in: orderIds } })
-      .populate('staff', 'fullName username currentAssignedQuantity')
-      .populate('product', 'name code unit')
-      .lean();
+    const [assignments, materialIssueMap] = await Promise.all([
+      ProductionOrderAssignment.find({ productionOrder: { $in: orderIds } })
+        .populate('staff', 'fullName username currentAssignedQuantity')
+        .populate('product', 'name code unit')
+        .lean(),
+      buildMaterialIssueSummary(orderIds)
+    ]);
 
     // Map assignments to their respective orders
     const ordersWithAssignments = orders.map(order => ({
       ...order,
-      assignments: assignments.filter(a => a.productionOrder.toString() === order._id.toString())
+      assignments: assignments.filter(a => a.productionOrder.toString() === order._id.toString()),
+      materialIssue: materialIssueMap.get(order._id.toString()) || {
+        hasRequisition: false,
+        isCompleted: false,
+        status: 'pending',
+        requisitionCount: 0,
+        completedCount: 0,
+        requisitions: []
+      }
     }));
 
     return {
@@ -230,20 +284,31 @@ export const getStaffProductionOrders = async (staffId, queryParams) => {
       totalPromise
     ]);
 
-    // Fetch assignments for these orders for THIS staff member
+    // Fetch assignments and material issue status for these orders for THIS staff member
     const orderIdsRetrieved = orders.map(o => o._id);
-    const orderAssignments = await ProductionOrderAssignment.find({
-      productionOrder: { $in: orderIdsRetrieved },
-      staff: staffId
-    })
-      .populate('staff', 'fullName username currentAssignedQuantity')
-      .populate('product', 'name code unit')
-      .lean();
+    const [orderAssignments, materialIssueMap] = await Promise.all([
+      ProductionOrderAssignment.find({
+        productionOrder: { $in: orderIdsRetrieved },
+        staff: staffId
+      })
+        .populate('staff', 'fullName username currentAssignedQuantity')
+        .populate('product', 'name code unit')
+        .lean(),
+      buildMaterialIssueSummary(orderIdsRetrieved)
+    ]);
 
     // Map assignments to their respective orders
     const ordersWithAssignments = orders.map(order => ({
       ...order,
-      assignments: orderAssignments.filter(a => a.productionOrder.toString() === order._id.toString())
+      assignments: orderAssignments.filter(a => a.productionOrder.toString() === order._id.toString()),
+      materialIssue: materialIssueMap.get(order._id.toString()) || {
+        hasRequisition: false,
+        isCompleted: false,
+        status: 'pending',
+        requisitionCount: 0,
+        completedCount: 0,
+        requisitions: []
+      }
     }));
 
     return {
@@ -288,12 +353,22 @@ export const getProductionOrderById = async (orderIdentifier) => {
       .populate('product', 'name code unit')
       .lean();
 
+    const materialIssueMap = await buildMaterialIssueSummary([orderId]);
+
     return {
       success: true,
       message: 'Production order details retrieved.',
       data: {
         ...order,
-        assignments
+        assignments,
+        materialIssue: materialIssueMap.get(orderId.toString()) || {
+          hasRequisition: false,
+          isCompleted: false,
+          status: 'pending',
+          requisitionCount: 0,
+          completedCount: 0,
+          requisitions: []
+        }
       }
     };
   } catch (error) {
@@ -335,12 +410,22 @@ export const getStaffProductionOrderById = async (orderIdentifier, staffId) => {
       return { success: false, message: 'You are not assigned to this production order.', data: null };
     }
 
+    const materialIssueMap = await buildMaterialIssueSummary([order._id]);
+
     return {
       success: true,
       message: 'Production order details retrieved.',
       data: {
         ...order,
-        assignments
+        assignments,
+        materialIssue: materialIssueMap.get(order._id.toString()) || {
+          hasRequisition: false,
+          isCompleted: false,
+          status: 'pending',
+          requisitionCount: 0,
+          completedCount: 0,
+          requisitions: []
+        }
       }
     };
   } catch (error) {
@@ -1015,7 +1100,7 @@ export const assignProductionOrder = async (orderId, assignments) => {
 
     return {
       success: true,
-      message: 'PhÃ¢n cÃ´ng nhÃ¢n sá»± thÃ nh cÃ´ng.',
+      message: 'Phân công nhân sự thành công.',
       data: { assignments: newAssignments }
     };
   } catch (error) {
@@ -1127,6 +1212,16 @@ export const updateProductionOrderStatus = async (orderId, status, notes = '') =
     if (notes) order.holdReason = notes; // Using holdReason as a general note field for status changes
 
     if (status === ORDER_STATUS.COMPLETED && oldStatus !== ORDER_STATUS.COMPLETED) {
+      // Check that all sub-tasks (assignments) assigned to staff are completed
+      const assignments = await ProductionOrderAssignment.find({ productionOrder: orderId }).session(session);
+      if (assignments.length === 0) {
+        throw new Error('Không thể hoàn thành lệnh sản xuất khi chưa có nhân sự thực hiện nhiệm vụ.');
+      }
+      const allCompleted = assignments.every(a => a.status === ORDER_STATUS.COMPLETED);
+      if (!allCompleted) {
+        throw new Error('Tất cả công việc phân công cho nhân viên phải hoàn thành trước khi xác nhận hoàn thành lệnh sản xuất.');
+      }
+
       order.completedAt = new Date();
       stockInResult = await createOrGetFinishedGoodsStockInSlip({
         order,
@@ -1146,8 +1241,8 @@ export const updateProductionOrderStatus = async (orderId, status, notes = '') =
     // Notify about status change
     await createNotification({
       recipient: order.createdBy,
-      title: 'Cáº­p nháº­t lá»‡nh sáº£n xuáº¥t',
-      message: `ÄÆ¡n hÃ ng ${order.orderCode} Ä‘Ã£ chuyá»ƒn sang tráº¡ng thÃ¡i: ${status}.`,
+      title: 'Cập nhật lệnh sản xuất',
+      message: `Đơn hàng ${order.orderCode} đã chuyển sang trạng thái: ${status}.`,
       type: 'ORDER',
       priority: 'MEDIUM',
       metaData: { orderId: order._id, status }
@@ -1198,8 +1293,8 @@ export const updateProductionOrderStatus = async (orderId, status, notes = '') =
       await notifyUsersByRole({
         roles: [ROLES.KHO_MANAGER],
         excludeUserId: order.createdBy,
-        title: 'Co phieu nhap thanh pham moi',
-        message: `Phieu nhap ${stockInResult.slip.slipNumber} cho don ${order.orderCode} dang cho xu ly.`,
+        title: 'Có phiếu nhập thành phẩm mới',
+        message: `Phiếu nhập ${stockInResult.slip.slipNumber} cho đơn ${order.orderCode} đang chờ xử lý.`,
         type: 'INVENTORY',
         priority: 'HIGH',
         metaData: {
@@ -1273,8 +1368,8 @@ export const reassignProductionOrder = async (assignmentId, newStaffId, reason =
 
     await createNotification({
       recipient: oldStaffId,
-      title: 'Nhiem vu da duoc phan cong lai',
-      message: `Nhiem vu cua don ${order.orderCode} da duoc chuyen sang nhan su khac.${reason ? ` Ly do: ${reason}` : ''}`,
+      title: 'Nhiệm vụ đã được phân công lại',
+      message: `Nhiệm vụ của đơn ${order.orderCode} đã được chuyển sang nhân sự khác.${reason ? ` Lý do: ${reason}` : ''}`,
       type: 'TASK',
       priority: 'HIGH',
       metaData: {
@@ -1286,10 +1381,10 @@ export const reassignProductionOrder = async (assignmentId, newStaffId, reason =
 
     await createNotification({
       recipient: newStaffId,
-      title: 'Nhiem vu san xuat moi',
+      title: 'Nhiệm vụ sản xuất mới',
       message: STAFF_VISIBLE_ORDER_STATUSES.includes(order.status)
-        ? `Ban duoc phan cong nhiem vu moi cho don ${order.orderCode}. So luong: ${assignment.assignedQuantity}.`
-        : `Ban duoc phan cong nhiem vu cho don ${order.orderCode}. Nhiem vu se hien thi khi don bat dau san xuat.`,
+        ? `Bạn được phân công nhiệm vụ mới cho đơn ${order.orderCode}. Số lượng: ${assignment.assignedQuantity}.`
+        : `Bạn được phân công nhiệm vụ cho đơn ${order.orderCode}. Nhiệm vụ sẽ hiển thị khi đơn bắt đầu sản xuất.`,
       type: 'TASK',
       priority: 'HIGH',
       metaData: {
@@ -1302,8 +1397,8 @@ export const reassignProductionOrder = async (assignmentId, newStaffId, reason =
 
     await notifyUsersByRole({
       roles: [ROLES.PRODUCTION_MANAGER],
-      title: 'Da phan cong lai nhiem vu',
-      message: `Nhiem vu cua don ${order.orderCode} da duoc chuyen nhan su.${reason ? ` Ly do: ${reason}` : ''}`,
+      title: 'Đã phân công lại nhiệm vụ',
+      message: `Nhiệm vụ của đơn ${order.orderCode} đã được chuyển nhân sự.${reason ? ` Lý do: ${reason}` : ''}`,
       type: 'ORDER',
       priority: 'MEDIUM',
       metaData: {
@@ -1329,7 +1424,7 @@ export const reassignProductionOrder = async (assignmentId, newStaffId, reason =
 
     return {
       success: true,
-      message: 'ÄÃ£ thay Ä‘á»•i nhÃ¢n sá»± thÃ nh cÃ´ng.',
+      message: 'Đã thay đổi nhân sự thành công.',
       data: { assignment }
     };
   } catch (error) {
@@ -1376,7 +1471,7 @@ export const updateAssignmentStatus = async (assignmentId, status, completedQuan
                         lastReportDate.getMonth() === today.getMonth() &&
                         lastReportDate.getDate() === today.getDate();
       if (isSameDay) {
-        throw new Error('Báº¡n Ä‘Ã£ gá»­i bÃ¡o cÃ¡o cho cÃ´ng viá»‡c nÃ y hÃ´m nay rá»“i. Má»—i ngÃ y chá»‰ Ä‘Æ°á»£c bÃ¡o cÃ¡o tá»‘i Ä‘a 1 láº§n.');
+        throw new Error('Bạn đã gửi báo cáo cho công việc này hôm nay rồi. Mỗi ngày chỉ được báo cáo tối đa 1 lần.');
       }
     }
 
@@ -1547,7 +1642,7 @@ export const createStockInSlip = async (orderIdentifier, managerId, slipData = {
         product: pItem.product._id,
         itemName: pItem.product.name,
         itemCode: pItem.product.code,
-        unit: pItem.product.unit || 'cÃ¡i',
+        unit: pItem.product.unit || 'cái',
         quantity: {
           requested: quantity,
           actual: 0 // Default actual to 0 until warehouse manager confirms
@@ -1571,7 +1666,7 @@ export const createStockInSlip = async (orderIdentifier, managerId, slipData = {
         creator: managerId,
         personInOut: slipData.personInOut || 'Bo phan san xuat'
       },
-      notes: slipData.notes || `Nháº­p kho thÃ nh pháº©m cho Ä‘Æ¡n hÃ ng ${order.orderCode}`,
+      notes: slipData.notes || `Nhập kho thành phẩm cho đơn hàng ${order.orderCode}`,
     });
 
     await newSlip.save({ session });
@@ -1627,7 +1722,7 @@ export const updateProductionOrder = async (orderId, updateData, userId) => {
     if (!order) throw new Error('Order not found.');
 
     if ([ORDER_STATUS.COMPLETED, ORDER_STATUS.CANCELLED].includes(order.status)) {
-      throw new Error(`KhÃ´ng thá»ƒ chá»‰nh sá»­a Ä‘Æ¡n hÃ ng Ä‘ang á»Ÿ tráº¡ng thÃ¡i ${order.status}.`);
+      throw new Error(`Không thể chỉnh sửa đơn hàng đang ở trạng thái ${order.status}.`);
     }
 
     const { products: orderProducts, priority, deadline, notes, reason } = updateData;
@@ -1640,7 +1735,7 @@ export const updateProductionOrder = async (orderId, updateData, userId) => {
     ].includes(order.status);
 
     if (orderProducts && isProductionStarted) {
-      throw new Error('ÄÆ¡n hÃ ng Ä‘Ã£ báº¯t Ä‘áº§u sáº£n xuáº¥t, khÃ´ng thá»ƒ thay Ä‘á»•i sá»‘ lÆ°á»£ng sáº£n pháº©m. Chá»‰ cÃ³ thá»ƒ cáº­p nháº­t háº¡n hoÃ n thÃ nh vÃ  ghi chÃº.');
+      throw new Error('Đơn hàng đã bắt đầu sản xuất, không thể thay đổi số lượng sản phẩm. Chỉ có thể cập nhật hạn hoàn thành và ghi chú.');
     }
 
     // 2. Update basic fields
@@ -1649,7 +1744,7 @@ export const updateProductionOrder = async (orderId, updateData, userId) => {
     if (notes !== undefined) order.notes = notes;
 
     // Log the update reason
-    const logEntry = `\n[${new Date().toLocaleString()}] Chá»‰nh sá»­a bá»Ÿi ${userId}. LÃ½ do: ${reason}`;
+    const logEntry = `\n[${new Date().toLocaleString()}] Chỉnh sửa bởi ${userId}. Lý do: ${reason}`;
     order.notes = (order.notes || '') + logEntry;
 
     // 3. Handle product and material updates
@@ -1674,7 +1769,7 @@ export const updateProductionOrder = async (orderId, updateData, userId) => {
 
       for (const item of orderProducts) {
         const product = productMap.get(item.productId || item.productCode);
-        if (!product) throw new Error(`Sáº£n pháº©m ${item.productId || item.productCode} khÃ´ng tá»“n táº¡i.`);
+        if (!product) throw new Error(`Sản phẩm ${item.productId || item.productCode} không tồn tại.`);
 
         validatedProducts.push({
           product: product._id,
@@ -1714,7 +1809,7 @@ export const updateProductionOrder = async (orderId, updateData, userId) => {
 
       for (const [matId, neededQuantity] of newMaterialRequirements.entries()) {
         const material = materialMap.get(matId);
-        if (!material) throw new Error(`Váº­t tÆ° ${matId} khÃ´ng tá»“n táº¡i.`);
+        if (!material) throw new Error(`Vật tư ${matId} không tồn tại.`);
 
         if (material.currentStock < neededQuantity) {
           hasInsufficientStock = true;
@@ -1797,7 +1892,7 @@ export const updateProductionOrder = async (orderId, updateData, userId) => {
             };
           }),
           status: REQUISITION_STATUS.PENDING,
-          notes: `Táº¡o láº¡i yÃªu cáº§u sau khi chá»‰nh sá»­a Ä‘Æ¡n hÃ ng. LÃ½ do: ${reason}`
+          notes: `Tạo lại yêu cầu sau khi chỉnh sửa đơn hàng. Lý do: ${reason}`
         });
         await newRequisition.save({ session });
       } else if (processedReqs.length > 0) {
@@ -1827,7 +1922,7 @@ export const updateProductionOrder = async (orderId, updateData, userId) => {
             items: supplementaryItems,
             type: REQUISITION_TYPE.SUPPLEMENTARY,
             status: REQUISITION_STATUS.PENDING,
-            notes: `YÃªu cáº§u bá»• sung váº­t tÆ° do tÄƒng sá»‘ lÆ°á»£ng Ä‘Æ¡n hÃ ng. LÃ½ do: ${reason}`
+            notes: `Yêu cầu bổ sung vật tư do tăng số lượng đơn hàng. Lý do: ${reason}`
           });
           await supRequisition.save({ session });
         }
@@ -1868,7 +1963,7 @@ export const updateProductionOrder = async (orderId, updateData, userId) => {
 
     return {
       success: true,
-      message: 'Cáº­p nháº­t lá»‡nh sáº£n xuáº¥t thÃ nh cÃ´ng.',
+      message: 'Cập nhật lệnh sản xuất thành công.',
       data: { order }
     };
   } catch (error) {
@@ -1916,8 +2011,8 @@ export const cancelProductionOrder = async (orderId, reason, userId) => {
         // Notify staff
         await createNotification({
           recipient: assignment.staff,
-          title: 'Nhiá»‡m vá»¥ bá»‹ há»§y',
-          message: `Nhiá»‡m vá»¥ sáº£n xuáº¥t cho Ä‘Æ¡n ${order.orderCode} Ä‘Ã£ bá»‹ há»§y. LÃ½ do: ${reason}`,
+          title: 'Nhiệm vụ bị hủy',
+          message: `Nhiệm vụ sản xuất cho đơn ${order.orderCode} đã bị hủy. Lý do: ${reason}`,
           type: 'TASK',
           priority: 'MEDIUM',
           metaData: { orderId, assignmentId: assignment._id }

@@ -820,6 +820,40 @@ export const seedInventoryTransactions = async () => {
     console.log(`[OK] Seeded ${txDocs.length} inventory transactions`);
 };
 
+export const syncCurrentStockFromBatches = async () => {
+    const [materialStockRows, productStockRows] = await Promise.all([
+        InventoryBatch.aggregate([
+            { $match: { material: { $ne: null } } },
+            { $group: { _id: '$material', currentStock: { $sum: '$quantityRemaining' } } }
+        ]),
+        InventoryBatch.aggregate([
+            { $match: { product: { $ne: null } } },
+            { $group: { _id: '$product', currentStock: { $sum: '$quantityRemaining' } } }
+        ])
+    ]);
+
+    const materialOps = materialStockRows.map((row) => ({
+        updateOne: {
+            filter: { _id: row._id },
+            update: { $set: { currentStock: Number(row.currentStock || 0) } }
+        }
+    }));
+
+    const productOps = productStockRows.map((row) => ({
+        updateOne: {
+            filter: { _id: row._id },
+            update: { $set: { currentStock: Number(row.currentStock || 0) } }
+        }
+    }));
+
+    await Promise.all([
+        materialOps.length > 0 ? Material.bulkWrite(materialOps, { ordered: false }) : Promise.resolve(),
+        productOps.length > 0 ? Product.bulkWrite(productOps, { ordered: false }) : Promise.resolve()
+    ]);
+
+    console.log(`[OK] Synced currentStock from batches (${materialOps.length} materials, ${productOps.length} products)`);
+};
+
 export const seedMaterialAlerts = async () => {
     if (await MaterialAlert.countDocuments()) return;
 

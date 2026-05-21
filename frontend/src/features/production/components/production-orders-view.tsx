@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { useCreateProductionOrder } from "@/features/production/hooks/use-production"
 import { useProducts } from "@/features/production/hooks/use-products"
-import { PRODUCTION_STATUS_FILTERS, WAITING_MATERIAL_ISSUE_CONFIG, getProductionOrderStatusConfig, isWaitingMaterialIssueStatus } from "@/features/production/utils/production-status"
+import { PRODUCTION_STATUS_FILTERS, getMaterialIssueStatusConfig, getProductionOrderStatusConfig, isMaterialIssueCompleted, isWaitingMaterialIssueStatus } from "@/features/production/utils/production-status"
 
 const CreateOrderModal = dynamic(
   () => import("@/features/production/components/create-order-modal").then((m) => m.CreateOrderModal),
@@ -251,6 +251,8 @@ export function ProductionOrdersView({ detailBasePath, canCreate = false }: Prod
             const progress = quantity > 0 ? Math.min(100, (completedQty / quantity) * 100) : 0
             const isUrgent = order.priority === "urgent" || order.priority === "high"
             const progressColor = progress === 100 ? "bg-emerald-500" : progress >= 75 ? "bg-blue-500" : progress >= 25 ? "bg-amber-500" : "bg-red-500"
+            const materialIssueConfig = getMaterialIssueStatusConfig(order.materialIssue)
+            const canShowTasks = isMaterialIssueCompleted(order.materialIssue)
 
             return (
               <Card
@@ -286,9 +288,9 @@ export function ProductionOrdersView({ detailBasePath, canCreate = false }: Prod
                       <Badge variant="outline" className={cn("border font-medium shadow-sm", config.color)}>
                         {config.label}
                       </Badge>
-                      {isWaitingMaterialIssueStatus(order.status) && (
-                        <Badge variant="outline" className={cn("border text-[11px] font-medium shadow-sm", WAITING_MATERIAL_ISSUE_CONFIG.color)}>
-                          {WAITING_MATERIAL_ISSUE_CONFIG.label}
+                      {order.materialIssue?.hasRequisition && (
+                        <Badge variant="outline" className={cn("border text-[11px] font-medium shadow-sm", materialIssueConfig.color)}>
+                          {materialIssueConfig.label}
                         </Badge>
                       )}
                     </div>
@@ -306,13 +308,16 @@ export function ProductionOrdersView({ detailBasePath, canCreate = false }: Prod
                       <div className="mb-1.5 flex items-end justify-between text-sm">
                         <span className="font-medium text-muted-foreground">Tiến độ</span>
                         <div className="text-right">
-                          <span className="font-bold text-foreground">{completedQty}</span>
+                          <span className="font-bold text-foreground">{canShowTasks ? completedQty : 0}</span>
                           <span className="text-muted-foreground"> / {quantity}</span>
                         </div>
                       </div>
                       <div className="relative h-2 w-full overflow-hidden rounded-full bg-black/5 dark:bg-white/10">
-                        <div className={cn("absolute left-0 top-0 h-full rounded-full transition-all duration-500", progressColor)} style={{ width: `${progress}%` }} />
+                        <div className={cn("absolute left-0 top-0 h-full rounded-full transition-all duration-500", progressColor)} style={{ width: `${canShowTasks ? progress : 0}%` }} />
                       </div>
+                      {isWaitingMaterialIssueStatus(order.status, order.materialIssue) && (
+                        <p className="mt-1 text-xs font-medium text-amber-700">Task sẽ hiển thị sau khi kho hoàn tất xuất vật tư.</p>
+                      )}
                     </div>
 
                     <div className="flex items-center justify-between border-t border-black/5 pt-3 dark:border-white/5">

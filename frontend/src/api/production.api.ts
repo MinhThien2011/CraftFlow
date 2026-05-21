@@ -36,6 +36,20 @@ export interface ProductionOrder {
     notes?: string;
     createdBy: string | any;
     assignments?: ProductionOrderAssignment[];
+    materialIssue?: {
+        hasRequisition: boolean;
+        isCompleted: boolean;
+        status: string;
+        requisitionCount: number;
+        completedCount: number;
+        requisitions?: Array<{
+            _id: string;
+            requisitionCode?: string;
+            status: string;
+            type: string;
+            relatedSlip?: string | null;
+        }>;
+    };
     createdAt: string;
     updatedAt: string;
 }

@@ -52,7 +52,7 @@ const safeJsonParse = (text) => {
 
 const getModelChain = () => {
   const primary = process.env.AI_MODEL_PRIMARY || modelConfig.model;
-  const fallbacks = String(process.env.AI_MODEL_FALLBACKS || 'gemini-2.0-flash')
+  const fallbacks = String(process.env.AI_MODEL_FALLBACKS || 'gemini-3.1-flash-lite')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);

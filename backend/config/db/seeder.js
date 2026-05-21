@@ -15,6 +15,7 @@ import {
   seedProductExportSlips,
   seedInventoryTransactions,
   seedMaterialAlerts,
+  syncCurrentStockFromBatches,
 } from "./seeds/seeders.js";
 
 export const initializeCollections = async () => {
@@ -53,6 +54,7 @@ const SEED_PIPELINE = [
   { name: "ProductExportRequests", fn: seedProductExportRequests },
   { name: "ProductExportSlips", fn: seedProductExportSlips },
   { name: "InventoryTransactions", fn: seedInventoryTransactions },
+  { name: "CurrentStockSync", fn: syncCurrentStockFromBatches },
   { name: "MaterialAlerts", fn: seedMaterialAlerts },
 ];
 

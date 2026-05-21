@@ -70,18 +70,29 @@ export function StockingAssignmentDialog({
         }
     }, [open, items])
 
+    // Tính số lượng còn chưa phân bổ cho một nhóm mặt hàng
+    const getItemUnassignedQty = (itemCode: string, currentAssignments: any[]): number => {
+        const group = currentAssignments.filter(a => a.itemCode === itemCode)
+        if (group.length === 0) return 0
+        const totalAssigned = group.reduce((sum, a) => sum + (Number(a.actualQuantity) || 0), 0)
+        return group[0].totalActualQuantity - totalAssigned
+    }
+
     const handleSplitLine = (idx: number) => {
         const itemToSplit = assignments[idx]
+        const currentQty = Number(itemToSplit.actualQuantity) || 0
+
+        // Chia đôi số lượng: dòng hiện tại giữ nửa dưới, dòng mới nhận nửa còn lại
+        const parentQty = Math.floor(currentQty / 2)
+        const newLineQty = currentQty - parentQty
+
         const newAssignments = [...assignments]
+        newAssignments[idx] = { ...itemToSplit, actualQuantity: parentQty, isSplit: true }
 
-        // Đánh dấu dòng hiện tại là đã tách
-        newAssignments[idx] = { ...itemToSplit, isSplit: true }
-
-        // Thêm dòng mới kế tiếp với số lượng mặc định là 0
         const newLine = {
             ...itemToSplit,
             id: `split-${Date.now()}`,
-            actualQuantity: 0,
+            actualQuantity: newLineQty,
             batchNumber: '',
             shelf: '',
             isSplit: true
@@ -179,25 +190,38 @@ export function StockingAssignmentDialog({
         toast.success(`Đã tự động chia mặt hàng thành ${newSplitLines.length} dòng dựa trên sức chứa.`)
     }
 
+    // Kiểm tra toàn bộ số lượng có cân bằng không (dùng cho cả UI và confirm)
+    const getQuantityErrors = (): { code: string; name: string; assigned: number; expected: number }[] => {
+        const itemCodes = Array.from(new Set(assignments.map(a => a.itemCode)))
+        return itemCodes.flatMap(code => {
+            const lines = assignments.filter(a => a.itemCode === code)
+            const assigned = lines.reduce((sum, a) => sum + (Number(a.actualQuantity) || 0), 0)
+            const expected = lines[0].totalActualQuantity
+            return assigned !== expected ? [{ code, name: lines[0].itemName, assigned, expected }] : []
+        })
+    }
+
     const handleConfirm = () => {
         // 1. Kiểm tra gán kệ
-        const unassigned = assignments.some(a => !a.shelf)
-        if (unassigned) {
-            toast.error("Vui lòng chọn kệ cho tất cả các dòng hàng.")
+        const missingShelf = assignments.filter(a => !a.shelf)
+        if (missingShelf.length > 0) {
+            const names = [...new Set(missingShelf.map(a => a.itemName))].join(", ")
+            toast.error(`Chưa chọn vị trí kệ cho: ${names}. Vui lòng gán kệ cho tất cả các dòng.`)
             return
         }
 
         // 2. Kiểm tra tổng số lượng sau khi tách dòng
-        const itemCodes = Array.from(new Set(assignments.map(a => a.itemCode)))
-        for (const code of itemCodes) {
-            const itemLines = assignments.filter(a => a.itemCode === code)
-            const currentTotal = itemLines.reduce((sum, a) => sum + a.actualQuantity, 0)
-            const originalTotal = itemLines[0].totalActualQuantity
-
-            if (currentTotal !== originalTotal) {
-                toast.error(`Tổng số lượng của mặt hàng ${code} (${currentTotal}) không khớp với số lượng thực nhập (${originalTotal}). Vui lòng kiểm tra lại.`)
-                return
-            }
+        const qtyErrors = getQuantityErrors()
+        if (qtyErrors.length > 0) {
+            qtyErrors.forEach(({ name, code, assigned, expected }) => {
+                const diff = assigned - expected
+                const direction = diff > 0 ? `thừa ${diff}` : `thiếu ${Math.abs(diff)}`
+                toast.error(
+                    `"${name}" (${code}): tổng đã phân bổ ${assigned} — ${direction} so với số lượng thực nhập ${expected}. Vui lòng điều chỉnh lại.`,
+                    { duration: 6000 }
+                )
+            })
+            return
         }
 
         // 3. Kiểm tra sức chứa (cảnh báo)
@@ -298,6 +322,7 @@ export function StockingAssignmentDialog({
                                                     {item.isSplit ? (
                                                         <Input
                                                             type="number"
+                                                            min={0}
                                                             value={item.actualQuantity}
                                                             onChange={(e) => handleQuantityChange(idx, Number(e.target.value))}
                                                             className="h-8 text-right font-bold text-emerald-700 bg-emerald-50/30"
@@ -307,11 +332,26 @@ export function StockingAssignmentDialog({
                                                             {item.actualQuantity} {item.unit}
                                                         </Badge>
                                                     )}
-                                                    {item.isSplit && isFirstOfDuplicate && (
-                                                        <span className="text-[10px] text-muted-foreground italic">
-                                                            Tổng: {item.totalActualQuantity} {item.unit}
-                                                        </span>
-                                                    )}
+                                                    {item.isSplit && isFirstOfDuplicate && (() => {
+                                                        const remaining = getItemUnassignedQty(item.itemCode, assignments)
+                                                        return (
+                                                            <span className={cn(
+                                                                "text-[10px] italic font-medium",
+                                                                remaining === 0
+                                                                    ? "text-emerald-600"
+                                                                    : remaining > 0
+                                                                        ? "text-amber-600"
+                                                                        : "text-red-600"
+                                                            )}>
+                                                                {remaining === 0
+                                                                    ? `✓ Đủ ${item.totalActualQuantity} ${item.unit}`
+                                                                    : remaining > 0
+                                                                        ? `Còn thiếu ${remaining} ${item.unit}`
+                                                                        : `Thừa ${Math.abs(remaining)} ${item.unit}`
+                                                                }
+                                                            </span>
+                                                        )
+                                                    })()}
                                                 </div>
                                             </TableCell>
                                             <TableCell>
@@ -477,14 +517,32 @@ export function StockingAssignmentDialog({
                     <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
                         Quay lại
                     </Button>
-                    <Button
-                        onClick={handleConfirm}
-                        disabled={isSubmitting}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 px-8"
-                    >
-                        {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
-                        Xác nhận Nhập kho & Hoàn tất
-                    </Button>
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <span>
+                                    <Button
+                                        onClick={handleConfirm}
+                                        disabled={isSubmitting || getQuantityErrors().length > 0}
+                                        className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 px-8 disabled:opacity-60"
+                                    >
+                                        {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+                                        Xác nhận Nhập kho & Hoàn tất
+                                    </Button>
+                                </span>
+                            </TooltipTrigger>
+                            {getQuantityErrors().length > 0 && (
+                                <TooltipContent side="top" className="max-w-[300px] p-3 bg-red-50 border-red-200 text-red-700">
+                                    <p className="text-xs font-semibold mb-1">Chưa thể xác nhận:</p>
+                                    {getQuantityErrors().map(({ name, code, assigned, expected }) => (
+                                        <p key={code} className="text-xs">
+                                            • "{name}": phân bổ {assigned}/{expected} {assigned < expected ? `(thiếu ${expected - assigned})` : `(thừa ${assigned - expected})`}
+                                        </p>
+                                    ))}
+                                </TooltipContent>
+                            )}
+                        </Tooltip>
+                    </TooltipProvider>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

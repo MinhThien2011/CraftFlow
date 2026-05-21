@@ -1,7 +1,7 @@
 import app, { initializeServices } from './app.js';
 import { createServer } from 'http';
 import { initSocket } from './config/socket.js';
-import { handleRequisitionTimeouts } from './services/materialRequisitionService.js';
+import { checkAndCreateLowStockNotifications } from './services/inventoryService.js';
 
 const httpServer = createServer(app);
 initSocket(httpServer);
@@ -20,12 +20,16 @@ process.on('uncaughtException', (error) => {
 try {
   await initializeServices();
 
+  // Run once on server startup, then periodically
+  checkAndCreateLowStockNotifications().catch((error) => {
+    console.error('[BackgroundJob] Initial low stock alerts check failed:', error);
+  });
+
   setInterval(async () => {
     try {
-      console.log('[BackgroundJob] Checking for material requisition timeouts...');
-      await handleRequisitionTimeouts();
+      await checkAndCreateLowStockNotifications();
     } catch (error) {
-      console.error('[BackgroundJob] material requisition timeout check failed:', error);
+      console.error('[BackgroundJob] Low stock alerts check failed:', error);
     }
   }, 15 * 60 * 1000);
 

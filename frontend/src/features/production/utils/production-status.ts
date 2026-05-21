@@ -173,20 +173,41 @@ export function getAssignmentStatusConfig(status?: string): Pick<StatusConfig, "
   }
 }
 
-const WAITING_MATERIAL_ISSUE_STATUSES = new Set<ProductionOrderStatus>([
-  PRODUCTION_ORDER_STATUS.READY_TO_ASSIGN,
-  PRODUCTION_ORDER_STATUS.ASSIGNED,
-])
-
 export const WAITING_MATERIAL_ISSUE_CONFIG = {
   label: "Đang chờ cấp vật tư",
   color: "text-amber-700 border-amber-300 bg-amber-100/70",
 }
 
-export function isWaitingMaterialIssueStatus(status?: string): boolean {
-  if (!status) return false
-  const normalized = status.toLowerCase() as ProductionOrderStatus
-  return WAITING_MATERIAL_ISSUE_STATUSES.has(normalized)
+export const MATERIAL_ISSUE_STATUS_CONFIG: Record<string, Pick<StatusConfig, "label" | "color">> = {
+  completed: {
+    label: "Đã xuất vật tư",
+    color: "text-emerald-700 border-emerald-300 bg-emerald-100/70",
+  },
+  pending: WAITING_MATERIAL_ISSUE_CONFIG,
+  accepted: WAITING_MATERIAL_ISSUE_CONFIG,
+  approved: WAITING_MATERIAL_ISSUE_CONFIG,
+  preparing: WAITING_MATERIAL_ISSUE_CONFIG,
+  prepared: WAITING_MATERIAL_ISSUE_CONFIG,
+}
+
+export function isMaterialIssueCompleted(materialIssue?: { isCompleted?: boolean } | null): boolean {
+  return Boolean(materialIssue?.isCompleted)
+}
+
+export function isWaitingMaterialIssueStatus(_status?: string, materialIssue?: { isCompleted?: boolean; hasRequisition?: boolean } | null): boolean {
+  return Boolean(materialIssue?.hasRequisition && !materialIssue?.isCompleted)
+}
+
+export function getMaterialIssueStatusConfig(materialIssue?: { status?: string; isCompleted?: boolean; hasRequisition?: boolean } | null) {
+  if (!materialIssue?.hasRequisition) {
+    return {
+      label: "Chưa có yêu cầu vật tư",
+      color: "text-slate-700 border-slate-300 bg-slate-100/70",
+    }
+  }
+
+  if (materialIssue.isCompleted) return MATERIAL_ISSUE_STATUS_CONFIG.completed
+  return MATERIAL_ISSUE_STATUS_CONFIG[materialIssue.status || "pending"] || WAITING_MATERIAL_ISSUE_CONFIG
 }
 
 // ─── Priority config ────────────────────────────────────────────────────────

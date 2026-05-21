@@ -14,18 +14,30 @@ import {
     TRANSACTION_TYPE,
     REQUISITION_STATUS,
     REQUISITION_TYPE,
+    ORDER_STATUS,
     ROLES
 } from "../utils/constants.js";
 import { createNotification } from "./notificationService.js";
 import { emitToRoles } from "../config/socket.js";
-import { emitDataChanged } from "./realtimeService.js";
+import { emitDataChanged, notifyUsersByRole } from "./realtimeService.js";
 import { updateShelfLoad } from "./shelfService.js";
-import { createBatchesFromImport, generateBatchNumber, allocateBatchesForMaterial, allocateBatchesForItem } from "./fifoService.js";
-import { autoUpdateInsufficientOrders } from "./productionOrderService.js";
+import {
+    createBatchesFromImport,
+    generateBatchNumber,
+    allocateBatchesForMaterial,
+    allocateBatchesForItem,
+    getAllocatableBatchStockForItem
+} from "./fifoService.js";
+import {
+    autoUpdateInsufficientOrders,
+    getMaterialIssueReadiness,
+    notifyAssignedStaffProductionStarted
+} from "./productionOrderService.js";
 import inventoryEvents from "../events/inventoryEvents.js";
 import { autoAcceptRequisitionsIfSufficient } from "./materialRequisitionService.js";
 import mongoose from "mongoose";
 import { applyCreatedAtCursor, buildListPagination, normalizePagination } from "../utils/pagination.js";
+import { clearCacheByPattern } from "../utils/redisFetching.js";
 
 
 import { ServiceResponse } from "../utils/serviceHelper.js";
@@ -122,7 +134,9 @@ async function processMaterialUpdate(item, slip, userId, session, transactionDoc
 
     if (slip.type === INVENTORY_IMPORT_EXPORT_SLIP_TYPE.EXPORT) {
         const fifoResult = await allocateBatchesForMaterial(item.material, quantity, session);
-        if (!fifoResult.success) throw new Error(`FIFO failed for ${material.code}: ${fifoResult.message}`);
+        if (!fifoResult.success) {
+            throw new Error(`Xuat kho FIFO that bai cho vat tu "${material.name}" (${material.code}): ${fifoResult.message}`);
+        }
 
         for (const allocation of fifoResult.data) {
             transactionDocs.push({
@@ -159,13 +173,14 @@ async function processMaterialUpdate(item, slip, userId, session, transactionDoc
                 }
             }
         }
-        const updatedMaterial = await Material.findOneAndUpdate(
-            { _id: item.material, currentStock: { $gte: quantity } },
-            { $inc: { currentStock: -quantity } },
-            { returnDocument: 'after', session, session }
+        const syncedStock = await getAllocatableBatchStockForItem({ materialId: item.material, session });
+        const updatedMaterial = await Material.findByIdAndUpdate(
+            item.material,
+            { $set: { currentStock: syncedStock } },
+            { returnDocument: 'after', session }
         );
         if (!updatedMaterial) {
-            throw new Error(`Insufficient stock for material ${material.code}.`);
+            throw new Error(`Khong tim thay vat tu ${material.code} khi cap nhat ton kho.`);
         }
 
         beforeStock = updatedMaterial.currentStock + quantity;
@@ -256,16 +271,121 @@ async function processProductUpdate(item, slip, userId, session, transactionDocs
             });
             beforeStock -= allocation.quantityAllocated;
         }
-        const updatedProduct = await Product.findOneAndUpdate(
-            { _id: item.product, currentStock: { $gte: quantity } },
-            { $inc: { currentStock: -quantity } },
+        const syncedStock = await getAllocatableBatchStockForItem({ productId: item.product, session });
+        const updatedProduct = await Product.findByIdAndUpdate(
+            item.product,
+            { $set: { currentStock: syncedStock } },
             { returnDocument: 'after', session }
         );
         if (!updatedProduct) {
-            throw new Error(`Insufficient stock for product ${product.code}.`);
+            throw new Error(`Product ${product.code} not found while syncing FIFO stock.`);
         }
     }
     if (product.shelf) await updateShelfLoad(product.shelf, session);
+}
+
+const invalidateInventoryFlowCaches = async () => {
+    await Promise.all([
+        clearCacheByPattern('production:list:*'),
+        clearCacheByPattern('production:detail:*'),
+        clearCacheByPattern('material:list:*'),
+        clearCacheByPattern('material:detail:*'),
+        clearCacheByPattern('product:list:*'),
+        clearCacheByPattern('product:detail:*'),
+        clearCacheByPattern('dashboard:*')
+    ]);
+};
+
+async function finalizeLinkedRequisitionAndOrder(slip, session) {
+    if (!slip.relatedRequisition) return null;
+
+    const requisition = await MaterialRequisition.findById(slip.relatedRequisition).session(session);
+    if (!requisition) return null;
+
+    const productionOrder = await ProductionOrder.findById(requisition.productionOrder).session(session);
+    let productionStarted = null;
+    let materialIssueCompleted = null;
+
+    if (requisition.type === REQUISITION_TYPE.RETURN) {
+        requisition.status = REQUISITION_STATUS.RETURNED;
+        requisition.completedAt = new Date();
+
+        if (productionOrder) {
+            for (const item of slip.items) {
+                if (!item.material) continue;
+
+                const matId = item.material.toString();
+                const bomIndex = productionOrder.materials.findIndex((m) => m.material.toString() === matId);
+                if (bomIndex > -1) {
+                    productionOrder.materials[bomIndex].returnedQuantity += item.quantity.actual;
+                } else {
+                    productionOrder.materials.push({
+                        material: item.material,
+                        plannedQuantity: 0,
+                        issuedQuantity: 0,
+                        returnedQuantity: item.quantity.actual,
+                        unit: item.unit
+                    });
+                }
+
+                const reqItemIndex = requisition.items.findIndex((ri) => ri.material.toString() === matId);
+                if (reqItemIndex > -1) {
+                    requisition.items[reqItemIndex].returnedQuantity = item.quantity.actual;
+                }
+            }
+
+            await productionOrder.save({ session });
+        }
+
+        await requisition.save({ session });
+        return null;
+    }
+
+    requisition.status = REQUISITION_STATUS.COMPLETED;
+    requisition.completedAt = new Date();
+
+    if (productionOrder) {
+        materialIssueCompleted = {
+            orderId: productionOrder._id,
+            orderCode: productionOrder.orderCode,
+            requisitionId: requisition._id,
+            requisitionCode: requisition.requisitionCode
+        };
+
+        for (const item of slip.items) {
+            if (!item.material) continue;
+
+            const matId = item.material.toString();
+            const bomIndex = productionOrder.materials.findIndex((m) => m.material.toString() === matId);
+            if (bomIndex > -1) {
+                productionOrder.materials[bomIndex].issuedQuantity += item.quantity.actual;
+            }
+
+            const reqItemIndex = requisition.items.findIndex((ri) => ri.material.toString() === matId);
+            if (reqItemIndex > -1) {
+                requisition.items[reqItemIndex].actualQuantity = item.quantity.actual;
+            }
+        }
+
+        await requisition.save({ session });
+
+        if (productionOrder.status === ORDER_STATUS.ASSIGNED) {
+            const readiness = await getMaterialIssueReadiness(productionOrder._id, session);
+            if (readiness.ready) {
+                productionOrder.status = ORDER_STATUS.IN_PRODUCTION;
+                productionStarted = {
+                    orderId: productionOrder._id,
+                    orderCode: productionOrder.orderCode
+                };
+            }
+        }
+
+        await productionOrder.save({ session });
+    } else {
+        await requisition.save({ session });
+    }
+
+    return { productionStarted, materialIssueCompleted };
 }
 
 /**
@@ -435,6 +555,7 @@ export const updateSlipStatusService = async (slipId, newStatus, updateData, use
 
         slip.status = targetStatus;
 
+        let productionFlowUpdate = null;
         const session = await mongoose.startSession();
         session.startTransaction();
 
@@ -481,6 +602,8 @@ export const updateSlipStatusService = async (slipId, newStatus, updateData, use
 
                 if (transactionDocs.length > 0) await InventoryTransaction.create(transactionDocs, { session, ordered: true });
 
+                productionFlowUpdate = await finalizeLinkedRequisitionAndOrder(slip, session);
+
                 // Resolve all alerts linked to this purchase order once goods are stocked in.
                 if (isImport && slip.relatedPurchaseOrder) {
                     await MaterialAlert.updateMany(
@@ -495,6 +618,65 @@ export const updateSlipStatusService = async (slipId, newStatus, updateData, use
 
                 await slip.save({ session, ordered: true });
                 await session.commitTransaction();
+
+                await invalidateInventoryFlowCaches();
+
+                const materialIssueCompleted = productionFlowUpdate?.materialIssueCompleted;
+                const productionStarted = productionFlowUpdate?.productionStarted;
+
+                if (materialIssueCompleted) {
+                    await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.KHO_MANAGER, ROLES.STAFF], {
+                        domains: ['production', 'requisitions', 'slips', 'inventory', 'materials', 'notifications'],
+                        action: 'material_issue_completed',
+                        entity: 'production_order',
+                        id: materialIssueCompleted.orderId,
+                        message: `Material issue completed for production order ${materialIssueCompleted.orderCode}.`,
+                        metaData: {
+                            orderId: materialIssueCompleted.orderId,
+                            orderCode: materialIssueCompleted.orderCode,
+                            requisitionId: materialIssueCompleted.requisitionId,
+                            requisitionCode: materialIssueCompleted.requisitionCode
+                        }
+                    });
+
+                    await notifyUsersByRole({
+                        roles: [ROLES.PRODUCTION_MANAGER],
+                        title: 'Vat tu da xuat kho',
+                        message: `Don ${materialIssueCompleted.orderCode} da hoan tat xuat vat tu.`,
+                        type: 'PRODUCTION',
+                        priority: 'HIGH',
+                        metaData: {
+                            orderId: materialIssueCompleted.orderId,
+                            orderCode: materialIssueCompleted.orderCode,
+                            requisitionId: materialIssueCompleted.requisitionId,
+                            requisitionCode: materialIssueCompleted.requisitionCode
+                        }
+                    });
+                }
+
+                if (productionStarted) {
+                    await emitToRoles([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.STAFF], 'production_order_status_updated', {
+                        orderId: productionStarted.orderId,
+                        orderCode: productionStarted.orderCode,
+                        status: ORDER_STATUS.IN_PRODUCTION,
+                        message: `Lenh san xuat ${productionStarted.orderCode} da chuyen sang dang san xuat do vat tu da duoc xuat kho.`
+                    });
+
+                    await emitDataChanged([ROLES.ADMIN, ROLES.PRODUCTION_MANAGER, ROLES.STAFF, ROLES.KHO_MANAGER], {
+                        domains: ['production', 'requisitions', 'slips', 'inventory', 'materials', 'notifications'],
+                        action: 'status_updated',
+                        entity: 'production_order',
+                        id: productionStarted.orderId,
+                        message: `Production order ${productionStarted.orderCode} moved to in_production after material issue completed.`,
+                        metaData: {
+                            orderId: productionStarted.orderId,
+                            orderCode: productionStarted.orderCode,
+                            status: ORDER_STATUS.IN_PRODUCTION
+                        }
+                    });
+
+                    await notifyAssignedStaffProductionStarted(productionStarted.orderId, productionStarted.orderCode);
+                }
 
                 // Notify Warehouse Managers real-time when a slip is finalized/in stock
                 emitToRoles([ROLES.ADMIN, ROLES.KHO_MANAGER], 'inventory_slip_updated', {
@@ -513,13 +695,15 @@ export const updateSlipStatusService = async (slipId, newStatus, updateData, use
                     metaData: { slipId: slip._id, slipNumber: slip.slipNumber, status: targetStatus, type: slip.type }
                 });
 
-                inventoryEvents.emit('inventory_finalized', { slip, userId });
+                inventoryEvents.emit('inventory_finalized', { slip, userId, skipRequisitionFinalization: true });
 
                 return ServiceResponse(true, `Slip updated to ${targetStatus}`, { slip, warnings });
             }
 
             await slip.save({ session });
             await session.commitTransaction();
+
+            await invalidateInventoryFlowCaches();
 
             await emitDataChanged([ROLES.ADMIN, ROLES.KHO_MANAGER, ROLES.PRODUCTION_MANAGER], {
                 domains: ["slips", "inventory", "materials", "products", "production", "requisitions"],

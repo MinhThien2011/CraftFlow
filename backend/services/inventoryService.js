@@ -6,6 +6,9 @@ import { determineStockLevel } from '../utils/inventoryHelpers.js';
 import { STOCK_LEVEL_METADATA } from '../utils/constants.js';
 import { buildListPagination, normalizePagination } from '../utils/pagination.js';
 import { applyAggregateGuards } from '../utils/queryPerformance.js';
+import Notification from '../models/Notification.js';
+import { ROLES } from '../utils/constants.js';
+import { notifyUsersByRole } from './realtimeService.js';
 
 const MAX_LIMIT = 100;
 
@@ -250,5 +253,62 @@ export const getUnifiedLowStockAlerts = async () => {
   } catch (error) {
     console.log('[InventoryService] getUnifiedLowStockAlerts error:', error);
     return { success: false, message: error.message, data: [] };
+  }
+};
+
+/**
+ * Background job to check for low stock materials/products and create system notifications.
+ */
+export const checkAndCreateLowStockNotifications = async () => {
+  try {
+    console.log('[BackgroundJob] Running unified low stock alerts check...');
+    const result = await getUnifiedLowStockAlerts();
+    if (!result.success || !result.data || result.data.length === 0) {
+      console.log('[BackgroundJob] No low stock items found.');
+      return { success: true, count: 0 };
+    }
+
+    const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000);
+    let notifiedCount = 0;
+
+    for (const item of result.data) {
+      // Check if we already alerted about this item in the last 12 hours
+      const alreadyNotified = await Notification.exists({
+        type: 'ALERT',
+        'metaData.itemId': item._id,
+        createdAt: { $gte: twelveHoursAgo }
+      });
+
+      if (!alreadyNotified) {
+        const itemTypeName = item.itemType === 'material' ? 'Vật tư' : 'Sản phẩm';
+        const isOutOfStock = item.currentStock === 0;
+        const priority = isOutOfStock ? 'URGENT' : 'HIGH';
+        const title = `[Cảnh báo] ${itemTypeName} ${item.name} ${isOutOfStock ? 'đã hết hàng' : 'sắp hết hàng'}`;
+        const message = `${itemTypeName} ${item.name} (${item.code}) hiện chỉ còn ${item.currentStock} ${item.unit || ''} trong kho, dưới mức định mức tối thiểu (${item.threshold} ${item.unit || ''}). Vui lòng kiểm tra và lên kế hoạch nhập hàng/sản xuất.`;
+
+        await notifyUsersByRole({
+          roles: [ROLES.ADMIN, ROLES.KHO_MANAGER],
+          title,
+          message,
+          type: 'ALERT',
+          priority,
+          metaData: {
+            itemId: item._id,
+            itemType: item.itemType,
+            code: item.code,
+            currentStock: item.currentStock,
+            threshold: item.threshold
+          }
+        });
+
+        console.log(`[BackgroundJob] Created low stock alert for ${item.code} (${item.name}).`);
+        notifiedCount++;
+      }
+    }
+
+    return { success: true, count: notifiedCount };
+  } catch (error) {
+    console.error('[BackgroundJob] Error in checkAndCreateLowStockNotifications:', error);
+    throw error;
   }
 };

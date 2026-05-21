@@ -42,9 +42,17 @@ function getPickedStats(slip: Slip | null, pickedQuantities: PickQuantities) {
   }
 }
 
+function getSlipCategoryLabel(slip: Slip): { label: string; className: string } {
+  const isProduct = slip.items.some((item) => !!item.product)
+  return isProduct
+    ? { label: 'Thành phẩm', className: 'bg-purple-100 text-purple-700' }
+    : { label: 'Vật tư', className: 'bg-amber-100 text-amber-700' }
+}
+
 function getSlipCategoryPath(slip: Slip) {
   return slip.items.some((item) => !!item.product) ? "/issuing/products" : "/issuing/materials"
 }
+
 
 function PickListPageContent() {
   const router = useRouter()
@@ -269,11 +277,14 @@ function PickListPageContent() {
                     onClick={() => setSelectedSlipId(slip._id)}
                     className={`w-full rounded-lg border p-3 text-left transition-colors ${isSelected ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`}
                   >
-                    <div className="mb-2 flex items-center justify-between gap-2">
+                    <div className="mb-1.5 flex items-center justify-between gap-2">
                       <span className="truncate text-sm font-semibold text-primary">{slip.slipNumber}</span>
                       <Badge className={PICK_STATUS_CONFIG.received.color}>{PICK_STATUS_CONFIG.received.label}</Badge>
                     </div>
-                    <p className="mb-2 truncate text-xs text-muted-foreground">{slip.personName || slip.reason || "Phiếu xuất kho"}</p>
+                    <div className="mb-2 flex items-center gap-1.5">
+                      {(() => { const cat = getSlipCategoryLabel(slip); return <Badge className={`${cat.className} border-none text-[10px] h-4 px-1.5`}>{cat.label}</Badge> })()}
+                      <p className="truncate text-xs text-muted-foreground">{slip.personName || slip.reason || 'Phiếu xuất kho'}</p>
+                    </div>
                     <div className="flex items-center gap-2">
                       <Progress value={stats.percent} className="h-2" />
                       <span className="w-9 text-right text-xs text-muted-foreground">{stats.percent}%</span>
@@ -293,8 +304,9 @@ function PickListPageContent() {
                       <div className="flex flex-wrap items-center gap-2">
                         <CardTitle className="text-lg">{selectedSlip.slipNumber}</CardTitle>
                         <Badge className={PICK_STATUS_CONFIG.received.color}>{PICK_STATUS_CONFIG.received.label}</Badge>
+                        {(() => { const cat = getSlipCategoryLabel(selectedSlip); return <Badge className={`${cat.className} border-none`}>{cat.label}</Badge> })()}
                       </div>
-                      <p className="mt-1 text-sm text-muted-foreground">{selectedSlip.personName || selectedSlip.reason}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">{selectedSlip.personName || selectedSlip.reason || 'Phiếu xuất kho'}</p>
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="min-w-28 text-right">
