@@ -1,0 +1,86 @@
+import Joi from 'joi';
+import { ORDER_STATUS, TRANSACTION_TYPE } from '../utils/constants.js';
+
+export const objectId = Joi.string().hex().length(24).messages({
+  'string.pattern.base': `"{{#label}}" must be a valid MongoDB ObjectId`,
+});
+
+const createOrderSchema = Joi.object({
+  products: Joi.array().items(
+    Joi.object({
+      productId: Joi.string().allow('', null),
+      productCode: Joi.string().allow('', null),
+      quantity: Joi.number().integer().min(1).required(),
+    }).or('productId', 'productCode')
+  ).min(1).required(),
+  priority: Joi.string().valid('low', 'medium', 'high', 'urgent').default('medium'),
+  notes: Joi.string().trim().allow(''),
+  deadline: Joi.date().iso().greater('now').required(),
+});
+
+const assignOrderSchema = Joi.object({
+  orderId: objectId.required(),
+  assignments: Joi.array().items(
+    Joi.object({
+      staffId: objectId.required(),
+      productId: objectId.required(),
+      assignedQuantity: Joi.number().integer().min(1).required(),
+    })
+  ).min(1).required(),
+});
+
+const reassignTaskSchema = Joi.object({
+  assignmentId: objectId.required(),
+  newStaffId: objectId.required(),
+  reason: Joi.string().trim().min(5).required(),
+});
+
+const updateAssignmentStatusSchema = Joi.object({
+  status: Joi.string().valid(...Object.values(ORDER_STATUS)).optional().messages({
+    'any.only': 'Trạng thái đơn hàng không hợp lệ.',
+  }),
+  completedQuantity: Joi.number().integer().min(0).optional().messages({
+    'number.min': 'Số lượng hoàn thành không được âm.',
+    'number.base': 'Số lượng hoàn thành phải là một con số.'
+  }),
+});
+
+const outgoingProductSchema = Joi.object({
+  productId: objectId.required(),
+  quantity: Joi.number().integer().min(1).required(),
+  transactionType: Joi.string().valid(TRANSACTION_TYPE.SALES_OUT, TRANSACTION_TYPE.DAMAGE_OUT).required(),
+  notes: Joi.string().trim().allow(''),
+});
+
+const createStockInSlipSchema = Joi.object({
+  personInOut: Joi.string().trim().allow(''),
+  notes: Joi.string().trim().allow(''),
+  // images: Joi.array().items(Joi.string()).optional(),
+});
+
+const updateOrderSchema = Joi.object({
+  products: Joi.array().items(
+    Joi.object({
+      productId: Joi.string().allow('', null),
+      productCode: Joi.string().allow('', null),
+      quantity: Joi.number().integer().min(1).required(),
+    }).or('productId', 'productCode')
+  ).min(1).optional(),
+  priority: Joi.string().valid('low', 'medium', 'high', 'urgent').optional(),
+  notes: Joi.string().trim().allow('').optional(),
+  deadline: Joi.date().iso().greater('now').optional(),
+  reason: Joi.string().trim().min(5).required(),
+});
+
+const cancelOrderSchema = Joi.object({
+  reason: Joi.string().trim().min(5).required(),
+});
+
+export const createOrderValidator = (body) => createOrderSchema.validate(body, { abortEarly: false, stripUnknown: true });
+export const assignOrderValidator = (body) => assignOrderSchema.validate(body, { abortEarly: false, stripUnknown: true });
+export const reassignTaskValidator = (body) => reassignTaskSchema.validate(body, { abortEarly: false, stripUnknown: true });
+export const updateAssignmentStatusValidator = (body) => updateAssignmentStatusSchema.validate(body, { abortEarly: false, stripUnknown: true });
+export const outgoingProductValidator = (body) => outgoingProductSchema.validate(body, { abortEarly: false, stripUnknown: true });
+export const createStockInSlipValidator = (body) => createStockInSlipSchema.validate(body, { abortEarly: false, stripUnknown: true });
+export const updateOrderValidator = (body) => updateOrderSchema.validate(body, { abortEarly: false, stripUnknown: true });
+export const cancelOrderValidator = (body) => cancelOrderSchema.validate(body, { abortEarly: false, stripUnknown: true });

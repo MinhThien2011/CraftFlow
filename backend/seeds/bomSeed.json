@@ -1,0 +1,46 @@
+[
+    {
+        "productCode": "PROD-BEAR-01",
+        "items": [
+            {
+                "materialCode": "YARN-MC-01",
+                "qtyPerUnit": 1.5,
+                "unit": "Cuộn",
+                "note": "Màu nâu"
+            },
+            {
+                "materialCode": "FILL-PL-01",
+                "qtyPerUnit": 0.1,
+                "unit": "Kg",
+                "note": "Bông gòn nhân tạo"
+            },
+            {
+                "materialCode": "ACC-EYE-01",
+                "qtyPerUnit": 1,
+                "unit": "Cặp",
+                "note": "Mắt gấu đen"
+            }
+        ],
+        "version": "v1.0",
+        "isActive": true
+    },
+    {
+        "productCode": "PROD-BAG-01",
+        "items": [
+            {
+                "materialCode": "FAB-CV-01",
+                "qtyPerUnit": 0.8,
+                "unit": "Mét",
+                "note": "Vải canvas"
+            },
+            {
+                "materialCode": "ACC-ZIP-01",
+                "qtyPerUnit": 1,
+                "unit": "Cái",
+                "note": "Dây kéo đồng"
+            }
+        ],
+        "version": "v1.0",
+        "isActive": true
+    }
+]

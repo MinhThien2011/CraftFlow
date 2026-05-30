@@ -1,0 +1,118 @@
+import mongoose from 'mongoose';
+import { SHRINKAGE_STATUS } from '../utils/constants.js';
+
+const InventoryShrinkageReportSchema = new mongoose.Schema({
+    reportCode: {
+        type: String,
+        required: true,
+        unique: true,
+    },
+    reportDate: {
+        type: Date,
+        default: Date.now,
+    },
+    // Linking to the specific batch where shrinkage occurred
+    batch: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'InventoryBatch',
+        required: true,
+    },
+    material: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Material',
+        required: true,
+    },
+    productionOrder: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'ProductionOrder',
+    },
+    shrinkageAmount: {
+        type: Number,
+        required: true,
+        min: 0,
+    },
+    totalReceivedQuantity: {
+        type: Number,
+        default: 0,
+        min: 0,
+    },
+    totalUsedQuantity: {
+        type: Number,
+        default: 0,
+        min: 0,
+    },
+    remainingQuantity: {
+        type: Number,
+        default: 0,
+        min: 0,
+    },
+    notableMetrics: {
+        type: String,
+        trim: true,
+        default: '',
+    },
+    returnableQuantity: {
+        type: Number,
+        default: 0,
+        min: 0,
+    },
+    shrinkageReason: {
+        type: String,
+        required: true,
+    },
+    shrinkageImage: [{
+        type: String, // URL to image in Cloudinary
+    }],
+    status: {
+        type: String,
+        enum: Object.values(SHRINKAGE_STATUS),
+        default: SHRINKAGE_STATUS.PENDING,
+    },
+    createdBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true,
+    },
+    checkedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+    },
+    resolvedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+    },
+    decisionBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+    },
+    adminNotes: {
+        type: String,
+    },
+    relatedReturnRequisition: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'MaterialRequisition',
+    },
+    relatedReturnSlip: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'InventoryImportExportSlip',
+    },
+    resolvedAt: {
+        type: Date,
+    },
+    decisionAt: {
+        type: Date,
+    }
+}, {
+    timestamps: true,
+    toJSON: { versionKey: false },
+    toObject: { versionKey: false },
+});
+
+InventoryShrinkageReportSchema.index({ status: 1 });
+InventoryShrinkageReportSchema.index({ material: 1 });
+InventoryShrinkageReportSchema.index({ batch: 1 });
+InventoryShrinkageReportSchema.index({ productionOrder: 1 });
+InventoryShrinkageReportSchema.index({ createdBy: 1 });
+InventoryShrinkageReportSchema.index({ checkedBy: 1 });
+
+export default mongoose.model('InventoryShrinkageReport', InventoryShrinkageReportSchema);

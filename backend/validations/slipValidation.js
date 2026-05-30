@@ -1,0 +1,114 @@
+import joi from 'joi';
+import { INVENTORY_IMPORT_EXPORT_SLIP_STATUS, INVENTORY_IMPORT_EXPORT_SLIP_TYPE } from '../utils/constants.js';
+import { objectId } from './productionValidation.js';
+
+const slipValidationSchema = joi.object({
+    type: joi.string().required().valid(INVENTORY_IMPORT_EXPORT_SLIP_TYPE.IMPORT, INVENTORY_IMPORT_EXPORT_SLIP_TYPE.EXPORT).messages({
+        'any.only': 'Loại phiếu phải là IMPORT hoặc EXPORT.',
+        'any.required': 'Loại phiếu là bắt buộc.'
+    }),
+    slipNumber: joi.string().optional(),
+    date: joi.date().required().messages({
+        'date.base': 'Ngày chứng từ không hợp lệ.',
+        'any.required': 'Ngày chứng từ là bắt buộc.'
+    }),
+    status: joi.string().optional().valid(...Object.values(INVENTORY_IMPORT_EXPORT_SLIP_STATUS)),
+    unit: joi.string().optional().allow('').trim(),
+    department: joi.string().optional().allow('').trim(),
+    accounting: joi.object({
+        debit: joi.string().optional().allow('').trim(),
+        credit: joi.string().optional().allow('').trim(),
+    }).default({ debit: '', credit: '' }),
+    personName: joi.string().required().messages({
+        'any.required': 'Tên người giao/nhận là bắt buộc.'
+    }),
+    addressOrDepartment: joi.string().optional().allow('').trim(),
+    reason: joi.string().required().min(5).messages({
+        'string.min': 'Lý do phải có ít nhất 5 ký tự.',
+        'any.required': 'Lý do là bắt buộc.'
+    }),
+    warehouse: joi.object({
+        name: joi.string().optional().trim(),
+        location: joi.string().optional().trim(),
+    }).optional(),
+    referenceDoc: joi.object({ // "Theo... số... ngày... tháng... năm... của..."
+        description: joi.string().optional().trim(), // e.g., "Hóa đơn", "Lệnh điều động"
+        number: joi.string().optional().trim(),
+        date: joi.date().optional(),
+        issuer: joi.string().optional().trim(), // "của..." (Entity that issued the document)
+    }).optional(),
+    items: joi.array().items({
+        material: joi.string().optional().hex().length(24).allow(null),
+        product: joi.string().optional().hex().length(24).allow(null),
+
+        // Snapshots to preserve historical data
+        itemName: joi.string().required().trim().messages({
+            'any.required': 'Tên vật tư/sản phẩm là bắt buộc.'
+        }),
+        itemCode: joi.string().required().trim().messages({
+            'any.required': 'Mã vật tư/sản phẩm là bắt buộc.'
+        }),
+        unit: joi.string().required().trim().messages({
+            'any.required': 'Đơn vị tính là bắt buộc.'
+        }),
+
+        quantity: joi.object({
+            requested: joi.number().required().min(0).messages({
+                'number.min': 'Số lượng yêu cầu không được âm.',
+                'any.required': 'Số lượng yêu cầu là bắt buộc.'
+            }),
+            provisional: joi.number().optional().min(0).default(0),
+            actual: joi.number().optional().min(0).default(0),
+        }).required(),
+        unitPrice: joi.number().optional().min(0).default(0), // "Đơn giá"
+        amount: joi.number().optional().min(0).default(0), // "Thành tiền"
+
+        // Batch tracking
+        batchNumber: joi.string().optional().trim(),
+        expirationDate: joi.date().optional().allow(null),
+
+        // Storage & Notes
+        shelf: joi.string().optional().hex().length(24).allow(null),
+        itemNote: joi.string().optional().allow('').trim(),
+    }).required(),
+    totalAmount: joi.number().optional(), // "Cộng"
+    totalAmountInWords: joi.string().optional(), // "Tổng số tiền (viết bằng chữ)"
+    originalDocsCount: joi.string().optional().trim(), // "Số lượng chứng từ"
+    signatures: joi.object({
+        creator: joi.string().optional(), // User ID
+        personInOut: joi.string().optional().trim(),
+        storekeeper: joi.string().optional(), // User ID
+        chiefAccountant: joi.string().optional(), // User ID
+        manager: joi.string().optional(), // User ID
+    }).optional(),
+    images: joi.array().items(joi.string()).optional(),
+    notes: joi.string().optional().allow('').trim(),
+});
+
+export const slipValidatior = (data) => slipValidationSchema.validate(data, { abortEarly: false, stripUnknown: true });
+
+const updateStatusValidationSchema = joi.object({
+    status: joi.string().required().valid(...Object.values(INVENTORY_IMPORT_EXPORT_SLIP_STATUS)),
+    items: joi.array().items(joi.object({
+        itemCode: joi.string().optional().trim(),
+        material: joi.string().optional(),
+        product: joi.string().optional(),
+
+        actualQuantity: joi.number().optional().min(0),
+        provisionalQuantity: joi.number().optional().min(0),
+
+        itemNote: joi.string().optional().allow('').trim(),
+        batchNumber: joi.string().optional().trim(),
+        expirationDate: joi.date().optional().allow(null),
+        shelf: objectId.allow(null),
+    })).optional(),
+    scannedItems: joi.array().items(joi.object({
+        itemCode: joi.string().optional().trim(),
+        actualQuantity: joi.number().optional().min(0),
+        provisionalQuantity: joi.number().optional().min(0),
+    })).optional(),
+    notes: joi.string().optional().allow('').trim(),
+    signatures: joi.object().optional(),
+});
+
+export const slipUpdateStatusValidator = (data) => updateStatusValidationSchema.validate(data, { abortEarly: false, stripUnknown: true });
